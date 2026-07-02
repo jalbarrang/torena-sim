@@ -14,15 +14,18 @@ import {
 } from '@/store/runners.store';
 import {
   canUseVacuum,
+  clampFieldSize,
   setCompareMode,
-  setFillWithMobs,
+  setFieldSize,
   useCompareSettings,
+  MAX_FIELD_SIZE,
+  MIN_FIELD_SIZE,
   type CompareMode
 } from '@/modules/simulation/stores/compare.store';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const COMPARE_A_COLOR = '#2a77c5';
@@ -109,7 +112,7 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
 
   const runners = useRunners();
   const { compareA, compareB } = useCompareRoles();
-  const { compareMode, fillWithMobs } = useCompareSettings();
+  const { compareMode, fieldSize } = useCompareSettings();
 
   const roleOf = (fieldId: string): CompareRole | null => {
     if (fieldId === compareA) return 'uma1';
@@ -146,6 +149,7 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
   const atMax = runners.length >= MAX_RUNNERS;
   const atMin = runners.length <= MIN_RUNNERS;
   const picking = pickRole !== null;
+  const mobCount = Math.max(0, fieldSize - runners.length);
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -257,19 +261,53 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
         <div className="flex flex-col gap-2 border-t pt-2">
           <div className="flex items-center justify-between gap-3 px-1">
             <div className="min-w-0">
-              <Label htmlFor="fill-mobs-switch" className="text-sm">
-                Fill empty gates with mobs
+              <Label htmlFor="field-size-input" className="text-sm">
+                Race field size
               </Label>
               <p className="text-xs text-muted-foreground">
-                Pads the race to 9+ with generated pacers so contention mechanics emerge.
+                {mobCount > 0
+                  ? `${runners.length} uma${runners.length === 1 ? '' : 's'} + ${mobCount} mob pacer${mobCount === 1 ? '' : 's'} (600 stats).`
+                  : 'No mob padding — only your umas race.'}
               </p>
             </div>
-            <Switch
-              id="fill-mobs-switch"
-              checked={fillWithMobs}
-              onCheckedChange={(checked) => setFillWithMobs(checked)}
-              disabled={compareMode === 'vacuum'}
-            />
+            <div
+              className="flex shrink-0 items-center gap-1"
+              role="group"
+              aria-label="Race field size"
+            >
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Decrease field size"
+                disabled={compareMode === 'vacuum' || fieldSize <= MIN_FIELD_SIZE}
+                onClick={() => setFieldSize(fieldSize - 1)}
+              >
+                <Minus className="size-3.5" />
+              </Button>
+              <input
+                id="field-size-input"
+                type="number"
+                inputMode="numeric"
+                min={MIN_FIELD_SIZE}
+                max={MAX_FIELD_SIZE}
+                value={fieldSize}
+                disabled={compareMode === 'vacuum'}
+                onChange={(e) => {
+                  const value = Number.parseInt(e.target.value, 10);
+                  if (Number.isFinite(value)) setFieldSize(clampFieldSize(value));
+                }}
+                className="h-8 w-12 rounded-md border bg-background text-center text-sm tabular-nums disabled:opacity-50"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Increase field size"
+                disabled={compareMode === 'vacuum' || fieldSize >= MAX_FIELD_SIZE}
+                onClick={() => setFieldSize(fieldSize + 1)}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            </div>
           </div>
 
           {canUseVacuum(runners.length) && (

@@ -86,11 +86,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
       : '';
   const uma1Name = preview ? runnerName(preview.runners[preview.compareA]) : '';
   const uma2Name = preview ? runnerName(preview.runners[preview.compareB]) : '';
-  const fieldSize = preview ? preview.runners.length : 0;
+  const runnerCount = preview ? preview.runners.length : 0;
   const compareModeLabel = preview
     ? preview.compareMode === 'contested'
-      ? `Same race (${preview.fillWithMobs ? '+ mob pacers' : 'no mob padding'}${
-          fieldSize > 2 ? `, ${fieldSize} runners` : ''
+      ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
+          runnerCount === 1 ? '' : 's'
         })`
       : 'Vacuum (isolated)'
     : '';

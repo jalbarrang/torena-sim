@@ -22,22 +22,26 @@ import type { ComparePlan } from './wasm-compare';
 
 export type ComparePlanMode = ComparePlan['mode'];
 
-// Padding floor for a mob-filled contested field: keep parity with the
-// field-composition experiment (9 runners minimum), never exceeding the cap.
-const MOB_FILL_FLOOR = 9;
-
 export type BuildComparePlanOptions = {
   mode?: ComparePlanMode;
-  /** Pad the contested field with generated mobs (contested mode only). */
-  fillWithMobs?: boolean;
+  /**
+   * Target field size (total gates, contested mode only). Real umas fill
+   * first; remaining gates are padded with generated 600-stat mobs.
+   */
+  fieldSize?: number;
   /** Extra field runners beyond the compared pair (context / opponents). */
   contextRunners?: Array<IRunnerState>;
 };
 
-/** Compute the mob-fill target for a contested field of `fieldSize` runners. */
-export function computeFillTo(fieldSize: number, fillWithMobs: boolean): number | undefined {
-  if (!fillWithMobs) return undefined;
-  return Math.min(MAX_RUNNERS, Math.max(fieldSize, MOB_FILL_FLOOR));
+/**
+ * Compute the engine mob-fill target for `runnerCount` real umas and the
+ * user's target `fieldSize`. `undefined` when the real field already meets or
+ * exceeds the target (no padding).
+ */
+export function computeFillTo(runnerCount: number, fieldSize: number): number | undefined {
+  const target = Math.min(MAX_RUNNERS, fieldSize);
+  if (target <= runnerCount) return undefined;
+  return target;
 }
 
 function resolveRunnerName(outfitId: string, fallbackIndex: number): string {
@@ -64,7 +68,7 @@ export function buildComparePlan(
 
   const baseSeed = options.seed ?? 0;
   const mode = buildOptions.mode ?? 'vacuum';
-  const fillWithMobs = buildOptions.fillWithMobs ?? false;
+  const fieldSize = buildOptions.fieldSize ?? 0;
   const contextRunners = buildOptions.contextRunners ?? [];
   const raceParameters = toSundayRaceParameters(racedef);
 
@@ -126,7 +130,7 @@ export function buildComparePlan(
     const contextCreateRunners = contextRunners.map((runner) =>
       toCreateRunner(runner, runner.skills.toSorted(skillSorter))
     );
-    const fieldSize = 2 + contextCreateRunners.length;
+    const runnerCount = 2 + contextCreateRunners.length;
 
     return {
       mode: 'contested',
@@ -140,7 +144,7 @@ export function buildComparePlan(
           resolveRunnerName(runnerB.outfitId, 1),
           ...contextCreateRunners.map((runner, index) => resolveRunnerName(runner.outfitId, index + 2))
         ],
-        fillTo: computeFillTo(fieldSize, fillWithMobs),
+        fillTo: computeFillTo(runnerCount, fieldSize),
         nsamples,
         masterSeed: baseSeed
       }),

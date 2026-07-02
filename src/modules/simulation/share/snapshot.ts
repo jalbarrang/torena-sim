@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 import { replaceField, useRunnersStore, type FieldRunner } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
 import {
-  DEFAULT_FILL_WITH_MOBS,
+  clampFieldSize,
+  DEFAULT_FIELD_SIZE,
+  MIN_FIELD_SIZE,
   resetResults,
   useRaceStore,
   type CompareMode
@@ -48,7 +50,7 @@ function buildSnapshot(): SimulationSnapshot {
     seed: race.seed,
     nsamples: settings.nsamples,
     compareMode: race.compareMode,
-    fillWithMobs: race.fillWithMobs,
+    fieldSize: race.fieldSize,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
     forcedPositions: {
@@ -140,7 +142,7 @@ function parseCommonFields(
   parsed: Record<string, unknown>
 ): Omit<
   SimulationSnapshot,
-  'version' | 'runners' | 'compareA' | 'compareB' | 'compareMode' | 'fillWithMobs'
+  'version' | 'runners' | 'compareA' | 'compareB' | 'compareMode' | 'fieldSize'
 > | null {
   if (typeof parsed.timestamp !== 'number') return null;
   if (typeof parsed.courseId !== 'number') return null;
@@ -191,8 +193,16 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
   if (compareA === compareB) return null;
 
   const compareMode = isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
-  const fillWithMobs =
-    typeof parsed.fillWithMobs === 'boolean' ? parsed.fillWithMobs : DEFAULT_FILL_WITH_MOBS;
+  // Newer v2 snapshots carry `fieldSize`; older v2 snapshots carried
+  // `fillWithMobs: boolean` (pad-to-9 vs no padding).
+  const fieldSize =
+    typeof parsed.fieldSize === 'number'
+      ? clampFieldSize(parsed.fieldSize)
+      : typeof parsed.fillWithMobs === 'boolean'
+        ? parsed.fillWithMobs
+          ? DEFAULT_FIELD_SIZE
+          : MIN_FIELD_SIZE
+        : DEFAULT_FIELD_SIZE;
 
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
@@ -201,7 +211,7 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
     compareA,
     compareB,
     compareMode,
-    fillWithMobs
+    fieldSize
   };
 }
 
@@ -217,11 +227,8 @@ function parseLegacyPair(parsed: Record<string, unknown>, versioned: boolean): S
   // Pre-versioned snapshots have no compare settings → vacuum. v1 carries an
   // explicit compareMode + fieldComposition ('duo'|'mobs').
   const compareMode = versioned && isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
-  const fillWithMobs = versioned
-    ? parsed.fieldComposition === undefined
-      ? DEFAULT_FILL_WITH_MOBS
-      : parsed.fieldComposition === 'mobs'
-    : DEFAULT_FILL_WITH_MOBS;
+  const fieldSize =
+    versioned && parsed.fieldComposition === 'duo' ? MIN_FIELD_SIZE : DEFAULT_FIELD_SIZE;
 
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
@@ -230,7 +237,7 @@ function parseLegacyPair(parsed: Record<string, unknown>, versioned: boolean): S
     compareA: 0,
     compareB: 1,
     compareMode,
-    fillWithMobs
+    fieldSize
   };
 }
 
@@ -286,7 +293,7 @@ export function importSnapshot(data: SimulationSnapshot): void {
   useRaceStore.setState({
     seed: data.seed,
     compareMode: data.compareMode,
-    fillWithMobs: data.fillWithMobs,
+    fieldSize: clampFieldSize(data.fieldSize),
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
 

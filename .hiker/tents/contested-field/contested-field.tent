@@ -25,16 +25,16 @@ law contested_field_valid(f) {
   f.size <= 12
 }
 
-// Mob fill: fillTo = max(fieldSize, 9) capped at 12 when fillWithMobs is on.
-// Laws state the bounds (the max() arithmetic itself is not expressible):
-// never below the real field, never below the experiment floor of 9,
-// never above the engine ceiling.
-sort FillRequest { fieldSize: Int, fillTo: Int }
+// Mob fill: the user picks a target field size (total gates); real umas fill
+// first and the remainder are generated mobs. The engine fill target sent to
+// run_contested_compare is never below the real runner count and never above
+// the engine ceiling. (The default of 9 preserves the field-composition
+// experiment outcome but is a default, not a law.)
+sort FillRequest { runnerCount: Int, fillTarget: Int }
 relation mob_fill_valid(r: FillRequest)
 law mob_fill_valid(r) {
-  r.fieldSize <= r.fillTo
-  9 <= r.fillTo
-  r.fillTo <= 12
+  r.runnerCount <= r.fillTarget
+  r.fillTarget <= 12
 }
 
 // Compare mode: 0 = contested, 1 = vacuum.

@@ -26,7 +26,8 @@ export type SimulationSnapshot = {
   seed: number | null;
   nsamples: number;
   compareMode: CompareMode;
-  fillWithMobs: boolean;
+  /** Target field size (total gates); real umas fill first, mobs pad the rest. */
+  fieldSize: number;
   witVarianceSettings: WitVarianceSettings;
   staminaDrainOverrides: StaminaDrainOverrides;
   forcedPositions: {

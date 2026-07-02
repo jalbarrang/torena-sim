@@ -157,7 +157,7 @@ describe('buildComparePlan', () => {
   });
 
   it('builds the contested plan shape with both runners in one envelope', () => {
-    const plan = buildComparePlan(compareParams(), { mode: 'contested', fillWithMobs: true });
+    const plan = buildComparePlan(compareParams(), { mode: 'contested', fieldSize: 9 });
 
     expect(plan.mode).toBe('contested');
     if (plan.mode !== 'contested') throw new Error('expected contested plan');
@@ -170,10 +170,10 @@ describe('buildComparePlan', () => {
     expect('duelingRates' in plan.wasmParamsContested).toBe(false);
   });
 
-  it('includes context runners after the compared pair and skips mob padding when disabled', () => {
+  it('includes context runners after the compared pair and skips mob padding when the field is full', () => {
     const plan = buildComparePlan(compareParams(), {
       mode: 'contested',
-      fillWithMobs: false,
+      fieldSize: 2,
       contextRunners: [createRunnerState(), createRunnerState(), createRunnerState()]
     });
 
@@ -185,12 +185,16 @@ describe('buildComparePlan', () => {
 });
 
 describe('computeFillTo', () => {
-  it('pads to the mob floor for small fields and to the field size for larger ones', () => {
-    expect(computeFillTo(2, true)).toBe(9);
-    expect(computeFillTo(9, true)).toBe(9);
-    expect(computeFillTo(10, true)).toBe(10);
-    expect(computeFillTo(12, true)).toBe(12);
-    expect(computeFillTo(2, false)).toBeUndefined();
+  it('pads up to the target field size, never below the real runner count', () => {
+    // 2 real umas, target 9 -> pad to 9
+    expect(computeFillTo(2, 9)).toBe(9);
+    // target equals or is below the real count -> no padding
+    expect(computeFillTo(9, 9)).toBeUndefined();
+    expect(computeFillTo(10, 9)).toBeUndefined();
+    expect(computeFillTo(2, 2)).toBeUndefined();
+    // target above the cap clamps to 12
+    expect(computeFillTo(2, 99)).toBe(12);
+    expect(computeFillTo(11, 12)).toBe(12);
   });
 });
 

@@ -66,7 +66,7 @@ export function useSimulationRunner() {
 
   const { uma1: forcedUma1, uma2: forcedUma2 } = useForcedPositions();
   const { uma1: debuffsUma1, uma2: debuffsUma2 } = useDebuffs();
-  const { compareMode, fillWithMobs } = useCompareSettings();
+  const { compareMode, fieldSize } = useCompareSettings();
   const scenarioOverrides = useScenarioOverrides();
 
   const webWorkerRef = useRef<Worker | null>(null);
@@ -167,7 +167,7 @@ export function useSimulationRunner() {
     // worker never touches the dataset.
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params, { mode: compareMode, fillWithMobs, contextRunners })
+      data: buildComparePlan(params, { mode: compareMode, fieldSize, contextRunners })
     });
   };
 
@@ -220,7 +220,7 @@ export function useSimulationRunner() {
 
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params, { mode: compareMode, fillWithMobs, contextRunners })
+      data: buildComparePlan(params, { mode: compareMode, fieldSize, contextRunners })
     });
   }
 

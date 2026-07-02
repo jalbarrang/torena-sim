@@ -8,7 +8,8 @@ import { useRunnersStore, MAX_RUNNERS, MIN_RUNNERS } from '@/store/runners.store
 import {
   useRaceStore,
   DEFAULT_COMPARE_MODE,
-  DEFAULT_FILL_WITH_MOBS
+  DEFAULT_FIELD_SIZE,
+  MIN_FIELD_SIZE
 } from '@/modules/simulation/stores/compare.store';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
 import type { FieldRunner } from '@/store/runners.store';
@@ -33,7 +34,7 @@ const resetStores = () => {
   seedField(2);
   useRaceStore.setState({
     compareMode: DEFAULT_COMPARE_MODE,
-    fillWithMobs: DEFAULT_FILL_WITH_MOBS
+    fieldSize: DEFAULT_FIELD_SIZE
   });
 };
 
@@ -105,12 +106,33 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(screen.queryByRole('radiogroup', { name: /compare mode/i })).not.toBeInTheDocument();
   });
 
-  it('toggles fillWithMobs from the switch', () => {
+  it('steps the field size with the +/- controls and clamps at bounds', () => {
     render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
 
-    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.click(screen.getByRole('button', { name: /decrease field size/i }));
+    expect(useRaceStore.getState().fieldSize).toBe(DEFAULT_FIELD_SIZE - 1);
 
-    expect(useRaceStore.getState().fillWithMobs).toBe(!DEFAULT_FILL_WITH_MOBS);
+    fireEvent.click(screen.getByRole('button', { name: /increase field size/i }));
+    expect(useRaceStore.getState().fieldSize).toBe(DEFAULT_FIELD_SIZE);
+  });
+
+  it('accepts a typed field size, clamped into range', () => {
+    render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '99' } });
+    expect(useRaceStore.getState().fieldSize).toBe(12);
+
+    fireEvent.change(input, { target: { value: '1' } });
+    expect(useRaceStore.getState().fieldSize).toBe(MIN_FIELD_SIZE);
+  });
+
+  it('describes the mob padding for the current field', () => {
+    seedField(2);
+    useRaceStore.setState({ fieldSize: 9 });
+    render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+
+    expect(screen.getByText(/2 umas \+ 7 mob pacers/i)).toBeInTheDocument();
   });
 });
 

@@ -31,7 +31,7 @@ function snapshot(overrides: Partial<SimulationSnapshot> = {}): SimulationSnapsh
     seed: 42,
     nsamples: 10,
     compareMode: 'contested',
-    fillWithMobs: true,
+    fieldSize: 9,
     witVarianceSettings,
     staminaDrainOverrides: {},
     forcedPositions: { uma1: {}, uma2: {} },
@@ -63,7 +63,7 @@ describe('parseSnapshotJson', () => {
           compareA: 0,
           compareB: 2,
           compareMode: 'contested',
-          fillWithMobs: false
+          fieldSize: 12
         })
       )
     );
@@ -73,7 +73,18 @@ describe('parseSnapshotJson', () => {
     expect(parsed?.compareA).toBe(0);
     expect(parsed?.compareB).toBe(2);
     expect(parsed?.compareMode).toBe('contested');
-    expect(parsed?.fillWithMobs).toBe(false);
+    expect(parsed?.fieldSize).toBe(12);
+  });
+
+  it('maps older v2 snapshots carrying fillWithMobs to field sizes', () => {
+    const base = snapshot() as unknown as Record<string, unknown>;
+    delete base.fieldSize;
+
+    const padded = parseSnapshotJson(JSON.stringify({ ...base, fillWithMobs: true }));
+    expect(padded?.fieldSize).toBe(9);
+
+    const unpadded = parseSnapshotJson(JSON.stringify({ ...base, fillWithMobs: false }));
+    expect(unpadded?.fieldSize).toBe(2);
   });
 
   it('rejects v2 snapshots with out-of-range compare indices', () => {
@@ -90,7 +101,7 @@ describe('parseSnapshotJson', () => {
     expect(parseSnapshotJson(JSON.stringify(future))).toBeNull();
   });
 
-  it('imports a v1 legacy snapshot, mapping fieldComposition → fillWithMobs', () => {
+  it('imports a v1 legacy snapshot, mapping fieldComposition → field size', () => {
     const v1Mobs = {
       version: 1,
       ...legacyCommon,
@@ -104,11 +115,11 @@ describe('parseSnapshotJson', () => {
     expect(parsedMobs?.compareA).toBe(0);
     expect(parsedMobs?.compareB).toBe(1);
     expect(parsedMobs?.compareMode).toBe('contested');
-    expect(parsedMobs?.fillWithMobs).toBe(true);
+    expect(parsedMobs?.fieldSize).toBe(9);
 
     const v1Duo = { ...v1Mobs, fieldComposition: 'duo' };
     const parsedDuo = parseSnapshotJson(JSON.stringify(v1Duo));
-    expect(parsedDuo?.fillWithMobs).toBe(false);
+    expect(parsedDuo?.fieldSize).toBe(2);
   });
 
   it('imports a pre-versioned legacy snapshot in vacuum mode', () => {
@@ -123,6 +134,6 @@ describe('parseSnapshotJson', () => {
     expect(parsed?.version).toBe(SIMULATION_SNAPSHOT_VERSION);
     expect(parsed?.runners).toHaveLength(2);
     expect(parsed?.compareMode).toBe('vacuum');
-    expect(parsed?.fillWithMobs).toBe(true);
+    expect(parsed?.fieldSize).toBe(9);
   });
 });

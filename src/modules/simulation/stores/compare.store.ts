@@ -20,11 +20,20 @@ const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 export type CompareMode = 'contested' | 'vacuum';
 
 export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
-// Padding the field with generated mobs is the default: the field-composition
-// experiment (docs/dev-process/spike-contested-compare.md) showed an unpadded
-// duo fails to surface spot-struggle / dueling for asymmetric fields — the exact
-// mechanics contested compare exists to model.
-export const DEFAULT_FILL_WITH_MOBS = true;
+// The user-facing "field size" (total gates). Real umas fill first; remaining
+// gates are padded with generated 600-stat mobs. Default 9: the
+// field-composition experiment (docs/dev-process/spike-contested-compare.md)
+// showed an unpadded duo fails to surface spot-struggle / dueling for
+// asymmetric fields — the exact mechanics contested compare exists to model.
+export const DEFAULT_FIELD_SIZE = 9;
+export const MIN_FIELD_SIZE = 2;
+export const MAX_FIELD_SIZE = 12;
+
+/** Clamp an arbitrary value into a valid field size. */
+export const clampFieldSize = (value: number): number => {
+  if (!Number.isFinite(value)) return DEFAULT_FIELD_SIZE;
+  return Math.min(MAX_FIELD_SIZE, Math.max(MIN_FIELD_SIZE, Math.round(value)));
+};
 
 const isCompareMode = (value: unknown): value is CompareMode => {
   return value === 'contested' || value === 'vacuum';
@@ -36,7 +45,7 @@ export const canUseVacuum = (fieldSize: number): boolean => fieldSize <= MIN_RUN
 type PersistedRaceStore = {
   injectedDebuffs?: InjectedDebuffsMap;
   compareMode?: CompareMode;
-  fillWithMobs?: boolean;
+  fieldSize?: number;
 };
 
 type IRaceStore = {
@@ -55,7 +64,7 @@ type IRaceStore = {
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
   compareMode: CompareMode;
-  fillWithMobs: boolean;
+  fieldSize: number;
 };
 
 export const useRaceStore = create<IRaceStore>()(
@@ -76,17 +85,17 @@ export const useRaceStore = create<IRaceStore>()(
       simulationProgress: null,
       injectedDebuffs: { uma1: [], uma2: [] },
       compareMode: DEFAULT_COMPARE_MODE,
-      fillWithMobs: DEFAULT_FILL_WITH_MOBS
+      fieldSize: DEFAULT_FIELD_SIZE
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState, version) => migrateComparePersisted(persistedState, version),
       partialize: (state) => ({
         injectedDebuffs: state.injectedDebuffs,
         compareMode: state.compareMode,
-        fillWithMobs: state.fillWithMobs
+        fieldSize: state.fieldSize
       })
     }
   )
@@ -97,20 +106,31 @@ export const migrateComparePersisted = (
   persistedState: unknown,
   version: number
 ): PersistedRaceStore => {
-  const state = (persistedState ?? {}) as PersistedRaceStore & { fieldComposition?: string };
+  const state = (persistedState ?? {}) as PersistedRaceStore & {
+    fieldComposition?: string;
+    fillWithMobs?: boolean;
+  };
 
-  // v1 stored `fieldComposition: 'duo' | 'mobs'`; map it to `fillWithMobs`.
-  const fillWithMobs =
-    version >= 2
-      ? (state.fillWithMobs ?? DEFAULT_FILL_WITH_MOBS)
-      : state.fieldComposition === undefined
-        ? DEFAULT_FILL_WITH_MOBS
-        : state.fieldComposition === 'mobs';
+  // v1 stored `fieldComposition: 'duo' | 'mobs'`; v2 stored
+  // `fillWithMobs: boolean`; v3 stores the explicit `fieldSize` (total gates).
+  // Legacy "pad with mobs" maps to the classic 9-field; "no padding" maps to
+  // the minimum (2 — never pads).
+  let fieldSize: number;
+  if (version >= 3) {
+    fieldSize = clampFieldSize(state.fieldSize ?? DEFAULT_FIELD_SIZE);
+  } else if (version === 2) {
+    fieldSize = (state.fillWithMobs ?? true) ? DEFAULT_FIELD_SIZE : MIN_FIELD_SIZE;
+  } else {
+    fieldSize =
+      state.fieldComposition === undefined || state.fieldComposition === 'mobs'
+        ? DEFAULT_FIELD_SIZE
+        : MIN_FIELD_SIZE;
+  }
 
   return {
     injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
     compareMode: isCompareMode(state.compareMode) ? state.compareMode : DEFAULT_COMPARE_MODE,
-    fillWithMobs
+    fieldSize
   } satisfies PersistedRaceStore;
 };
 
@@ -131,8 +151,8 @@ export const forceContestedForField = () => {
   useRaceStore.setState({ compareMode: 'contested' });
 };
 
-export const setFillWithMobs = (fillWithMobs: boolean) => {
-  useRaceStore.setState({ fillWithMobs });
+export const setFieldSize = (fieldSize: number) => {
+  useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });
 };
 
 export const createNewCompareSeed = () => {
@@ -270,7 +290,7 @@ export const useCompareSettings = () => {
   return useRaceStore(
     useShallow((state) => ({
       compareMode: state.compareMode,
-      fillWithMobs: state.fillWithMobs
+      fieldSize: state.fieldSize
     }))
   );
 };

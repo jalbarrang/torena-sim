@@ -193,6 +193,8 @@ export type ContestedCompareParamsToWasmArgs = {
   fillTo?: number;
   /** @deprecated Legacy shim: `true` maps to `fillTo: 9` when `fillTo` is absent. Use `fillTo`. */
   fillMobs?: boolean;
+  /** Flat stat line for fill mobs. Omit for the engine default (600). */
+  mobStats?: number;
   nsamples: number;
   masterSeed: number;
 };
@@ -210,6 +212,7 @@ export function contestedCompareParamsToWasm(
     ),
     fillTo: args.fillTo,
     fillMobs: args.fillMobs,
+    mobStats: args.mobStats,
     nsamples: args.nsamples,
     masterSeed: args.masterSeed
   };

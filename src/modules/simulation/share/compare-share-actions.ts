@@ -62,7 +62,7 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
       staminaStats: s.staminaStats,
       seed: s.seed,
       compareMode: s.compareMode,
-      fillWithMobs: s.fillWithMobs
+      fieldSize: s.fieldSize
     }))
   );
 
@@ -110,7 +110,7 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
 
     const compareSummary =
       race.compareMode === 'contested'
-        ? `Same race · ${race.fillWithMobs ? '+ mob pacers' : 'no mob padding'}`
+        ? `Same race · field of ${race.fieldSize}`
         : 'Vacuum · isolated runners';
     const raceSummary = `${getRaceSettingsSummaryLine(courseId, racedef)} · ${compareSummary}`;
 

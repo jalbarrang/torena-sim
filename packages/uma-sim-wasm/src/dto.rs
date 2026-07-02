@@ -875,6 +875,9 @@ pub struct WasmContestedCompareParams {
     /// plan migrates callers to `fillTo`.
     #[serde(default)]
     pub fill_mobs: bool,
+    /// Flat stat line for fill mobs. Omit for the default (600).
+    #[serde(default)]
+    pub mob_stats: Option<i32>,
     /// Number of rounds.
     pub nsamples: usize,
     /// Master seed.
@@ -907,6 +910,7 @@ impl WasmContestedCompareParams {
             settings,
             runners,
             fill_to,
+            mob_stats: self.mob_stats,
             nsamples: self.nsamples,
             master_seed: self.master_seed,
         })
@@ -1502,6 +1506,18 @@ mod tests {
                 .expect("contested compare params deserialize with fillTo");
         let domain = dto.into_domain().expect("params convert to domain");
         assert_eq!(domain.fill_to, Some(12));
+        // mobStats omitted -> engine default (600).
+        assert_eq!(domain.mob_stats, None);
+    }
+
+    #[test]
+    fn contested_compare_mob_stats_passes_through() {
+        let dto: WasmContestedCompareParams = serde_json::from_str(&minimal_contested_json(
+            r#" "fillTo": 9, "mobStats": 700,"#,
+        ))
+        .expect("contested compare params deserialize with mobStats");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.mob_stats, Some(700));
     }
 
     #[test]

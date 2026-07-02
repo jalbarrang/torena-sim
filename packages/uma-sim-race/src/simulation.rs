@@ -8,7 +8,7 @@ use crate::collectors::{CollectedData, RaceEventLog, RaceEventLogCollector, Race
 use crate::race::{Race, SimulationSettings};
 use uma_sim_primitives::compare::{CompareData, CompareDataCollector};
 use uma_sim_primitives::course::model::CourseData;
-use uma_sim_primitives::mob::generate_mob_runners;
+use uma_sim_primitives::mob::{generate_mob_runners, CONTESTED_FILL_MOB_STATS};
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
 use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
@@ -56,6 +56,9 @@ pub struct ContestedCompareParams {
     /// runners (`runners.len()..=MAX_CONTESTED_FIELD`; `n == runners.len()` is
     /// an accepted no-op). `None` runs only the compared runners.
     pub fill_to: Option<usize>,
+    /// Flat stat line for fill mobs. `None` uses
+    /// [`CONTESTED_FILL_MOB_STATS`] (600).
+    pub mob_stats: Option<i32>,
     /// Number of rounds to simulate.
     pub nsamples: usize,
     /// Master seed (round `i` uses `master_seed + i`).
@@ -225,7 +228,8 @@ fn build_contested_race(params: ContestedCompareParams) -> Result<(Race, Vec<Run
 
     if let Some(fill_to) = params.fill_to {
         let open_slots = fill_to - focus_runner_ids.len();
-        for mob in generate_mob_runners(open_slots) {
+        let mob_stats = params.mob_stats.unwrap_or(CONTESTED_FILL_MOB_STATS);
+        for mob in generate_mob_runners(open_slots, mob_stats) {
             race.add_runner(mob);
         }
     }
@@ -316,6 +320,7 @@ mod tests {
             settings: SimulationSettings::default(),
             runners,
             fill_to,
+            mob_stats: None,
             nsamples,
             master_seed: 9001,
         }
