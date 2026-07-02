@@ -10,6 +10,7 @@ import {
   swapWithRunner,
   syncRunnerToLibrary,
   unlinkRunner,
+  useCompareRoles,
   useRunner
 } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
@@ -36,6 +37,8 @@ import './style.css';
 
 export const RunnersPanel = () => {
   const { runnerId, runner, updateRunner, resetRunner } = useRunner();
+  const { compareA, compareB } = useCompareRoles();
+  const isEditingA = runnerId === compareA;
   const { courseId } = useSettingsStore();
   const {
     updateRunner: updateLibraryRunner,
@@ -57,19 +60,15 @@ export const RunnersPanel = () => {
   };
 
   const handleCopyRunner = () => {
-    if (runnerId === 'uma1') {
-      copyToRunner('uma1', 'uma2');
-    } else if (runnerId === 'uma2') {
-      copyToRunner('uma2', 'uma1');
+    if (isEditingA) {
+      copyToRunner(compareA, compareB);
+    } else {
+      copyToRunner(compareB, compareA);
     }
   };
 
   const handleSwapRunners = () => {
-    if (runnerId === 'uma1') {
-      swapWithRunner('uma1', 'uma2');
-    } else if (runnerId === 'uma2') {
-      swapWithRunner('uma2', 'uma1');
-    }
+    swapWithRunner(compareA, compareB);
   };
 
   const handleSyncToLibrary = () => {
@@ -103,11 +102,11 @@ export const RunnersPanel = () => {
               type="button"
               className={cn(
                 'px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer h-full',
-                runnerId === 'uma1'
+                isEditingA
                   ? 'bg-[#2a77c5] text-white'
                   : 'bg-background text-muted-foreground hover:bg-muted'
               )}
-              onClick={() => showRunner('uma1')}
+              onClick={() => showRunner(compareA)}
             >
               Uma 1
             </button>
@@ -116,11 +115,11 @@ export const RunnersPanel = () => {
               type="button"
               className={cn(
                 'px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer h-full',
-                runnerId === 'uma2'
+                !isEditingA
                   ? 'bg-[#c52a2a] text-white'
                   : 'bg-background text-muted-foreground hover:bg-muted'
               )}
-              onClick={() => showRunner('uma2')}
+              onClick={() => showRunner(compareB)}
             >
               Uma 2
             </button>

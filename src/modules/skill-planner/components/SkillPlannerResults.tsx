@@ -17,7 +17,7 @@ import {
 } from '@/modules/skills/components/skill-list/skill-item/primitives';
 import { SkillItemDetailsActions } from '@/modules/skills/components/skill-list/skill-item/actions';
 import { SkillItem } from '@/modules/skills/components/skill-list/skill-item/item';
-import { setRunner } from '@/store/runners.store';
+import { getCompareFieldId, setRunner } from '@/store/runners.store';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import { useSettingsStore } from '@/store/settings.store';
 import { toast } from 'sonner';
@@ -379,7 +379,7 @@ export function SkillPlannerResults(props: SkillPlannerResultsProps) {
 
   const handleSendToCompare = useCallback(
     (slot: 'uma1' | 'uma2', combination: CombinationResult) => {
-      setRunner(slot, buildRunnerSnapshot(combination));
+      setRunner(getCompareFieldId(slot), buildRunnerSnapshot(combination));
       toast.success(`Loaded build into ${slot === 'uma1' ? 'Uma 1' : 'Uma 2'}`);
     },
     [buildRunnerSnapshot]

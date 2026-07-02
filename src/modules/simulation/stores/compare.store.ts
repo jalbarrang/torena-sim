@@ -13,31 +13,30 @@ import type {
 import type { InjectedDebuffsMap } from '@/modules/simulation/types';
 import { generateSeed } from '@/utils/crypto';
 import { SpurtCandidate } from '@/lib/uma-domain/race/spurt-calculator';
+import { MIN_RUNNERS, useRunnersStore } from '@/store/runners.store';
 
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 
 export type CompareMode = 'contested' | 'vacuum';
-export type FieldComposition = 'duo' | 'mobs';
 
 export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
-// `mobs` (two umas + 7 generated mobs) is the default: the field-composition
-// experiment (docs/dev-process/spike-contested-compare.md) showed `duo` fails to
-// surface spot-struggle / dueling for asymmetric fields — the exact mechanics
-// contested compare exists to model. See contested-compare-ui t-003.
-export const DEFAULT_FIELD_COMPOSITION: FieldComposition = 'mobs';
+// Padding the field with generated mobs is the default: the field-composition
+// experiment (docs/dev-process/spike-contested-compare.md) showed an unpadded
+// duo fails to surface spot-struggle / dueling for asymmetric fields — the exact
+// mechanics contested compare exists to model.
+export const DEFAULT_FILL_WITH_MOBS = true;
 
 const isCompareMode = (value: unknown): value is CompareMode => {
   return value === 'contested' || value === 'vacuum';
 };
 
-const isFieldComposition = (value: unknown): value is FieldComposition => {
-  return value === 'duo' || value === 'mobs';
-};
+/** Vacuum mode compares two isolated runners; it is only valid for a duo field. */
+export const canUseVacuum = (fieldSize: number): boolean => fieldSize <= MIN_RUNNERS;
 
 type PersistedRaceStore = {
   injectedDebuffs?: InjectedDebuffsMap;
   compareMode?: CompareMode;
-  fieldComposition?: FieldComposition;
+  fillWithMobs?: boolean;
 };
 
 type IRaceStore = {
@@ -56,7 +55,7 @@ type IRaceStore = {
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
   compareMode: CompareMode;
-  fieldComposition: FieldComposition;
+  fillWithMobs: boolean;
 };
 
 export const useRaceStore = create<IRaceStore>()(
@@ -77,42 +76,63 @@ export const useRaceStore = create<IRaceStore>()(
       simulationProgress: null,
       injectedDebuffs: { uma1: [], uma2: [] },
       compareMode: DEFAULT_COMPARE_MODE,
-      fieldComposition: DEFAULT_FIELD_COMPOSITION
+      fillWithMobs: DEFAULT_FILL_WITH_MOBS
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
-      version: 1,
-      migrate: (persistedState) => {
-        const state = persistedState as PersistedRaceStore;
-
-        return {
-          injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
-          compareMode: isCompareMode(state.compareMode) ? state.compareMode : DEFAULT_COMPARE_MODE,
-          fieldComposition: isFieldComposition(state.fieldComposition)
-            ? state.fieldComposition
-            : DEFAULT_FIELD_COMPOSITION
-        } satisfies PersistedRaceStore;
-      },
+      version: 2,
+      migrate: (persistedState, version) => migrateComparePersisted(persistedState, version),
       partialize: (state) => ({
         injectedDebuffs: state.injectedDebuffs,
         compareMode: state.compareMode,
-        fieldComposition: state.fieldComposition
+        fillWithMobs: state.fillWithMobs
       })
     }
   )
 );
+
+/** Persist migration for the compare store (exported for unit tests). */
+export const migrateComparePersisted = (
+  persistedState: unknown,
+  version: number
+): PersistedRaceStore => {
+  const state = (persistedState ?? {}) as PersistedRaceStore & { fieldComposition?: string };
+
+  // v1 stored `fieldComposition: 'duo' | 'mobs'`; map it to `fillWithMobs`.
+  const fillWithMobs =
+    version >= 2
+      ? (state.fillWithMobs ?? DEFAULT_FILL_WITH_MOBS)
+      : state.fieldComposition === undefined
+        ? DEFAULT_FILL_WITH_MOBS
+        : state.fieldComposition === 'mobs';
+
+  return {
+    injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
+    compareMode: isCompareMode(state.compareMode) ? state.compareMode : DEFAULT_COMPARE_MODE,
+    fillWithMobs
+  } satisfies PersistedRaceStore;
+};
 
 export const setCompareSeed = (seed: number | null) => {
   useRaceStore.setState({ seed });
 };
 
 export const setCompareMode = (compareMode: CompareMode) => {
+  // Vacuum is only valid for a duo field; growing the field forces contested.
+  if (compareMode === 'vacuum' && !canUseVacuum(useRunnersStore.getState().runners.length)) {
+    return;
+  }
   useRaceStore.setState({ compareMode });
 };
 
-export const setFieldComposition = (fieldComposition: FieldComposition) => {
-  useRaceStore.setState({ fieldComposition });
+/** Force contested compare — called by the runners store when the field grows past a duo. */
+export const forceContestedForField = () => {
+  useRaceStore.setState({ compareMode: 'contested' });
+};
+
+export const setFillWithMobs = (fillWithMobs: boolean) => {
+  useRaceStore.setState({ fillWithMobs });
 };
 
 export const createNewCompareSeed = () => {
@@ -250,7 +270,7 @@ export const useCompareSettings = () => {
   return useRaceStore(
     useShallow((state) => ({
       compareMode: state.compareMode,
-      fieldComposition: state.fieldComposition
+      fillWithMobs: state.fillWithMobs
     }))
   );
 };

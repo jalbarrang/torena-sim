@@ -5,6 +5,7 @@ import type { HintLevel } from '@/modules/skill-planner/types';
 import { useShallow } from 'zustand/shallow';
 import { getBaseTier, getUpgradeTier } from '@/modules/skills/skill-relationships';
 import { buildSkillCostSummary } from '@/modules/skills/skill-cost-summary';
+import { LEGACY_FIELD_ID_A, LEGACY_FIELD_ID_B } from '@/store/runners.store';
 
 const SKILL_COST_META_STORE_NAME = 'umalator-skill-cost-meta';
 
@@ -67,6 +68,53 @@ const resolveMeta = (
   };
 };
 
+// Runner ids used to change from the fixed compare roles `uma1`/`uma2` to the
+// runners store's stable `fieldId`s. The runners store migrates the two legacy
+// runners to deterministic ids (`LEGACY_FIELD_ID_A`/`B`); this migration rekeys
+// persisted skill-cost metadata onto those same ids so hint levels, bought
+// flags, and fast-learner state survive. 'pacer' and any other non-field id
+// pass through unchanged.
+const rekeyRunnerId = (runnerId: string): string => {
+  if (runnerId === 'uma1') return LEGACY_FIELD_ID_A;
+  if (runnerId === 'uma2') return LEGACY_FIELD_ID_B;
+  return runnerId;
+};
+
+/** Persist migration for the skill-cost-meta store (exported for unit tests). */
+export const migrateSkillCostMetaPersisted = (
+  persistedState: unknown,
+  version: number
+): SkillCostMetaState => {
+  const state = (persistedState ?? {}) as SkillCostMetaState;
+
+  if (version >= 1) {
+    return {
+      skillMetaByKey: state.skillMetaByKey ?? {},
+      runnerSettingsById: state.runnerSettingsById ?? {}
+    };
+  }
+
+  // v0 → v1: rekey "uma1:*" / "uma2:*" composite keys to the legacy fieldIds.
+  const skillMetaByKey: Record<string, SkillCostMeta> = {};
+  for (const [key, meta] of Object.entries(state.skillMetaByKey ?? {})) {
+    const separatorIndex = key.indexOf(':');
+    if (separatorIndex === -1) {
+      skillMetaByKey[key] = meta;
+      continue;
+    }
+    const runnerId = key.slice(0, separatorIndex);
+    const skillId = key.slice(separatorIndex + 1);
+    skillMetaByKey[`${rekeyRunnerId(runnerId)}:${skillId}`] = meta;
+  }
+
+  const runnerSettingsById: Record<string, RunnerCostSettings> = {};
+  for (const [runnerId, settings] of Object.entries(state.runnerSettingsById ?? {})) {
+    runnerSettingsById[rekeyRunnerId(runnerId)] = settings;
+  }
+
+  return { skillMetaByKey, runnerSettingsById };
+};
+
 export const useSkillCostMetaStore = create<SkillCostMetaState>()(
   persist(
     (_) => ({
@@ -75,7 +123,9 @@ export const useSkillCostMetaStore = create<SkillCostMetaState>()(
     }),
     {
       name: SKILL_COST_META_STORE_NAME,
-      storage: createJSONStorage(() => localStorage)
+      storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persistedState, version) => migrateSkillCostMetaPersisted(persistedState, version)
     }
   )
 );

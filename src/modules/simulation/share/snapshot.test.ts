@@ -23,14 +23,15 @@ function snapshot(overrides: Partial<SimulationSnapshot> = {}): SimulationSnapsh
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
     timestamp: 123,
-    uma1: createRunnerState(),
-    uma2: createRunnerState(),
+    runners: [createRunnerState(), createRunnerState()],
+    compareA: 0,
+    compareB: 1,
     courseId: 10101,
     racedef: createRaceConditions(),
     seed: 42,
     nsamples: 10,
     compareMode: 'contested',
-    fieldComposition: 'duo',
+    fillWithMobs: true,
     witVarianceSettings,
     staminaDrainOverrides: {},
     forcedPositions: { uma1: {}, uma2: {} },
@@ -40,26 +41,88 @@ function snapshot(overrides: Partial<SimulationSnapshot> = {}): SimulationSnapsh
   };
 }
 
+// Common fields shared by every legacy fixture shape.
+const legacyCommon = {
+  timestamp: 123,
+  courseId: 10101,
+  racedef: createRaceConditions(),
+  seed: 42,
+  nsamples: 10,
+  witVarianceSettings,
+  staminaDrainOverrides: {},
+  forcedPositions: { uma1: {}, uma2: {} },
+  injectedDebuffs: { uma1: [], uma2: [] }
+};
+
 describe('parseSnapshotJson', () => {
-  it('preserves compare mode and field composition for new snapshots', () => {
+  it('round-trips a v2 snapshot (field + compare pair + fillWithMobs)', () => {
     const parsed = parseSnapshotJson(
-      JSON.stringify(snapshot({ compareMode: 'contested', fieldComposition: 'mobs' }))
+      JSON.stringify(
+        snapshot({
+          runners: [createRunnerState(), createRunnerState(), createRunnerState()],
+          compareA: 0,
+          compareB: 2,
+          compareMode: 'contested',
+          fillWithMobs: false
+        })
+      )
     );
 
+    expect(parsed?.version).toBe(SIMULATION_SNAPSHOT_VERSION);
+    expect(parsed?.runners).toHaveLength(3);
+    expect(parsed?.compareA).toBe(0);
+    expect(parsed?.compareB).toBe(2);
     expect(parsed?.compareMode).toBe('contested');
-    expect(parsed?.fieldComposition).toBe('mobs');
+    expect(parsed?.fillWithMobs).toBe(false);
   });
 
-  it('opens old snapshots without compare settings in vacuum mode', () => {
-    const oldSnapshot = snapshot() as Partial<SimulationSnapshot>;
-    delete oldSnapshot.compareMode;
-    delete oldSnapshot.fieldComposition;
+  it('rejects v2 snapshots with out-of-range compare indices', () => {
+    expect(
+      parseSnapshotJson(JSON.stringify(snapshot({ compareA: 0, compareB: 5 })))
+    ).toBeNull();
+    expect(
+      parseSnapshotJson(JSON.stringify(snapshot({ compareA: 1, compareB: 1 })))
+    ).toBeNull();
+  });
 
-    const parsed = parseSnapshotJson(JSON.stringify(oldSnapshot));
+  it('rejects unknown / future snapshot versions', () => {
+    const future = { ...snapshot(), version: 999 };
+    expect(parseSnapshotJson(JSON.stringify(future))).toBeNull();
+  });
 
+  it('imports a v1 legacy snapshot, mapping fieldComposition → fillWithMobs', () => {
+    const v1Mobs = {
+      version: 1,
+      ...legacyCommon,
+      uma1: createRunnerState(),
+      uma2: createRunnerState(),
+      compareMode: 'contested',
+      fieldComposition: 'mobs'
+    };
+    const parsedMobs = parseSnapshotJson(JSON.stringify(v1Mobs));
+    expect(parsedMobs?.runners).toHaveLength(2);
+    expect(parsedMobs?.compareA).toBe(0);
+    expect(parsedMobs?.compareB).toBe(1);
+    expect(parsedMobs?.compareMode).toBe('contested');
+    expect(parsedMobs?.fillWithMobs).toBe(true);
+
+    const v1Duo = { ...v1Mobs, fieldComposition: 'duo' };
+    const parsedDuo = parseSnapshotJson(JSON.stringify(v1Duo));
+    expect(parsedDuo?.fillWithMobs).toBe(false);
+  });
+
+  it('imports a pre-versioned legacy snapshot in vacuum mode', () => {
+    const legacy = {
+      ...legacyCommon,
+      uma1: createRunnerState(),
+      uma2: createRunnerState()
+    };
+
+    const parsed = parseSnapshotJson(JSON.stringify(legacy));
+
+    expect(parsed?.version).toBe(SIMULATION_SNAPSHOT_VERSION);
+    expect(parsed?.runners).toHaveLength(2);
     expect(parsed?.compareMode).toBe('vacuum');
-    // field composition is moot for vacuum snapshots; it falls back to the
-    // current default (mobs) for consistency.
-    expect(parsed?.fieldComposition).toBe('mobs');
+    expect(parsed?.fillWithMobs).toBe(true);
   });
 });

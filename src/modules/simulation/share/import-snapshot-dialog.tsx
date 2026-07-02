@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { parseSnapshotJson, importSnapshot } from './snapshot';
 import type { SimulationSnapshot } from './types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { trackDescription } from '@/modules/racetrack/labels';
 
@@ -77,19 +78,20 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
     document.getElementById('snapshot-file-input')?.click();
   };
 
-  const uma1Name = preview
-    ? preview.uma1.outfitId
-      ? (getUmaDisplayInfo(preview.uma1.outfitId)?.name ?? preview.uma1.outfitId)
-      : '(no uma)'
-    : '';
-  const uma2Name = preview
-    ? preview.uma2.outfitId
-      ? (getUmaDisplayInfo(preview.uma2.outfitId)?.name ?? preview.uma2.outfitId)
-      : '(no uma)'
-    : '';
+  const runnerName = (runner: IRunnerState | undefined) =>
+    runner
+      ? runner.outfitId
+        ? (getUmaDisplayInfo(runner.outfitId)?.name ?? runner.outfitId)
+        : '(no uma)'
+      : '';
+  const uma1Name = preview ? runnerName(preview.runners[preview.compareA]) : '';
+  const uma2Name = preview ? runnerName(preview.runners[preview.compareB]) : '';
+  const fieldSize = preview ? preview.runners.length : 0;
   const compareModeLabel = preview
     ? preview.compareMode === 'contested'
-      ? `Same race (${preview.fieldComposition === 'duo' ? 'two umas only' : '+7 mob pacers'})`
+      ? `Same race (${preview.fillWithMobs ? '+ mob pacers' : 'no mob padding'}${
+          fieldSize > 2 ? `, ${fieldSize} runners` : ''
+        })`
       : 'Vacuum (isolated)'
     : '';
 

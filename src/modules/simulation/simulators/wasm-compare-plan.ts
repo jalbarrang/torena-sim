@@ -4,11 +4,13 @@
 // safe `ComparePlan` the worker runs without touching the dataset.
 
 import type { CompareParams } from '@/modules/simulation/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import {
   compareParamsToWasm,
   contestedCompareParamsToWasm
 } from '@/lib/uma-sim-wasm/adapter-params';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
+import { MAX_RUNNERS } from '@/store/runners.store';
 import { createSkillSorterByGroup } from './shared';
 import {
   DEFAULT_DUELING_RATES,
@@ -19,12 +21,24 @@ import {
 import type { ComparePlan } from './wasm-compare';
 
 export type ComparePlanMode = ComparePlan['mode'];
-export type ContestedCompareField = 'duo' | 'mobs';
+
+// Padding floor for a mob-filled contested field: keep parity with the
+// field-composition experiment (9 runners minimum), never exceeding the cap.
+const MOB_FILL_FLOOR = 9;
 
 export type BuildComparePlanOptions = {
   mode?: ComparePlanMode;
-  contestedField?: ContestedCompareField;
+  /** Pad the contested field with generated mobs (contested mode only). */
+  fillWithMobs?: boolean;
+  /** Extra field runners beyond the compared pair (context / opponents). */
+  contextRunners?: Array<IRunnerState>;
 };
+
+/** Compute the mob-fill target for a contested field of `fieldSize` runners. */
+export function computeFillTo(fieldSize: number, fillWithMobs: boolean): number | undefined {
+  if (!fillWithMobs) return undefined;
+  return Math.min(MAX_RUNNERS, Math.max(fieldSize, MOB_FILL_FLOOR));
+}
 
 function resolveRunnerName(outfitId: string, fallbackIndex: number): string {
   const info = outfitId ? getUmaDisplayInfo(outfitId) : null;
@@ -50,7 +64,8 @@ export function buildComparePlan(
 
   const baseSeed = options.seed ?? 0;
   const mode = buildOptions.mode ?? 'vacuum';
-  const fillMobs = buildOptions.contestedField === 'mobs';
+  const fillWithMobs = buildOptions.fillWithMobs ?? false;
+  const contextRunners = buildOptions.contextRunners ?? [];
   const raceParameters = toSundayRaceParameters(racedef);
 
   const allSkillIds = [...uma1.skills, ...uma2.skills];
@@ -106,15 +121,26 @@ export function buildComparePlan(
       staminaDrainOverrides: options.staminaDrainOverrides
     });
 
+    // Context runners fill the field after the compared pair. Insertion order is
+    // load-bearing: the trace split in `wasm-compare.ts` assumes A=id0, B=id1.
+    const contextCreateRunners = contextRunners.map((runner) =>
+      toCreateRunner(runner, runner.skills.toSorted(skillSorter))
+    );
+    const fieldSize = 2 + contextCreateRunners.length;
+
     return {
       mode: 'contested',
       wasmParamsContested: contestedCompareParamsToWasm({
         course,
         parameters: raceParameters,
         settings: settingsContested,
-        runners: [runnerA, runnerB],
-        names: [resolveRunnerName(runnerA.outfitId, 0), resolveRunnerName(runnerB.outfitId, 1)],
-        fillMobs,
+        runners: [runnerA, runnerB, ...contextCreateRunners],
+        names: [
+          resolveRunnerName(runnerA.outfitId, 0),
+          resolveRunnerName(runnerB.outfitId, 1),
+          ...contextCreateRunners.map((runner, index) => resolveRunnerName(runner.outfitId, index + 2))
+        ],
+        fillTo: computeFillTo(fieldSize, fillWithMobs),
         nsamples,
         masterSeed: baseSeed
       }),

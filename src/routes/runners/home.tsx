@@ -40,7 +40,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
+import { getCompareFieldId, loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
 import { RosterImportDialog } from '@/modules/runners/roster/import-dialog';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { aptitudeNames, strategyNames } from '@/lib/uma-domain/runner/definitions';
@@ -333,8 +333,9 @@ export default function RosterHomePage() {
     (slot: 'uma1' | 'uma2') => {
       if (!page.runnerToLoad) return;
 
-      loadRunnerFromLibrary(slot, page.runnerToLoad);
-      showRunner(slot);
+      const fieldId = getCompareFieldId(slot);
+      loadRunnerFromLibrary(fieldId, page.runnerToLoad);
+      showRunner(fieldId);
       dispatch({ type: 'load:completed' });
       navigate('/');
     },

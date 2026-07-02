@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { copyScreenshot, getSkillsForShareCard } from '@/modules/runners/share/share-actions';
 import { useRaceStore } from '@/modules/simulation/stores/compare.store';
-import { useRunnersStore } from '@/store/runners.store';
+import { useComparePairRunners, useRunnersStore } from '@/store/runners.store';
+import type { CompareRunnerId } from '@/modules/simulation/compare.types';
 import { useSettingsStore, useWitVariance } from '@/store/settings.store';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { getDefaultTrackIdForCourse } from '@/modules/racetrack/courses';
@@ -61,13 +62,15 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
       staminaStats: s.staminaStats,
       seed: s.seed,
       compareMode: s.compareMode,
-      fieldComposition: s.fieldComposition
+      fillWithMobs: s.fillWithMobs
     }))
   );
 
-  const { runnerId, uma1, uma2 } = useRunnersStore(
-    useShallow((s) => ({ runnerId: s.runnerId, uma1: s.uma1, uma2: s.uma2 }))
-  );
+  const { uma1, uma2 } = useComparePairRunners();
+  const editingId = useRunnersStore((s) => s.editingId);
+  const compareB = useRunnersStore((s) => s.compareB);
+  // Pair role of the runner shown on the share card (defaults to slot A).
+  const runnerId: CompareRunnerId = editingId === compareB ? 'uma2' : 'uma1';
 
   const courseId = useSettingsStore((s) => s.courseId);
   const racedef = useSettingsStore((s) => s.racedef);
@@ -107,7 +110,7 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
 
     const compareSummary =
       race.compareMode === 'contested'
-        ? `Same race · ${race.fieldComposition === 'duo' ? 'Two umas only' : '+7 mob pacers'}`
+        ? `Same race · ${race.fillWithMobs ? '+ mob pacers' : 'no mob padding'}`
         : 'Vacuum · isolated runners';
     const raceSummary = `${getRaceSettingsSummaryLine(courseId, racedef)} · ${compareSummary}`;
 

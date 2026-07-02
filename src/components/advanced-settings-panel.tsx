@@ -8,7 +8,7 @@ import {
   useStaminaDrainOverrides,
   useWitVariance
 } from '@/store/settings.store';
-import { useRunnersStore } from '@/store/runners.store';
+import { useComparePairRunners } from '@/store/runners.store';
 import { SkillType } from '@/lib/uma-domain/skills/definitions';
 
 import { Label } from '@/components/ui/label';
@@ -83,7 +83,7 @@ const WitVarianceSettingRow = ({
 
 export const AdvancedSettingsPanel = () => {
   const { nsamples } = useSettingsStore();
-  const { uma1, uma2 } = useRunnersStore();
+  const { uma1, uma2 } = useComparePairRunners();
   const ignoreStaminaConsumption = useSkillPlannerStore((state) => state.ignoreStaminaConsumption);
   const witVarianceSettings = useWitVariance();
   const staminaDrainOverrides = useStaminaDrainOverrides();

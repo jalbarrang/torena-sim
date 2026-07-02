@@ -10,7 +10,7 @@ import type {
   WasmCompareRoundData,
   WasmContestedCompareParams
 } from '@/lib/uma-sim-wasm/types';
-import { buildComparePlan } from './wasm-compare-plan';
+import { buildComparePlan, computeFillTo } from './wasm-compare-plan';
 import {
   reduceCompareRoundsPublic,
   runComparisonRoundsFromPlan,
@@ -157,15 +157,40 @@ describe('buildComparePlan', () => {
   });
 
   it('builds the contested plan shape with both runners in one envelope', () => {
-    const plan = buildComparePlan(compareParams(), { mode: 'contested', contestedField: 'mobs' });
+    const plan = buildComparePlan(compareParams(), { mode: 'contested', fillWithMobs: true });
 
     expect(plan.mode).toBe('contested');
     if (plan.mode !== 'contested') throw new Error('expected contested plan');
     expect(plan.wasmParamsContested.runners).toHaveLength(2);
-    expect(plan.wasmParamsContested.fillMobs).toBe(true);
+    // duo field padded to the mob floor (9)
+    expect(plan.wasmParamsContested.fillTo).toBe(9);
+    expect(plan.wasmParamsContested.fillMobs).toBeUndefined();
     expect(plan.wasmParamsContested.masterSeed).toBe(42);
     expect(plan.wasmParamsContested.settings?.rushed).toBe(true);
     expect('duelingRates' in plan.wasmParamsContested).toBe(false);
+  });
+
+  it('includes context runners after the compared pair and skips mob padding when disabled', () => {
+    const plan = buildComparePlan(compareParams(), {
+      mode: 'contested',
+      fillWithMobs: false,
+      contextRunners: [createRunnerState(), createRunnerState(), createRunnerState()]
+    });
+
+    if (plan.mode !== 'contested') throw new Error('expected contested plan');
+    // 2 compared + 3 context runners, A first / B second (insertion order)
+    expect(plan.wasmParamsContested.runners).toHaveLength(5);
+    expect(plan.wasmParamsContested.fillTo).toBeUndefined();
+  });
+});
+
+describe('computeFillTo', () => {
+  it('pads to the mob floor for small fields and to the field size for larger ones', () => {
+    expect(computeFillTo(2, true)).toBe(9);
+    expect(computeFillTo(9, true)).toBe(9);
+    expect(computeFillTo(10, true)).toBe(10);
+    expect(computeFillTo(12, true)).toBe(12);
+    expect(computeFillTo(2, false)).toBeUndefined();
   });
 });
 

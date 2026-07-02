@@ -4,11 +4,10 @@ import {
   resetResults,
   setCompareMode,
   setCompareSeed,
-  setFieldComposition,
+  setFillWithMobs,
   useCompareSettings,
   useRaceStore,
-  type CompareMode,
-  type FieldComposition
+  type CompareMode
 } from '@/modules/simulation/stores/compare.store';
 import { Button } from '@/components/ui/button';
 import { CompareLoadingOverlay } from '@/components/compare-loading-overlay';
@@ -51,7 +50,7 @@ type CompareSettingsPanelProps = {
 
 function CompareSettingsPanel(props: CompareSettingsPanelProps) {
   const { isSimulationRunning } = props;
-  const { compareMode, fieldComposition } = useCompareSettings();
+  const { compareMode, fillWithMobs } = useCompareSettings();
 
   const modeCopy =
     compareMode === 'contested'
@@ -87,18 +86,16 @@ function CompareSettingsPanel(props: CompareSettingsPanelProps) {
             Field composition
           </Label>
           <Select
-            value={fieldComposition}
-            onValueChange={(value) => setFieldComposition(value as FieldComposition)}
+            value={fillWithMobs ? 'mobs' : 'duo'}
+            onValueChange={(value) => setFillWithMobs(value === 'mobs')}
             disabled={isSimulationRunning || compareMode === 'vacuum'}
           >
             <SelectTrigger id="field-composition-select" size="sm" className="min-w-40">
-              <SelectValue>
-                {fieldComposition === 'duo' ? 'Two umas only' : '+7 mob pacers'}
-              </SelectValue>
+              <SelectValue>{fillWithMobs ? 'Pad with mob pacers' : 'No mob padding'}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="duo">Two umas only</SelectItem>
-              <SelectItem value="mobs">+7 mob pacers</SelectItem>
+              <SelectItem value="duo">No mob padding</SelectItem>
+              <SelectItem value="mobs">Pad with mob pacers</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -107,9 +104,8 @@ function CompareSettingsPanel(props: CompareSettingsPanelProps) {
       <div className="text-xs text-muted-foreground leading-relaxed">
         <p>{modeCopy}</p>
         <p>
-          Field composition applies to Same race only. Default: Two umas only, to keep the
-          head-to-head isolated while still allowing natural spot-struggle between the compared
-          runners.
+          Field composition applies to Same race only. Default: pad the field with mob pacers so
+          spot-struggle and dueling emerge naturally between the compared runners.
         </p>
       </div>
     </div>

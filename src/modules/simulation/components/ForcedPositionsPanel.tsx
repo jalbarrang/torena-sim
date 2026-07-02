@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useShallow } from 'zustand/shallow';
 import { Button } from '@/components/ui/button';
 import {
   Panel,
@@ -9,19 +8,16 @@ import {
   PanelTitle
 } from '@/components/ui/panel';
 import { buildRunnerSkillEntries, ForcedPositionGroup } from './ForcedPositionGroup';
-import { useRunnersStore } from '@/store/runners.store';
+import { useComparePairRunners } from '@/store/runners.store';
 import {
   clearAllForcedPositions,
   useForcedPositions
 } from '@/modules/simulation/stores/forced-positions.store';
 
 export function ForcedPositionsPanel() {
-  const { uma1Skills, uma2Skills } = useRunnersStore(
-    useShallow((state) => ({
-      uma1Skills: state.uma1.skills,
-      uma2Skills: state.uma2.skills
-    }))
-  );
+  const { uma1: runnerA, uma2: runnerB } = useComparePairRunners();
+  const uma1Skills = runnerA.skills;
+  const uma2Skills = runnerB.skills;
   const { uma1, uma2 } = useForcedPositions();
 
   const mappedSkills = useMemo(() => {

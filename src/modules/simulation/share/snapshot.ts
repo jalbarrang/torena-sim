@@ -1,38 +1,54 @@
 import { cloneDeep } from 'es-toolkit';
 import { toast } from 'sonner';
-import { useRunnersStore } from '@/store/runners.store';
+import { replaceField, useRunnersStore, type FieldRunner } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
 import {
-  DEFAULT_FIELD_COMPOSITION,
+  DEFAULT_FILL_WITH_MOBS,
   resetResults,
   useRaceStore,
-  type CompareMode,
-  type FieldComposition
+  type CompareMode
 } from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import type { SimulationSnapshot } from './types';
 import { SIMULATION_SNAPSHOT_VERSION } from './types';
 
+function stripFieldId(runner: FieldRunner): IRunnerState {
+  const { fieldId: _fieldId, ...rest } = cloneDeep(runner);
+  return rest;
+}
+
 function buildSnapshot(): SimulationSnapshot {
-  const runners = useRunnersStore.getState();
+  const runnersState = useRunnersStore.getState();
   const settings = useSettingsStore.getState();
   const race = useRaceStore.getState();
   const forced = useForcedPositionsStore.getState();
   const scenarioOverrides = useScenarioOverridesStore.getState();
 
+  const runners = runnersState.runners.map(stripFieldId);
+  const compareA = Math.max(
+    0,
+    runnersState.runners.findIndex((r) => r.fieldId === runnersState.compareA)
+  );
+  const compareB = Math.max(
+    0,
+    runnersState.runners.findIndex((r) => r.fieldId === runnersState.compareB)
+  );
+
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
     timestamp: Date.now(),
-    uma1: cloneDeep(runners.uma1),
-    uma2: cloneDeep(runners.uma2),
+    runners,
+    compareA,
+    compareB,
     courseId: settings.courseId,
     racedef: cloneDeep(settings.racedef),
     seed: race.seed,
     nsamples: settings.nsamples,
     compareMode: race.compareMode,
-    fieldComposition: race.fieldComposition,
+    fillWithMobs: race.fillWithMobs,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
     forcedPositions: {
@@ -51,7 +67,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isRunnerState(value: unknown): value is SimulationSnapshot['uma1'] {
+function isRunnerState(value: unknown): value is IRunnerState {
   if (!isRecord(value)) return false;
   return (
     typeof value.outfitId === 'string' &&
@@ -83,10 +99,6 @@ function isRaceConditions(value: unknown): boolean {
 
 function isCompareMode(value: unknown): value is CompareMode {
   return value === 'contested' || value === 'vacuum';
-}
-
-function isFieldComposition(value: unknown): value is FieldComposition {
-  return value === 'duo' || value === 'mobs';
 }
 
 function isWitVariance(value: unknown): boolean {
@@ -123,29 +135,18 @@ function isInjectedDebuffsMap(value: unknown): value is SimulationSnapshot['inje
   return ok(u1) && ok(u2);
 }
 
-export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(parsed)) return null;
-  if (parsed.version !== SIMULATION_SNAPSHOT_VERSION) return null;
+/** Validate the parts of a snapshot that are identical across codec versions. */
+function parseCommonFields(
+  parsed: Record<string, unknown>
+): Omit<
+  SimulationSnapshot,
+  'version' | 'runners' | 'compareA' | 'compareB' | 'compareMode' | 'fillWithMobs'
+> | null {
   if (typeof parsed.timestamp !== 'number') return null;
-  if (!isRunnerState(parsed.uma1)) return null;
-  const uma2 = parsed.uma2;
-  if (uma2 !== undefined && !isRunnerState(uma2)) return null;
   if (typeof parsed.courseId !== 'number') return null;
   if (!isRaceConditions(parsed.racedef)) return null;
   if (parsed.seed !== null && typeof parsed.seed !== 'number') return null;
   if (typeof parsed.nsamples !== 'number') return null;
-  const compareMode = parsed.compareMode === undefined ? 'vacuum' : parsed.compareMode;
-  if (!isCompareMode(compareMode)) return null;
-  const fieldComposition =
-    parsed.fieldComposition === undefined ? DEFAULT_FIELD_COMPOSITION : parsed.fieldComposition;
-  if (!isFieldComposition(fieldComposition)) return null;
   if (!isWitVariance(parsed.witVarianceSettings)) return null;
   if (!isRecord(parsed.staminaDrainOverrides)) return null;
   const fp = parsed.forcedPositions;
@@ -155,22 +156,14 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
   if (!fpNums(fp.uma1) || !fpNums(fp.uma2)) return null;
   if (!isInjectedDebuffsMap(parsed.injectedDebuffs)) return null;
 
-  const uma2Resolved = isRunnerState(parsed.uma2) ? parsed.uma2 : createRunnerState();
-
   return {
-    version: SIMULATION_SNAPSHOT_VERSION,
     timestamp: parsed.timestamp,
-    uma1: parsed.uma1,
-    uma2: uma2Resolved,
     courseId: parsed.courseId,
     racedef: parsed.racedef as SimulationSnapshot['racedef'],
-    seed: parsed.seed,
+    seed: parsed.seed as number | null,
     nsamples: parsed.nsamples,
-    compareMode,
-    fieldComposition,
     witVarianceSettings: parsed.witVarianceSettings as SimulationSnapshot['witVarianceSettings'],
-    staminaDrainOverrides:
-      parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
+    staminaDrainOverrides: parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
     forcedPositions: {
       uma1: fp.uma1 as Record<string, number>,
       uma2: fp.uma2 as Record<string, number>
@@ -180,13 +173,94 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
   };
 }
 
-export function importSnapshot(data: SimulationSnapshot): void {
-  const uma2 = data.uma2 ?? createRunnerState();
+/** Decode the v2 (runner array) shape. */
+function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
+  const common = parseCommonFields(parsed);
+  if (!common) return null;
 
-  useRunnersStore.setState({
-    uma1: cloneDeep(data.uma1),
-    uma2: cloneDeep(uma2)
-  });
+  if (!Array.isArray(parsed.runners)) return null;
+  if (!parsed.runners.every(isRunnerState)) return null;
+  const runners = parsed.runners as Array<IRunnerState>;
+  if (runners.length < 2 || runners.length > 12) return null;
+
+  const compareA = parsed.compareA;
+  const compareB = parsed.compareB;
+  if (typeof compareA !== 'number' || typeof compareB !== 'number') return null;
+  if (compareA < 0 || compareA >= runners.length) return null;
+  if (compareB < 0 || compareB >= runners.length) return null;
+  if (compareA === compareB) return null;
+
+  const compareMode = isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
+  const fillWithMobs =
+    typeof parsed.fillWithMobs === 'boolean' ? parsed.fillWithMobs : DEFAULT_FILL_WITH_MOBS;
+
+  return {
+    version: SIMULATION_SNAPSHOT_VERSION,
+    ...common,
+    runners,
+    compareA,
+    compareB,
+    compareMode,
+    fillWithMobs
+  };
+}
+
+/** Decode the legacy `{ uma1, uma2 }` pair shape (v1 and pre-versioned). */
+function parseLegacyPair(parsed: Record<string, unknown>, versioned: boolean): SimulationSnapshot | null {
+  const common = parseCommonFields(parsed);
+  if (!common) return null;
+  if (!isRunnerState(parsed.uma1)) return null;
+
+  const uma1 = parsed.uma1 as IRunnerState;
+  const uma2 = isRunnerState(parsed.uma2) ? (parsed.uma2 as IRunnerState) : createRunnerState();
+
+  // Pre-versioned snapshots have no compare settings → vacuum. v1 carries an
+  // explicit compareMode + fieldComposition ('duo'|'mobs').
+  const compareMode = versioned && isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
+  const fillWithMobs = versioned
+    ? parsed.fieldComposition === undefined
+      ? DEFAULT_FILL_WITH_MOBS
+      : parsed.fieldComposition === 'mobs'
+    : DEFAULT_FILL_WITH_MOBS;
+
+  return {
+    version: SIMULATION_SNAPSHOT_VERSION,
+    ...common,
+    runners: [uma1, uma2],
+    compareA: 0,
+    compareB: 1,
+    compareMode,
+    fillWithMobs
+  };
+}
+
+export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed)) return null;
+
+  const version = parsed.version;
+
+  if (version === 2) {
+    return parseV2(parsed);
+  }
+  if (version === 1) {
+    return parseLegacyPair(parsed, true);
+  }
+  if (version === undefined) {
+    return parseLegacyPair(parsed, false);
+  }
+  // Unknown / future version — refuse rather than silently mis-decode.
+  return null;
+}
+
+export function importSnapshot(data: SimulationSnapshot): void {
+  replaceField(data.runners, data.compareA, data.compareB);
 
   useSettingsStore.setState({
     courseId: data.courseId,
@@ -212,7 +286,7 @@ export function importSnapshot(data: SimulationSnapshot): void {
   useRaceStore.setState({
     seed: data.seed,
     compareMode: data.compareMode,
-    fieldComposition: data.fieldComposition,
+    fillWithMobs: data.fillWithMobs,
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
 
