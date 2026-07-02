@@ -50,9 +50,8 @@ impl RunnerObservation for Runner {
         self.is_fully_charged
     }
     fn fully_charged_region(&self) -> Option<(f64, f64)> {
-        self.fully_charged_region.map(|(start, end)| {
-            (start, if end >= 0.0 { end } else { self.position })
-        })
+        self.fully_charged_region
+            .map(|(start, end)| (start, if end >= 0.0 { end } else { self.position }))
     }
     fn fully_charged_accel(&self) -> Option<f64> {
         self.fully_charged_region.map(|_| self.fully_charged_accel)

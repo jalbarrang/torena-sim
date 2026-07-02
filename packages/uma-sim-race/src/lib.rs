@@ -9,11 +9,14 @@
 //!   real field**, then calls the shared pure step in `uma-sim-primitives`;
 //! - the [`run_race_sim`](simulation::run_race_sim) use case + distribution
 //!   orchestration over many randomized rounds;
+//! - the [`run_contested_compare`](simulation::run_contested_compare) use case:
+//!   compare-grade telemetry from a live contested field;
 //! - the read-model collectors (`RaceSimDataCollector`, `RaceEventLogCollector`).
 //!
-//! It contains **no paradigm flag** — there is no `Compare`/vacuum branch here;
-//! the vacuum bench lives in `uma-sim-vacuum`. Both engines run the same step
-//! kernel and differ only in how they produce `FieldInputs`.
+//! It contains **no paradigm flag** — vacuum compare remains in
+//! `uma-sim-vacuum`; contested compare is a separate use-case composition over
+//! this engine. Both engines run the same step kernel and differ only in how
+//! they produce `FieldInputs`.
 
 pub mod collectors;
 pub mod race;
@@ -21,5 +24,6 @@ pub mod simulation;
 
 pub use race::{Race, SimulationSettings};
 pub use simulation::{
-    run_race_sim, FinishEntry, RaceSimParams, RaceSimResult, SimError, FIELD_SIZE,
+    run_contested_compare, run_race_sim, ContestedCompareParams, FinishEntry, RaceSimParams,
+    RaceSimResult, SimError, FIELD_SIZE,
 };

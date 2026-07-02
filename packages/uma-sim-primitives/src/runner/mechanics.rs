@@ -484,7 +484,8 @@ impl Runner {
             self.close_fully_charged();
         }
 
-        if !self.conserve_power_enabled || self.conserve_power_stat <= 1200.0 || self.is_last_spurt {
+        if !self.conserve_power_enabled || self.conserve_power_stat <= 1200.0 || self.is_last_spurt
+        {
             return;
         }
 

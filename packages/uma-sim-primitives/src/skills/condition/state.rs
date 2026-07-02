@@ -56,7 +56,11 @@ fn register_style_temptation_opponent_count(name: &'static str, strategy: Strate
     register_style_temptation_count_impl(name, strategy, false);
 }
 
-fn register_style_temptation_count_impl(name: &'static str, strategy: Strategy, include_self: bool) {
+fn register_style_temptation_count_impl(
+    name: &'static str,
+    strategy: Strategy,
+    include_self: bool,
+) {
     let factory = match (strategy, include_self) {
         (Strategy::FrontRunner, true) => |arg, cmp| {
             DynamicCondition::new(move |r| {
