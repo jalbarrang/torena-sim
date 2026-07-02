@@ -4,7 +4,10 @@
 // safe `ComparePlan` the worker runs without touching the dataset.
 
 import type { CompareParams } from '@/modules/simulation/types';
-import { compareParamsToWasm } from '@/lib/uma-sim-wasm/adapter-params';
+import {
+  compareParamsToWasm,
+  contestedCompareParamsToWasm
+} from '@/lib/uma-sim-wasm/adapter-params';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { createSkillSorterByGroup } from './shared';
 import {
@@ -15,13 +18,24 @@ import {
 } from './shared-pure';
 import type { ComparePlan } from './wasm-compare';
 
+export type ComparePlanMode = ComparePlan['mode'];
+export type ContestedCompareField = 'duo' | 'mobs';
+
+export type BuildComparePlanOptions = {
+  mode?: ComparePlanMode;
+  contestedField?: ContestedCompareField;
+};
+
 function resolveRunnerName(outfitId: string, fallbackIndex: number): string {
   const info = outfitId ? getUmaDisplayInfo(outfitId) : null;
   return info?.name ?? `Runner ${fallbackIndex + 1}`;
 }
 
 /** Resolve `CompareParams` into the data-free {@link ComparePlan} for the worker. */
-export function buildComparePlan(params: CompareParams): ComparePlan {
+export function buildComparePlan(
+  params: CompareParams,
+  buildOptions: BuildComparePlanOptions = {}
+): ComparePlan {
   const {
     nsamples,
     course,
@@ -35,6 +49,8 @@ export function buildComparePlan(params: CompareParams): ComparePlan {
   } = params;
 
   const baseSeed = options.seed ?? 0;
+  const mode = buildOptions.mode ?? 'vacuum';
+  const fillMobs = buildOptions.contestedField === 'mobs';
   const raceParameters = toSundayRaceParameters(racedef);
 
   const allSkillIds = [...uma1.skills, ...uma2.skills];
@@ -78,6 +94,35 @@ export function buildComparePlan(params: CompareParams): ComparePlan {
     scenarioOverrides?.uma2
   );
 
+  if (mode === 'contested') {
+    const settingsContested = createCompareSettings({
+      healthSystem: true,
+      spotStruggle: true,
+      sectionModifier: options.allowSectionModifierUma1 || options.allowSectionModifierUma2,
+      rushed: options.allowRushedUma1 || options.allowRushedUma2,
+      downhill: options.allowDownhillUma1 || options.allowDownhillUma2,
+      conservePower: Boolean(options.allowConservePowerUma1 || options.allowConservePowerUma2),
+      witChecks: options.skillCheckChanceUma1 || options.skillCheckChanceUma2,
+      staminaDrainOverrides: options.staminaDrainOverrides
+    });
+
+    return {
+      mode: 'contested',
+      wasmParamsContested: contestedCompareParamsToWasm({
+        course,
+        parameters: raceParameters,
+        settings: settingsContested,
+        runners: [runnerA, runnerB],
+        names: [resolveRunnerName(runnerA.outfitId, 0), resolveRunnerName(runnerB.outfitId, 1)],
+        fillMobs,
+        nsamples,
+        masterSeed: baseSeed
+      }),
+      nsamples,
+      baseSeed
+    };
+  }
+
   const wasmParamsA = compareParamsToWasm({
     course,
     parameters: raceParameters,
@@ -99,5 +144,5 @@ export function buildComparePlan(params: CompareParams): ComparePlan {
     masterSeed: baseSeed
   });
 
-  return { wasmParamsA, wasmParamsB, nsamples, baseSeed };
+  return { mode: 'vacuum', wasmParamsA, wasmParamsB, nsamples, baseSeed };
 }

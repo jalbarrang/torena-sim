@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { ChevronDown, Download, Link2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
@@ -39,14 +39,20 @@ export function RaceSimActionBar({ isRunning, onRun, onCancel, onReplay }: RaceS
     }))
   );
 
-  const [sampleInput, setSampleInput] = useState(() => nsamples.toString());
+  const [sampleState, setSampleState] = useState(() => ({
+    nsamples,
+    value: nsamples.toString()
+  }));
   const [importOpen, setImportOpen] = useState(false);
-  const prevNsamplesRef = useRef(nsamples);
 
-  if (prevNsamplesRef.current !== nsamples) {
-    prevNsamplesRef.current = nsamples;
-    setSampleInput(nsamples.toString());
+  if (sampleState.nsamples !== nsamples) {
+    setSampleState({ nsamples, value: nsamples.toString() });
   }
+
+  const sampleInput = sampleState.value;
+  const setSampleInput = (value: string) => {
+    setSampleState({ nsamples, value });
+  };
 
   const handleNsamplesBlur = () => {
     const parsed = Number(sampleInput);

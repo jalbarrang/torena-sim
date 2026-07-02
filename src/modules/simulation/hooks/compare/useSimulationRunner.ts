@@ -17,9 +17,19 @@ import {
   hasAnyScenarioOverrides
 } from '@/modules/simulation/stores/scenario-overrides.store';
 import { coursesService } from '@/modules/data/services/CourseService';
-import { buildComparePlan } from '@/modules/simulation/simulators/wasm-compare-plan';
+import {
+  buildComparePlan,
+  type BuildComparePlanOptions
+} from '@/modules/simulation/simulators/wasm-compare-plan';
 
 const createCompareWorker = () => new CompareWasmWorker();
+
+// TODO(contested-compare-ui): read these from persisted settings and flip the
+// default mode to 'contested' when the compare settings UI lands.
+const DEFAULT_COMPARE_PLAN_OPTIONS: BuildComparePlanOptions = {
+  mode: 'vacuum',
+  contestedField: 'duo'
+};
 
 type WorkerMessage<T> =
   | {
@@ -160,7 +170,7 @@ export function useSimulationRunner() {
     // worker never touches the dataset.
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params)
+      data: buildComparePlan(params, DEFAULT_COMPARE_PLAN_OPTIONS)
     });
   };
 
@@ -213,7 +223,7 @@ export function useSimulationRunner() {
 
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params)
+      data: buildComparePlan(params, DEFAULT_COMPARE_PLAN_OPTIONS)
     });
   }
 

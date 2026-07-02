@@ -12,10 +12,15 @@ import type {
   Stats
 } from '@/modules/simulation/compare.types';
 import type { CollectedRunnerRoundData } from '@/lib/uma-domain/race/race-observer';
-import type { WasmCompareParams } from '@/lib/uma-sim-wasm/types';
+import type {
+  WasmCompareData,
+  WasmCompareParams,
+  WasmCompareRoundData,
+  WasmContestedCompareParams
+} from '@/lib/uma-sim-wasm/types';
 import { initializeSimulationRun } from '@/modules/simulation/compare.types';
 import { wasmCompareRoundDataToCollected } from '@/lib/uma-sim-wasm/adapter-results';
-import { runCompare } from '@/lib/uma-sim-wasm/loader';
+import { runCompare, runContestedCompare } from '@/lib/uma-sim-wasm/loader';
 import { computePositionDiff } from './shared-pure';
 
 type CompareStatsAccumulator = {
@@ -255,9 +260,7 @@ function reduceCompareRounds(
 }
 
 /** Extract the primary-runner round data from a WASM compare-round list. */
-function primaryRounds(
-  rounds: Array<{ runners: Array<Parameters<typeof wasmCompareRoundDataToCollected>[0]> }>
-): Array<CollectedRunnerRoundData> {
+function primaryRounds(rounds: WasmCompareData['rounds']): Array<CollectedRunnerRoundData> {
   return rounds.map((round) => {
     const primary = round.runners[0];
     if (!primary) {
@@ -265,6 +268,56 @@ function primaryRounds(
     }
     return wasmCompareRoundDataToCollected(primary);
   });
+}
+
+function findComparedRunner(
+  runners: Array<WasmCompareRoundData>,
+  runnerId: number,
+  roundIndex: number
+): WasmCompareRoundData {
+  const runner = runners.find((candidate) => candidate.runnerId === runnerId);
+  if (!runner) {
+    throw new Error(
+      `Missing compared runner ${runnerId} in contested compare round ${roundIndex}; got runner ids [${runners
+        .map((candidate) => candidate.runnerId)
+        .join(', ')}]`
+    );
+  }
+  return runner;
+}
+
+/**
+ * Extract A/B runner telemetry from same-race compare rounds.
+ *
+ * The contested engine assigns runner ids by insertion order, so the two compared
+ * runners are ids 0 and 1. The bashin delta is therefore a head-to-head same-race
+ * gap (ADR-0007), not the isolated paired-vacuum delta used by `primaryRounds`.
+ */
+export function splitContestedCompareRounds(data: WasmCompareData): CompareRounds {
+  const comparedRunnerAId = 0;
+  const comparedRunnerBId = 1;
+
+  const roundsA: CompareRounds['roundsA'] = [];
+  const roundsB: CompareRounds['roundsB'] = [];
+
+  for (const [index, round] of data.rounds.entries()) {
+    roundsA.push(
+      wasmCompareRoundDataToCollected(findComparedRunner(round.runners, comparedRunnerAId, index))
+    );
+    roundsB.push(
+      wasmCompareRoundDataToCollected(findComparedRunner(round.runners, comparedRunnerBId, index))
+    );
+  }
+
+  return { roundsA, roundsB };
+}
+
+function assertAlignedRounds(rounds: CompareRounds, expectedSamples: number): void {
+  if (rounds.roundsA.length !== expectedSamples || rounds.roundsB.length !== expectedSamples) {
+    throw new Error(
+      `Compare chunk returned ${rounds.roundsA.length}/${rounds.roundsB.length} A/B rounds; expected ${expectedSamples}`
+    );
+  }
 }
 
 /** Primary-runner round telemetry for both contestants, aligned by round index. */
@@ -281,12 +334,22 @@ export type CompareRounds = {
  * round 0; chunk `seedOffset` maps global round `seedOffset + j` to master seed
  * `baseSeed + seedOffset + j`, keeping chunked runs bit-for-bit identical.
  */
-export type ComparePlan = {
+export type VacuumComparePlan = {
+  mode: 'vacuum';
   wasmParamsA: WasmCompareParams;
   wasmParamsB: WasmCompareParams;
   nsamples: number;
   baseSeed: number;
 };
+
+export type ContestedComparePlan = {
+  mode: 'contested';
+  wasmParamsContested: WasmContestedCompareParams;
+  nsamples: number;
+  baseSeed: number;
+};
+
+export type ComparePlan = VacuumComparePlan | ContestedComparePlan;
 
 /**
  * Run the two WASM vacuum batches for a prebuilt {@link ComparePlan} and return
@@ -300,12 +363,29 @@ export async function runComparisonRoundsFromPlan(
 ): Promise<CompareRounds> {
   const masterSeed = plan.baseSeed + seedOffset;
 
+  if (plan.mode === 'contested') {
+    if (plan.wasmParamsContested.runners.length < 2) {
+      throw new Error('Contested compare plan requires at least two compared runners');
+    }
+
+    const data = await runContestedCompare({
+      ...plan.wasmParamsContested,
+      masterSeed,
+      nsamples: chunkSamples
+    });
+    const rounds = splitContestedCompareRounds(data);
+    assertAlignedRounds(rounds, chunkSamples);
+    return rounds;
+  }
+
   const [dataA, dataB] = await Promise.all([
     runCompare({ ...plan.wasmParamsA, masterSeed, nsamples: chunkSamples }),
     runCompare({ ...plan.wasmParamsB, masterSeed, nsamples: chunkSamples })
   ]);
 
-  return { roundsA: primaryRounds(dataA.rounds), roundsB: primaryRounds(dataB.rounds) };
+  const rounds = { roundsA: primaryRounds(dataA.rounds), roundsB: primaryRounds(dataB.rounds) };
+  assertAlignedRounds(rounds, chunkSamples);
+  return rounds;
 }
 
 /** Reduce aligned per-round telemetry into a {@link CompareResult}. */
