@@ -2,7 +2,13 @@ import { cloneDeep } from 'es-toolkit';
 import { toast } from 'sonner';
 import { useRunnersStore } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
-import { useRaceStore, resetResults } from '@/modules/simulation/stores/compare.store';
+import {
+  DEFAULT_FIELD_COMPOSITION,
+  resetResults,
+  useRaceStore,
+  type CompareMode,
+  type FieldComposition
+} from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
@@ -25,6 +31,8 @@ function buildSnapshot(): SimulationSnapshot {
     racedef: cloneDeep(settings.racedef),
     seed: race.seed,
     nsamples: settings.nsamples,
+    compareMode: race.compareMode,
+    fieldComposition: race.fieldComposition,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
     forcedPositions: {
@@ -71,6 +79,14 @@ function isRaceConditions(value: unknown): boolean {
     typeof value.time === 'number' &&
     typeof value.grade === 'number'
   );
+}
+
+function isCompareMode(value: unknown): value is CompareMode {
+  return value === 'contested' || value === 'vacuum';
+}
+
+function isFieldComposition(value: unknown): value is FieldComposition {
+  return value === 'duo' || value === 'mobs';
 }
 
 function isWitVariance(value: unknown): boolean {
@@ -125,6 +141,11 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
   if (!isRaceConditions(parsed.racedef)) return null;
   if (parsed.seed !== null && typeof parsed.seed !== 'number') return null;
   if (typeof parsed.nsamples !== 'number') return null;
+  const compareMode = parsed.compareMode === undefined ? 'vacuum' : parsed.compareMode;
+  if (!isCompareMode(compareMode)) return null;
+  const fieldComposition =
+    parsed.fieldComposition === undefined ? DEFAULT_FIELD_COMPOSITION : parsed.fieldComposition;
+  if (!isFieldComposition(fieldComposition)) return null;
   if (!isWitVariance(parsed.witVarianceSettings)) return null;
   if (!isRecord(parsed.staminaDrainOverrides)) return null;
   const fp = parsed.forcedPositions;
@@ -145,6 +166,8 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
     racedef: parsed.racedef as SimulationSnapshot['racedef'],
     seed: parsed.seed,
     nsamples: parsed.nsamples,
+    compareMode,
+    fieldComposition,
     witVarianceSettings: parsed.witVarianceSettings as SimulationSnapshot['witVarianceSettings'],
     staminaDrainOverrides:
       parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
@@ -188,6 +211,8 @@ export function importSnapshot(data: SimulationSnapshot): void {
 
   useRaceStore.setState({
     seed: data.seed,
+    compareMode: data.compareMode,
+    fieldComposition: data.fieldComposition,
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
 

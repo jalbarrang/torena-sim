@@ -59,7 +59,9 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
       fullyChargedStats: s.fullyChargedStats,
       leadCompetitionStats: s.leadCompetitionStats,
       staminaStats: s.staminaStats,
-      seed: s.seed
+      seed: s.seed,
+      compareMode: s.compareMode,
+      fieldComposition: s.fieldComposition
     }))
   );
 
@@ -103,7 +105,11 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
     const imageUrl = getUmaImageUrl(runner.outfitId, runner.randomMobId);
     const skills = getSkillsForShareCard(runner.skills);
 
-    const raceSummary = getRaceSettingsSummaryLine(courseId, racedef);
+    const compareSummary =
+      race.compareMode === 'contested'
+        ? `Same race · ${race.fieldComposition === 'duo' ? 'Two umas only' : '+7 mob pacers'}`
+        : 'Vacuum · isolated runners';
+    const raceSummary = `${getRaceSettingsSummaryLine(courseId, racedef)} · ${compareSummary}`;
 
     const statRows: CompareShareStatRow[] = [
       { label: 'Time to finish', value: formatTime(finishTime) },

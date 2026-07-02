@@ -2,6 +2,7 @@ import type { IRunnerState } from '@/modules/runners/components/runner-card/type
 import type { WitVarianceSettings, StaminaDrainOverrides } from '@/store/settings.store';
 import type { RaceConditions } from '@/utils/races';
 import type { InjectedDebuffsMap, ScenarioOverridesMap } from '@/modules/simulation/types';
+import type { CompareMode, FieldComposition } from '@/modules/simulation/stores/compare.store';
 
 export const SIMULATION_SNAPSHOT_VERSION = 1 as const;
 
@@ -14,6 +15,8 @@ export type SimulationSnapshot = {
   racedef: RaceConditions;
   seed: number | null;
   nsamples: number;
+  compareMode: CompareMode;
+  fieldComposition: FieldComposition;
   witVarianceSettings: WitVarianceSettings;
   staminaDrainOverrides: StaminaDrainOverrides;
   forcedPositions: {

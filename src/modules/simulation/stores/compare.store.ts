@@ -16,6 +16,26 @@ import { SpurtCandidate } from '@/lib/uma-domain/race/spurt-calculator';
 
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 
+export type CompareMode = 'contested' | 'vacuum';
+export type FieldComposition = 'duo' | 'mobs';
+
+export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
+export const DEFAULT_FIELD_COMPOSITION: FieldComposition = 'duo';
+
+const isCompareMode = (value: unknown): value is CompareMode => {
+  return value === 'contested' || value === 'vacuum';
+};
+
+const isFieldComposition = (value: unknown): value is FieldComposition => {
+  return value === 'duo' || value === 'mobs';
+};
+
+type PersistedRaceStore = {
+  injectedDebuffs?: InjectedDebuffsMap;
+  compareMode?: CompareMode;
+  fieldComposition?: FieldComposition;
+};
+
 type IRaceStore = {
   seed: number | null;
   results: Array<number>;
@@ -31,6 +51,8 @@ type IRaceStore = {
   isSimulationRunning: boolean;
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
+  compareMode: CompareMode;
+  fieldComposition: FieldComposition;
 };
 
 export const useRaceStore = create<IRaceStore>()(
@@ -49,13 +71,29 @@ export const useRaceStore = create<IRaceStore>()(
       firstUmaStats: null,
       isSimulationRunning: false,
       simulationProgress: null,
-      injectedDebuffs: { uma1: [], uma2: [] }
+      injectedDebuffs: { uma1: [], uma2: [] },
+      compareMode: DEFAULT_COMPARE_MODE,
+      fieldComposition: DEFAULT_FIELD_COMPOSITION
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as PersistedRaceStore;
+
+        return {
+          injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
+          compareMode: isCompareMode(state.compareMode) ? state.compareMode : DEFAULT_COMPARE_MODE,
+          fieldComposition: isFieldComposition(state.fieldComposition)
+            ? state.fieldComposition
+            : DEFAULT_FIELD_COMPOSITION
+        } satisfies PersistedRaceStore;
+      },
       partialize: (state) => ({
-        injectedDebuffs: state.injectedDebuffs
+        injectedDebuffs: state.injectedDebuffs,
+        compareMode: state.compareMode,
+        fieldComposition: state.fieldComposition
       })
     }
   )
@@ -63,6 +101,14 @@ export const useRaceStore = create<IRaceStore>()(
 
 export const setCompareSeed = (seed: number | null) => {
   useRaceStore.setState({ seed });
+};
+
+export const setCompareMode = (compareMode: CompareMode) => {
+  useRaceStore.setState({ compareMode });
+};
+
+export const setFieldComposition = (fieldComposition: FieldComposition) => {
+  useRaceStore.setState({ fieldComposition });
 };
 
 export const createNewCompareSeed = () => {
@@ -192,6 +238,15 @@ export const useDebuffs = (): InjectedDebuffsMap => {
     useShallow((state) => ({
       uma1: state.injectedDebuffs.uma1,
       uma2: state.injectedDebuffs.uma2
+    }))
+  );
+};
+
+export const useCompareSettings = () => {
+  return useRaceStore(
+    useShallow((state) => ({
+      compareMode: state.compareMode,
+      fieldComposition: state.fieldComposition
     }))
   );
 };

@@ -87,6 +87,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
       ? (getUmaDisplayInfo(preview.uma2.outfitId)?.name ?? preview.uma2.outfitId)
       : '(no uma)'
     : '';
+  const compareModeLabel = preview
+    ? preview.compareMode === 'contested'
+      ? `Same race (${preview.fieldComposition === 'duo' ? 'two umas only' : '+7 mob pacers'})`
+      : 'Vacuum (isolated)'
+    : '';
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -159,6 +164,10 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
             <div>
               <span className="text-muted-foreground">Seed: </span>
               <span className="font-medium">{preview.seed === null ? '(none)' : preview.seed}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Compare mode: </span>
+              <span className="font-medium">{compareModeLabel}</span>
             </div>
             <div>
               <span className="text-muted-foreground">Uma 1: </span>
