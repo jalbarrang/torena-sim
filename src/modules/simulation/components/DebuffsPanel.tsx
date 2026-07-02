@@ -13,9 +13,11 @@ import { isInjectableExternalDebuffSkill } from '@/lib/uma-domain/skills/externa
 import { SkillPickerModal } from '@/modules/skills/components/skill-picker/modal';
 import { addDebuff, clearAllDebuffs, useDebuffs } from '@/modules/simulation/stores/compare.store';
 import { CompareRunnerId } from '../compare.types';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 
 export function DebuffsPanel() {
   const { uma1, uma2 } = useDebuffs();
+  const names = useComparePairNames();
   const [pickerRunnerId, setPickerRunnerId] = useState<CompareRunnerId | null>(null);
   const [pickerSelection, setPickerSelection] = useState<Array<string>>([]);
 
@@ -83,8 +85,8 @@ export function DebuffsPanel() {
         </PanelHeader>
 
         <PanelContent className="flex flex-col gap-3">
-          <DebuffGroup runnerId="uma1" title="Uma 1" debuffs={uma1} onAdd={handleOpenPicker} />
-          <DebuffGroup runnerId="uma2" title="Uma 2" debuffs={uma2} onAdd={handleOpenPicker} />
+          <DebuffGroup runnerId="uma1" title={names.uma1} debuffs={uma1} onAdd={handleOpenPicker} />
+          <DebuffGroup runnerId="uma2" title={names.uma2} debuffs={uma2} onAdd={handleOpenPicker} />
         </PanelContent>
       </Panel>
 

@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 
 export const ResultButtonGroups = () => {
   const { displaying, results, chartData } = useRaceStore();
@@ -159,6 +160,7 @@ export const ResultButtonGroups = () => {
 
 export const SummaryTab = () => {
   const { firstUmaStats, staminaStats } = useRaceStore();
+  const names = useComparePairNames();
 
   return (
     <div className="flex flex-col gap-4">
@@ -179,8 +181,8 @@ export const SummaryTab = () => {
           </TableHeader>
           <TableBody>
             <TableRow>
-              <TableCell className="font-mono text-[#2a77c5] dark:text-blue-500 font-bold">
-                Uma 1
+              <TableCell className="max-w-40 truncate font-mono text-[#2a77c5] dark:text-blue-500 font-bold">
+                {names.uma1}
               </TableCell>
               <Activity mode={firstUmaStats ? 'visible' : 'hidden'}>
                 <TableCell className="font-mono">
@@ -199,8 +201,8 @@ export const SummaryTab = () => {
             </TableRow>
 
             <TableRow>
-              <TableCell className="font-mono text-[#c52a2a] dark:text-red-500 font-bold">
-                Uma 2
+              <TableCell className="max-w-40 truncate font-mono text-[#c52a2a] dark:text-red-500 font-bold">
+                {names.uma2}
               </TableCell>
               <TableCell className="font-mono">
                 {firstUmaStats?.uma2.firstPlaceRate.toFixed(1)}%

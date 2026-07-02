@@ -6,6 +6,7 @@ import { simToDisplaySeconds } from '@/modules/race-sim/constants';
 import { formatTime } from '@/utils/time';
 import { Table, TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import {
   Empty,
   EmptyDescription,
@@ -16,6 +17,7 @@ import {
 
 export const RunnerStatsTab = () => {
   const { chartData, rushedStats, leadCompetitionStats, staminaStats } = useRaceStore();
+  const names = useComparePairNames();
   const { allowRushedUma2 } = useWitVariance();
 
   const uma1Stats = useMemo(() => {
@@ -65,7 +67,7 @@ export const RunnerStatsTab = () => {
         {/* Uma 1 */}
         <div className="bg-background border-2 rounded-lg overflow-hidden">
           <div className="bg-[#2a77c5] dark:bg-blue-500 text-white text-center py-2 font-bold">
-            Umamusume 1
+            <span className="block truncate px-2">{names.uma1}</span>
           </div>
 
           <Table>
@@ -130,7 +132,7 @@ export const RunnerStatsTab = () => {
         {/* Uma 2 */}
         <div className="bg-background border-2 rounded-lg overflow-hidden">
           <div className="bg-[#c52a2a] dark:bg-red-500 text-white text-center py-2 font-bold">
-            Umamusume 2
+            <span className="block truncate px-2">{names.uma2}</span>
           </div>
 
           <Table>
@@ -209,15 +211,15 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               <Activity mode={uma1Stats.finishTime < uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 1 faster
+                {names.uma1} faster
               </Activity>
 
               <Activity mode={uma1Stats.finishTime > uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 2 faster
+                {names.uma2} faster
               </Activity>
 
               <Activity mode={uma1Stats.finishTime === uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 1 and Uma 2 finished at the same time
+                Both finished at the same time
               </Activity>
             </span>
           </div>
@@ -233,8 +235,8 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               {uma1Stats.topSpeed > uma2Stats.topSpeed
-                ? 'Uma 1 higher top speed'
-                : 'Uma 2 higher top speed'}
+                ? `${names.uma1} higher top speed`
+                : `${names.uma2} higher top speed`}
             </span>
           </div>
           <div className="flex flex-col items-center p-3 bg-background border-2 rounded-lg">
@@ -251,8 +253,8 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               {chartData.startDelay[0] < chartData.startDelay[1]
-                ? 'Uma 1 faster start'
-                : 'Uma 2 faster start'}
+                ? `${names.uma1} faster start`
+                : `${names.uma2} faster start`}
             </span>
           </div>
         </div>

@@ -2,12 +2,8 @@ import { Activity, useCallback, useRef, useState } from 'react';
 import {
   createNewCompareSeed,
   resetResults,
-  setCompareMode,
   setCompareSeed,
-  setFillWithMobs,
-  useCompareSettings,
-  useRaceStore,
-  type CompareMode
+  useRaceStore
 } from '@/modules/simulation/stores/compare.store';
 import { Button } from '@/components/ui/button';
 import { CompareLoadingOverlay } from '@/components/compare-loading-overlay';
@@ -36,81 +32,6 @@ import {
 import { Camera, ChevronDown, Download, Share2, Upload } from 'lucide-react';
 import { OverviewTab } from '@/modules/simulation/tabs/overview-tab';
 import { SkillsTab } from '@/modules/simulation/tabs/skills-tab';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-
-type CompareSettingsPanelProps = {
-  isSimulationRunning: boolean;
-};
-
-function CompareSettingsPanel(props: CompareSettingsPanelProps) {
-  const { isSimulationRunning } = props;
-  const { compareMode, fillWithMobs } = useCompareSettings();
-
-  const modeCopy =
-    compareMode === 'contested'
-      ? 'Same race — both umas race each other; dueling and spot-struggle emerge naturally.'
-      : 'Vacuum — each uma runs isolated with synthetic dueling; lowest-variance build comparison.';
-
-  return (
-    <div className="rounded-lg border bg-card/50 p-3 space-y-3">
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="compare-mode-select" className="text-sm text-muted-foreground">
-            Compare mode
-          </Label>
-          <Select
-            value={compareMode}
-            onValueChange={(value) => setCompareMode(value as CompareMode)}
-            disabled={isSimulationRunning}
-          >
-            <SelectTrigger id="compare-mode-select" size="sm" className="min-w-36">
-              <SelectValue>
-                {compareMode === 'contested' ? 'Same race' : 'Vacuum (isolated)'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="contested">Same race</SelectItem>
-              <SelectItem value="vacuum">Vacuum (isolated)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="field-composition-select" className="text-sm text-muted-foreground">
-            Field composition
-          </Label>
-          <Select
-            value={fillWithMobs ? 'mobs' : 'duo'}
-            onValueChange={(value) => setFillWithMobs(value === 'mobs')}
-            disabled={isSimulationRunning || compareMode === 'vacuum'}
-          >
-            <SelectTrigger id="field-composition-select" size="sm" className="min-w-40">
-              <SelectValue>{fillWithMobs ? 'Pad with mob pacers' : 'No mob padding'}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="duo">No mob padding</SelectItem>
-              <SelectItem value="mobs">Pad with mob pacers</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="text-xs text-muted-foreground leading-relaxed">
-        <p>{modeCopy}</p>
-        <p>
-          Field composition applies to Same race only. Default: pad the field with mob pacers so
-          spot-struggle and dueling emerge naturally between the compared runners.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 export default function CompareHomePage() {
   const { chartData, results, isSimulationRunning, simulationProgress, seed } = useRaceStore();
@@ -159,8 +80,6 @@ export default function CompareHomePage() {
       <div data-tutorial="race-settings">
         <RaceSettingsPanel />
       </div>
-
-      <CompareSettingsPanel isSimulationRunning={isSimulationRunning} />
 
       <div data-tutorial="simulation-controls" className="flex flex-wrap items-center gap-2">
         <Button

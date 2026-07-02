@@ -110,11 +110,11 @@ function CombinationCard(props: Readonly<CombinationCardProps>) {
           </Button>
 
           <Button size="sm" variant="outline" onClick={() => onSendToCompare('uma1', combination)}>
-            Uma 1
+            Compare A
           </Button>
 
           <Button size="sm" variant="outline" onClick={() => onSendToCompare('uma2', combination)}>
-            Uma 2
+            Compare B
           </Button>
         </div>
       )}
@@ -380,7 +380,7 @@ export function SkillPlannerResults(props: SkillPlannerResultsProps) {
   const handleSendToCompare = useCallback(
     (slot: 'uma1' | 'uma2', combination: CombinationResult) => {
       setRunner(getCompareFieldId(slot), buildRunnerSnapshot(combination));
-      toast.success(`Loaded build into ${slot === 'uma1' ? 'Uma 1' : 'Uma 2'}`);
+      toast.success(`Loaded build into ${slot === 'uma1' ? 'Compare A' : 'Compare B'}`);
     },
     [buildRunnerSnapshot]
   );

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/panel';
 import { buildRunnerSkillEntries, ForcedPositionGroup } from './ForcedPositionGroup';
 import { useComparePairRunners } from '@/store/runners.store';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import {
   clearAllForcedPositions,
   useForcedPositions
@@ -19,6 +20,7 @@ export function ForcedPositionsPanel() {
   const uma1Skills = runnerA.skills;
   const uma2Skills = runnerB.skills;
   const { uma1, uma2 } = useForcedPositions();
+  const names = useComparePairNames();
 
   const mappedSkills = useMemo(() => {
     return {
@@ -49,14 +51,14 @@ export function ForcedPositionsPanel() {
       <PanelContent className="flex flex-col gap-3">
         <ForcedPositionGroup
           runnerId="uma1"
-          title="Uma 1"
+          title={names.uma1}
           skills={mappedSkills.uma1}
           positions={uma1}
         />
 
         <ForcedPositionGroup
           runnerId="uma2"
-          title="Uma 2"
+          title={names.uma2}
           skills={mappedSkills.uma2}
           positions={uma2}
         />

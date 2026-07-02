@@ -176,13 +176,13 @@ export function ImportCodeDialog({
                 onClick={() => onLoadToSlot?.('uma1', decoded)}
                 className="bg-[#2a77c5] hover:bg-[#2a77c5]/90"
               >
-                Uma 1
+                Compare A
               </Button>
               <Button
                 onClick={() => onLoadToSlot?.('uma2', decoded)}
                 className="bg-[#c52a2a] hover:bg-[#c52a2a]/90"
               >
-                Uma 2
+                Compare B
               </Button>
             </div>
           )}

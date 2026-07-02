@@ -13,6 +13,7 @@ import { toggleRaceTrackDisplay, useRaceTrackDisplay } from '@/store/settings.st
 import type { RaceTrackDisplaySettings } from '@/modules/racetrack/display-settings';
 import { ChevronDownIcon } from 'lucide-react';
 import React from 'react';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 
 type DisplayOption = {
   settingKey: keyof RaceTrackDisplaySettings;
@@ -32,8 +33,8 @@ const UMA2_OPTIONS: DisplayOption[] = [
 ];
 
 const RUNNER_GROUPS = [
-  { label: 'Uma 1', options: UMA1_OPTIONS },
-  { label: 'Uma 2', options: UMA2_OPTIONS }
+  { key: 'uma1', options: UMA1_OPTIONS },
+  { key: 'uma2', options: UMA2_OPTIONS }
 ] as const;
 
 const RUNNER_OPTIONS: DisplayOption[] = [...UMA1_OPTIONS, ...UMA2_OPTIONS];
@@ -98,6 +99,7 @@ type RunnersDropdownProps = {
 
 const RunnersDropdown = React.memo((props: RunnersDropdownProps) => {
   const { display } = props;
+  const names = useComparePairNames();
 
   const activeCount = RUNNER_OPTIONS.filter((option) => display[option.settingKey]).length;
 
@@ -116,10 +118,12 @@ const RunnersDropdown = React.memo((props: RunnersDropdownProps) => {
       />
       <DropdownMenuContent align="start" className="min-w-44">
         {RUNNER_GROUPS.map((group, groupIndex) => (
-          <React.Fragment key={group.label}>
+          <React.Fragment key={group.key}>
             {groupIndex > 0 && <DropdownMenuSeparator />}
             <DropdownMenuGroup>
-              <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+              <DropdownMenuLabel className="max-w-44 truncate">
+                {names[group.key]}
+              </DropdownMenuLabel>
               {group.options.map((option) => (
                 <DropdownMenuCheckboxItem
                   key={option.settingKey}

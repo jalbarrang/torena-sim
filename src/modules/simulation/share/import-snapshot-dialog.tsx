@@ -172,11 +172,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
               <span className="font-medium">{compareModeLabel}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Uma 1: </span>
+              <span className="text-muted-foreground">Compare A: </span>
               <span className="font-medium">{uma1Name}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Uma 2: </span>
+              <span className="text-muted-foreground">Compare B: </span>
               <span className="font-medium">{uma2Name}</span>
             </div>
           </div>

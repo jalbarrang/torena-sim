@@ -80,7 +80,7 @@ export function RootComponent() {
       const fullRunner = createRunnerState(partialRunner);
       setRunner(getCompareFieldId(slot), fullRunner);
       setDialogOpen(false);
-      toast.success(`Runner loaded to ${slot === 'uma1' ? 'Uma 1' : 'Uma 2'}`);
+      toast.success(`Runner loaded to ${slot === 'uma1' ? 'Compare A' : 'Compare B'}`);
     },
     [setDialogOpen]
   );
