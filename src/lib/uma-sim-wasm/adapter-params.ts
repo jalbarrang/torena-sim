@@ -189,7 +189,10 @@ export type ContestedCompareParamsToWasmArgs = {
   settings: SimulationSettings;
   runners: [CreateRunner, CreateRunner, ...CreateRunner[]];
   names: [string, string, ...string[]];
-  fillMobs: boolean;
+  /** Pad the field with generated mobs to exactly this many runners (runners.length..=12). */
+  fillTo?: number;
+  /** @deprecated Legacy shim: `true` maps to `fillTo: 9` when `fillTo` is absent. Use `fillTo`. */
+  fillMobs?: boolean;
   nsamples: number;
   masterSeed: number;
 };
@@ -205,6 +208,7 @@ export function contestedCompareParamsToWasm(
     runners: args.runners.map((runner, index) =>
       sundayRunnerToWasm(runner, args.names[index] ?? `Runner ${index + 1}`)
     ),
+    fillTo: args.fillTo,
     fillMobs: args.fillMobs,
     nsamples: args.nsamples,
     masterSeed: args.masterSeed

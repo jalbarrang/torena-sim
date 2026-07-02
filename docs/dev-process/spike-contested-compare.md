@@ -41,7 +41,8 @@ Findings:
 
 - `run_race_sim` enforces exactly `FIELD_SIZE = 9` (`simulation.rs:98`), but the
   aggregate itself has no such invariant. A new use case
-  `run_contested_compare` accepting 2..=9 runners is straightforward.
+  `run_contested_compare` accepting 2 to 9 runners is straightforward. (Since
+  raised to 2 to 12 by the contested-field initiative.)
 - "+7 mobs" composition: `uma_sim_primitives::mob::{create_mob_runners,
   generate_mob_field}` already exists.
 - 2-only field: `select_pacer` is a pure domain service with full fallback

@@ -12,7 +12,9 @@ ADR-0005 split simulation into two engines over shared primitives: `uma-sim-race
 
 ## Decision
 
-Add contested compare as a separate use-case composition: run the existing `uma-sim-race` contested engine with 2..=9 compared runners, optionally fill the remaining slots with generated mobs, and attach the shared compare-grade telemetry collector. Keep vacuum compare as the isolated paired-delta use case. The compare collector and DTO-shaped read-model types live in `uma-sim-primitives::compare` because they depend only on the observer/projection primitives and are valid for both engines.
+Add contested compare as a separate use-case composition: run the existing `uma-sim-race` contested engine with 2..=12 compared runners, optionally fill the field with generated mobs to a configurable target size (`fill_to`, up to 12), and attach the shared compare-grade telemetry collector.
+
+> Amended by the contested-field initiative: the compared-runner ceiling was raised from 9 to 12 (`MAX_CONTESTED_FIELD`) and the boolean mob fill became a configurable `fill_to` target; `run_race_sim` remains exactly 9. Keep vacuum compare as the isolated paired-delta use case. The compare collector and DTO-shaped read-model types live in `uma-sim-primitives::compare` because they depend only on the observer/projection primitives and are valid for both engines.
 
 This is not a mode flag inside formulas or the shared step kernel. Formula code stays field-agnostic; the difference remains at orchestration boundaries: vacuum compare synthesizes absent field inputs in `uma-sim-vacuum`, while contested compare obtains field inputs from a live `uma-sim-race` field and projects the same compare telemetry shape.
 

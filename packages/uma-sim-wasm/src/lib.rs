@@ -74,8 +74,8 @@ pub fn run_compare_wasm(params: JsValue) -> Result<JsValue, JsError> {
 
 /// Run a same-race compare-family simulation and return the serialized result.
 ///
-/// `params` is a [`WasmContestedCompareParams`] JS object (2..=9 compared
-/// runners, optionally mob-filled). Returns the same [`WasmCompareData`] shape
+/// `params` is a [`WasmContestedCompareParams`] JS object (2..=12 compared
+/// runners, optionally mob-filled via `fillTo`). Returns the same [`WasmCompareData`] shape
 /// as vacuum compare so the TS reducer can be reused.
 #[wasm_bindgen(js_name = runContestedCompare)]
 pub fn run_contested_compare_wasm(params: JsValue) -> Result<JsValue, JsError> {

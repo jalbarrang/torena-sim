@@ -8,7 +8,7 @@ use crate::collectors::{CollectedData, RaceEventLog, RaceEventLogCollector, Race
 use crate::race::{Race, SimulationSettings};
 use uma_sim_primitives::compare::{CompareData, CompareDataCollector};
 use uma_sim_primitives::course::model::CourseData;
-use uma_sim_primitives::mob::generate_mob_field;
+use uma_sim_primitives::mob::generate_mob_runners;
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
 use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
@@ -16,6 +16,9 @@ use uma_sim_primitives::shared_kernel::params::RaceParameters;
 
 /// The number of runners a standard race expects.
 pub const FIELD_SIZE: usize = 9;
+
+/// The maximum field size for a contested compare (compared runners + mobs).
+pub const MAX_CONTESTED_FIELD: usize = 12;
 
 /// Inputs to [`run_race_sim`].
 pub struct RaceSimParams {
@@ -49,8 +52,10 @@ pub struct ContestedCompareParams {
     pub settings: SimulationSettings,
     /// Compared runners, added first and captured by the compare collector.
     pub runners: Vec<CreateRunner>,
-    /// Whether to fill the remaining field slots with generated mobs.
-    pub fill_mobs: bool,
+    /// When `Some(n)`, pad the field with generated mobs to exactly `n`
+    /// runners (`runners.len()..=MAX_CONTESTED_FIELD`; `n == runners.len()` is
+    /// an accepted no-op). `None` runs only the compared runners.
+    pub fill_to: Option<usize>,
     /// Number of rounds to simulate.
     pub nsamples: usize,
     /// Master seed (round `i` uses `master_seed + i`).
@@ -90,8 +95,15 @@ pub enum SimError {
     InvalidSamples,
     /// The field must contain exactly [`FIELD_SIZE`] runners.
     WrongRunnerCount(usize),
-    /// Contested compare requires 2..=[`FIELD_SIZE`] compared runners.
+    /// Contested compare requires 2..=[`MAX_CONTESTED_FIELD`] compared runners.
     ContestedRunnerCount(usize),
+    /// `fill_to` must be within `runners.len()..=MAX_CONTESTED_FIELD`.
+    ContestedFillTo {
+        /// The rejected `fill_to` value.
+        fill_to: usize,
+        /// The compared runner count.
+        runners: usize,
+    },
 }
 
 impl std::fmt::Display for SimError {
@@ -106,7 +118,11 @@ impl std::fmt::Display for SimError {
             }
             SimError::ContestedRunnerCount(n) => write!(
                 f,
-                "run_contested_compare expects 2..={FIELD_SIZE} compared runners, got {n}"
+                "run_contested_compare expects 2..={MAX_CONTESTED_FIELD} compared runners, got {n}"
+            ),
+            SimError::ContestedFillTo { fill_to, runners } => write!(
+                f,
+                "fill_to must be within {runners}..={MAX_CONTESTED_FIELD} (compared runners..=max field), got {fill_to}"
             ),
         }
     }
@@ -159,15 +175,41 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
 /// Run a same-race compare over `nsamples` contested rounds.
 ///
 /// Compared runners are added first and are the only runners captured by the
-/// compare collector. When `fill_mobs` is true, generated mob runners fill the
-/// rest of the field to [`FIELD_SIZE`] so field-dependent mechanics can emerge
-/// around the compared runners without increasing compare payload size.
+/// compare collector. When `fill_to` is `Some(n)`, generated mob runners pad
+/// the field to exactly `n` so field-dependent mechanics can emerge around the
+/// compared runners without increasing compare payload size.
 pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareData, SimError> {
     if params.nsamples == 0 {
         return Err(SimError::InvalidSamples);
     }
-    if !(2..=FIELD_SIZE).contains(&params.runners.len()) {
+    let nsamples = params.nsamples;
+    let master_seed = params.master_seed;
+    let (mut race, focus_runner_ids) = build_contested_race(params)?;
+
+    let collector = CompareDataCollector::for_runner_ids(focus_runner_ids);
+    race.subscribe(collector.handle());
+
+    for i in 0..nsamples {
+        race.prepare_round(master_seed + i as u64);
+        race.run();
+    }
+
+    Ok(collector.result())
+}
+
+/// Validate contested params and construct the race field: compared runners
+/// first (their ids become the compare focus), then mob padding to `fill_to`.
+fn build_contested_race(params: ContestedCompareParams) -> Result<(Race, Vec<RunnerId>), SimError> {
+    if !(2..=MAX_CONTESTED_FIELD).contains(&params.runners.len()) {
         return Err(SimError::ContestedRunnerCount(params.runners.len()));
+    }
+    if let Some(fill_to) = params.fill_to {
+        if !(params.runners.len()..=MAX_CONTESTED_FIELD).contains(&fill_to) {
+            return Err(SimError::ContestedFillTo {
+                fill_to,
+                runners: params.runners.len(),
+            });
+        }
     }
 
     let mut race = Race::new(
@@ -181,22 +223,14 @@ pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareDa
         focus_runner_ids.push(race.add_runner(runner));
     }
 
-    if params.fill_mobs {
-        let open_slots = FIELD_SIZE - focus_runner_ids.len();
-        for mob in generate_mob_field().into_iter().take(open_slots) {
+    if let Some(fill_to) = params.fill_to {
+        let open_slots = fill_to - focus_runner_ids.len();
+        for mob in generate_mob_runners(open_slots) {
             race.add_runner(mob);
         }
     }
 
-    let collector = CompareDataCollector::for_runner_ids(focus_runner_ids);
-    race.subscribe(collector.handle());
-
-    for i in 0..params.nsamples {
-        race.prepare_round(params.master_seed + i as u64);
-        race.run();
-    }
-
-    Ok(collector.result())
+    Ok((race, focus_runner_ids))
 }
 
 /// Build the finish order for the just-completed round.
@@ -273,7 +307,7 @@ mod tests {
     fn contested_params(
         nsamples: usize,
         runners: Vec<CreateRunner>,
-        fill_mobs: bool,
+        fill_to: Option<usize>,
     ) -> ContestedCompareParams {
         ContestedCompareParams {
             course: test_course(),
@@ -281,7 +315,7 @@ mod tests {
             parameters: test_race_params(),
             settings: SimulationSettings::default(),
             runners,
-            fill_mobs,
+            fill_to,
             nsamples,
             master_seed: 9001,
         }
@@ -334,10 +368,125 @@ mod tests {
             run_contested_compare(contested_params(
                 1,
                 vec![runner_props("solo", Strategy::FrontRunner)],
-                false,
+                None,
             )),
             Err(SimError::ContestedRunnerCount(1))
         ));
+    }
+
+    /// `count` compared runners cycling the strategy mix.
+    fn field_of(count: usize) -> Vec<CreateRunner> {
+        let strategies = [
+            Strategy::Runaway,
+            Strategy::FrontRunner,
+            Strategy::PaceChaser,
+            Strategy::LateSurger,
+            Strategy::EndCloser,
+        ];
+        (0..count)
+            .map(|i| runner_props(&format!("R{i}"), strategies[i % strategies.len()]))
+            .collect()
+    }
+
+    #[test]
+    fn contested_compare_rejects_thirteen_runners() {
+        assert!(matches!(
+            run_contested_compare(contested_params(1, field_of(13), None)),
+            Err(SimError::ContestedRunnerCount(13))
+        ));
+    }
+
+    #[test]
+    fn contested_compare_rejects_out_of_range_fill_to() {
+        for fill_to in [1, 13] {
+            assert!(matches!(
+                run_contested_compare(contested_params(1, field_of(2), Some(fill_to))),
+                Err(SimError::ContestedFillTo {
+                    fill_to: f,
+                    runners: 2
+                }) if f == fill_to
+            ));
+        }
+    }
+
+    #[test]
+    fn contested_compare_fill_to_runner_count_is_noop() {
+        let data = run_contested_compare(contested_params(1, field_of(2), Some(2)))
+            .expect("no-op fill_to accepted");
+        assert_eq!(data.rounds[0].runners.len(), 2);
+    }
+
+    #[test]
+    fn contested_compare_twelve_runner_field_completes() {
+        let data = run_contested_compare(contested_params(1, field_of(12), None))
+            .expect("12-runner contested compare runs");
+
+        assert_eq!(data.rounds.len(), 1);
+        let round = &data.rounds[0];
+        assert_eq!(round.runners.len(), 12);
+        assert!(round.runners.iter().all(|runner| runner.finished));
+        assert!(round
+            .runners
+            .iter()
+            .all(|runner| !runner.position.is_empty()));
+    }
+
+    #[test]
+    fn contested_compare_deterministic_at_ten_and_twelve() {
+        for size in [10, 12] {
+            let a = run_contested_compare(contested_params(2, field_of(size), None)).expect("a");
+            let b = run_contested_compare(contested_params(2, field_of(size), None)).expect("b");
+            assert_eq!(a, b, "field of {size} must be deterministic per seed");
+        }
+    }
+
+    #[test]
+    fn contested_compare_fill_to_twelve_builds_true_twelve_field() {
+        // Regression guard: generate_mob_field() only ever produced 9 mobs, so
+        // 2 + fill_to(12) silently built an 11-field.
+        let (race, focus) =
+            build_contested_race(contested_params(1, field_of(2), Some(12))).expect("field builds");
+        assert_eq!(focus.len(), 2);
+        assert_eq!(race.runners().len(), 12);
+
+        // Telemetry stays scoped to the compared runners.
+        let data = run_contested_compare(contested_params(1, field_of(2), Some(12)))
+            .expect("contested compare runs");
+        assert_eq!(data.rounds[0].runners.len(), 2);
+        assert!(data.rounds[0].runners.iter().all(|runner| runner.finished));
+    }
+
+    #[test]
+    fn contested_compare_twelve_field_assigns_twelve_distinct_gates() {
+        // Regression guard: the gate vector was hard-coded to 9 entries and
+        // panicked (index out of bounds) beyond 9 runners.
+        let (mut race, _) =
+            build_contested_race(contested_params(1, field_of(12), None)).expect("field builds");
+        race.prepare_round(9001);
+        let mut gates: Vec<i64> = race.runners().iter().map(|r| r.gate).collect();
+        gates.sort_unstable();
+        assert_eq!(gates, (0..12).collect::<Vec<i64>>());
+    }
+
+    #[test]
+    fn contested_compare_spot_struggle_emerges_in_twelve_field() {
+        let mut params = contested_params(
+            1,
+            vec![
+                runner_props("a", Strategy::FrontRunner),
+                runner_props("b", Strategy::FrontRunner),
+            ],
+            Some(12),
+        );
+        // Narrow lanes keep the front-runner pair close enough for the live
+        // group coordinator to activate naturally even in a full 12-field.
+        params.course.horse_lane = 0.01;
+        let data = run_contested_compare(params).expect("contested compare runs");
+
+        assert!(data.rounds[0]
+            .runners
+            .iter()
+            .any(|runner| runner.spot_struggle_region.is_some()));
     }
 
     #[test]
@@ -348,7 +497,7 @@ mod tests {
                 runner_props("a", Strategy::FrontRunner),
                 runner_props("b", Strategy::FrontRunner),
             ],
-            false,
+            None,
         ))
         .expect("contested compare runs");
 
@@ -372,7 +521,7 @@ mod tests {
                 runner_props("a", Strategy::FrontRunner),
                 runner_props("b", Strategy::FrontRunner),
             ],
-            true,
+            Some(FIELD_SIZE),
         ))
         .expect("contested compare runs");
 
@@ -391,7 +540,7 @@ mod tests {
                 runner_props("a", Strategy::FrontRunner),
                 runner_props("b", Strategy::FrontRunner),
             ],
-            false,
+            None,
         );
         // Narrow test course keeps same-strategy front-runners lane-close enough
         // for the live group coordinator to activate naturally.
@@ -419,7 +568,7 @@ mod tests {
             end: 500.0,
         }];
 
-        let data = run_contested_compare(contested_params(1, vec![runaway, front], false))
+        let data = run_contested_compare(contested_params(1, vec![runaway, front], None))
             .expect("contested compare runs");
         let round = &data.rounds[0];
         let runaway = round

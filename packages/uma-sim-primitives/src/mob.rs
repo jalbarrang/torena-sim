@@ -67,6 +67,15 @@ pub fn generate_mob_field() -> Vec<CreateRunner> {
     create_mob_runners(&MOB_STRATEGIES)
 }
 
+/// Build `count` mob runners by cycling the default strategy mix.
+///
+/// Unlike [`generate_mob_field`] (fixed 9), this supports arbitrary counts —
+/// used to pad a contested field of up to 12 runners.
+pub fn generate_mob_runners(count: usize) -> Vec<CreateRunner> {
+    let strategies: Vec<Strategy> = MOB_STRATEGIES.iter().copied().cycle().take(count).collect();
+    create_mob_runners(&strategies)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,6 +86,16 @@ mod tests {
         assert_eq!(field.len(), 9);
         assert!(field.iter().all(|r| r.stats.speed == 800));
         assert!(field.iter().all(|r| r.mood == Mood::Normal));
+    }
+
+    #[test]
+    fn generate_mob_runners_cycles_strategy_mix() {
+        let runners = generate_mob_runners(11);
+        assert_eq!(runners.len(), 11);
+        assert_eq!(runners[9].strategy, MOB_STRATEGIES[0]);
+        assert_eq!(runners[10].strategy, MOB_STRATEGIES[1]);
+
+        assert!(generate_mob_runners(0).is_empty());
     }
 
     #[test]

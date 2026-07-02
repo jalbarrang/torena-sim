@@ -866,7 +866,13 @@ pub struct WasmContestedCompareParams {
     pub settings: WasmSettings,
     /// Compared runners, added first and captured by the compare collector.
     pub runners: Vec<WasmCreateRunner>,
-    /// Whether to fill the remaining field with generated mobs.
+    /// Pad the field with generated mobs to exactly this many runners
+    /// (`runners.len()..=12`). Omit for no padding.
+    #[serde(default)]
+    pub fill_to: Option<usize>,
+    /// Deprecated back-compat shim: legacy `fillMobs: true` maps to
+    /// `fill_to: Some(9)` when `fillTo` is absent. Retire once the store
+    /// plan migrates callers to `fillTo`.
     #[serde(default)]
     pub fill_mobs: bool,
     /// Number of rounds.
@@ -887,13 +893,20 @@ impl WasmContestedCompareParams {
             .into_iter()
             .map(WasmCreateRunner::into_domain)
             .collect::<Result<Vec<_>, _>>()?;
+        // Legacy `fillMobs: true` → fill to the classic 9-runner field when no
+        // explicit `fillTo` is given (back-compat shim, see field docs).
+        let fill_to = match (self.fill_to, self.fill_mobs) {
+            (Some(n), _) => Some(n),
+            (None, true) => Some(9),
+            (None, false) => None,
+        };
         Ok(ContestedCompareParams {
             course,
             ground,
             parameters,
             settings,
             runners,
-            fill_mobs: self.fill_mobs,
+            fill_to,
             nsamples: self.nsamples,
             master_seed: self.master_seed,
         })
@@ -1425,11 +1438,80 @@ mod tests {
         assert_eq!(domain.runners.len(), 2);
         assert_eq!(domain.runners[0].name, "Alpha");
         assert_eq!(domain.runners[0].forced_spot_struggle_regions.len(), 1);
-        assert!(domain.fill_mobs);
+        // Legacy `fillMobs: true` maps to the classic 9-runner fill.
+        assert_eq!(domain.fill_to, Some(9));
         assert_eq!(domain.nsamples, 7);
         assert_eq!(domain.master_seed, 42);
         assert!(domain.settings.spot_struggle);
         assert!(!domain.settings.dueling);
+    }
+
+    fn minimal_contested_json(fill_fields: &str) -> String {
+        format!(
+            r#"{{
+                "course": {{
+                    "courseId": 10101,
+                    "raceTrackId": 101,
+                    "distance": 2000.0,
+                    "distanceType": 3,
+                    "surface": 1,
+                    "turn": 2,
+                    "laneMax": 18.0,
+                    "courseWidth": 30.0,
+                    "horseLane": 1.2,
+                    "laneChangeAcceleration": 0.1,
+                    "laneChangeAccelerationPerFrame": 0.01,
+                    "maxLaneDistance": 2.0,
+                    "moveLanePoint": 0.5
+                }},
+                "parameters": {{
+                    "ground": 1,
+                    "weather": 1,
+                    "season": 1,
+                    "timeOfDay": 1,
+                    "grade": 100
+                }},
+                "runners": [
+                    {{
+                        "outfitId": "test-outfit",
+                        "name": "Alpha",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": {{ "distance": 1, "strategy": 1, "surface": 1 }},
+                        "stats": {{ "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }}
+                    }},
+                    {{
+                        "outfitId": "test-outfit",
+                        "name": "Beta",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": {{ "distance": 1, "strategy": 1, "surface": 1 }},
+                        "stats": {{ "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }}
+                    }}
+                ],{fill_fields}
+                "nsamples": 1,
+                "masterSeed": 1
+            }}"#
+        )
+    }
+
+    #[test]
+    fn contested_compare_fill_to_passes_through() {
+        let dto: WasmContestedCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "fillTo": 12,"#))
+                .expect("contested compare params deserialize with fillTo");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, Some(12));
+    }
+
+    #[test]
+    fn contested_compare_fill_to_wins_over_legacy_fill_mobs() {
+        let dto: WasmContestedCompareParams = serde_json::from_str(&minimal_contested_json(
+            r#" "fillTo": 11, "fillMobs": true,"#,
+        ))
+        .expect("contested compare params deserialize with both fill fields");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, Some(11));
     }
 
     #[test]
@@ -1483,5 +1565,8 @@ mod tests {
         .expect("contested compare params deserialize with default fillMobs");
 
         assert!(!dto.fill_mobs);
+        assert_eq!(dto.fill_to, None);
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, None);
     }
 }

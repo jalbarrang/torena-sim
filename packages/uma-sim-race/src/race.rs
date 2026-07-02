@@ -230,8 +230,8 @@ impl Race {
         let base_speed = self.base_speed();
         let parser = ConditionParser::new(&self.catalog);
 
-        // Fisher-Yates gate shuffle (9 gates) seeded from the race RNG.
-        let mut gates: Vec<i64> = (0..9).collect();
+        // Fisher-Yates gate shuffle (one gate per runner) seeded from the race RNG.
+        let mut gates: Vec<i64> = (0..self.runners.len() as i64).collect();
         for i in (1..gates.len()).rev() {
             let j = self.rng.uniform(i as u32 + 1) as usize;
             gates.swap(i, j);
@@ -334,6 +334,7 @@ impl Race {
             let position_keep = PositionKeepContext {
                 position_keep_mode: self.settings.position_keep_mode,
                 num_runners: snapshot.num_active as usize,
+                field_size: snapshot.num_total as usize,
                 pacer_position: snapshot.pacer_position,
                 pacer_strategy: snapshot.pacer_strategy,
                 pacer_is_self: snapshot.pacer == Some(runner.id),
