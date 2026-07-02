@@ -1,0 +1,66 @@
+// Contested field (2..=12 compare) — architectural intent.
+//
+// The collapse this prevents: an agent "unifying" the two field regimes
+// (race-sim's exact-9 and contested-compare's 2..=12) into one constant, or
+// letting vacuum mode survive on a grown field, or reordering the compare
+// pair in engine params so the trace split silently swaps A and B.
+//
+// RaceSimField and ContestedField are deliberately DISTINCT sorts: a law
+// about one cannot be stated about the other, so "reuse the 9 check for
+// contested" (or vice versa) is unstatable.
+
+sort RaceSimField { size: Int }
+sort ContestedField { size: Int }
+
+// run_race_sim: the field is exactly 9. Always.
+relation race_sim_field_valid(f: RaceSimField)
+law race_sim_field_valid(f) {
+  f.size == 9
+}
+
+// run_contested_compare: 2..=12 compared runners.
+relation contested_field_valid(f: ContestedField)
+law contested_field_valid(f) {
+  2 <= f.size
+  f.size <= 12
+}
+
+// Mob fill: fillTo = max(fieldSize, 9) capped at 12 when fillWithMobs is on.
+// Laws state the bounds (the max() arithmetic itself is not expressible):
+// never below the real field, never below the experiment floor of 9,
+// never above the engine ceiling.
+sort FillRequest { fieldSize: Int, fillTo: Int }
+relation mob_fill_valid(r: FillRequest)
+law mob_fill_valid(r) {
+  r.fieldSize <= r.fillTo
+  9 <= r.fillTo
+  r.fillTo <= 12
+}
+
+// Compare mode: 0 = contested, 1 = vacuum.
+// Vacuum is only a valid mode for a field of exactly 2.
+sort CompareRun { fieldSize: Int, mode: Int }
+relation vacuum_gate(run: CompareRun)
+law vacuum_gate(run) {
+  run.mode == 1 => run.fieldSize == 2
+}
+
+// Engine param ordering: Compare A is inserted first (index 0), B second
+// (index 1). The TS trace split keys on this; swapping them silently flips
+// every pairwise stat.
+sort EngineParamOrder { aIndex: Int, bIndex: Int }
+relation pair_insertion_order(o: EngineParamOrder)
+law pair_insertion_order(o) {
+  o.aIndex == 0
+  o.bIndex == 1
+}
+
+// Legacy snapshot decode: a snapshot with no compareMode field predates the
+// contested engine and MUST decode to vacuum (mode 1) with a 2-runner field,
+// so historical shared results stay reproducible.
+sort LegacyDecode { mode: Int, fieldSize: Int }
+relation legacy_snapshot_decode(d: LegacyDecode)
+law legacy_snapshot_decode(d) {
+  d.mode == 1
+  d.fieldSize == 2
+}

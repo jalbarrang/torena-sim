@@ -38,6 +38,7 @@ docs/prd/
 
 .prd/
 .plans/
+.hiker-cache/
 .issues/
 .asset-bot/
 
