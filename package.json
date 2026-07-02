@@ -7,7 +7,7 @@
     "build": "bun run data:manifest && bun run wasm:build && vite build",
     "preview": "vite preview",
     "typecheck": "tsgo --noEmit",
-    "intent": "bun scripts/check-intent.ts",
+    "intent": "hiker check .hiker",
     "typecheck:legacy": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
