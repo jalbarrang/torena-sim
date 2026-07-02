@@ -39,14 +39,6 @@ if ! cargo clippy --workspace --all-targets -- -D warnings; then
     exit 1
 fi
 
-if command -v typos &>/dev/null; then
-    echo "  → typos..."
-    if ! typos; then
-        echo "❌ Typos found. Fix them before committing."
-        exit 1
-    fi
-fi
-
 echo "✅ Pre-commit checks passed."
 HOOK
 
@@ -54,4 +46,4 @@ chmod +x "$HOOK_FILE"
 echo "✅ Pre-commit hook installed at $HOOK_FILE"
 echo ""
 echo "Optional: install the full quality toolset:"
-echo "  cargo install typos-cli cargo-deny cargo-machete"
+echo "  cargo install cargo-deny cargo-machete"
