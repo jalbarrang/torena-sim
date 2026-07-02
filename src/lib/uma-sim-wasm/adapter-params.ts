@@ -16,6 +16,7 @@ import type {
 } from '@/lib/uma-domain/race/types';
 import type {
   WasmCompareParams,
+  WasmContestedCompareParams,
   WasmCourseData,
   WasmCreateRunner,
   WasmDuelingRates,
@@ -176,6 +177,35 @@ export function compareParamsToWasm(args: CompareParamsToWasmArgs): WasmCompareP
     settings: compareSettingsToWasm(args.settings),
     duelingRates: duelingRatesToWasm(args.duelingRates),
     runners: [sundayRunnerToWasm(args.runner, args.name)],
+    nsamples: args.nsamples,
+    masterSeed: args.masterSeed
+  };
+}
+
+/** Inputs to {@link contestedCompareParamsToWasm} — same-race compare runners over N rounds. */
+export type ContestedCompareParamsToWasmArgs = {
+  course: CourseData;
+  parameters: SundayRaceParameters;
+  settings: SimulationSettings;
+  runners: [CreateRunner, CreateRunner, ...CreateRunner[]];
+  names: [string, string, ...string[]];
+  fillMobs: boolean;
+  nsamples: number;
+  masterSeed: number;
+};
+
+/** Build the WASM contested compare params for same-race comparison. */
+export function contestedCompareParamsToWasm(
+  args: ContestedCompareParamsToWasmArgs
+): WasmContestedCompareParams {
+  return {
+    course: courseDataToWasm(args.course),
+    parameters: raceParametersToWasm(args.parameters),
+    settings: compareSettingsToWasm(args.settings),
+    runners: args.runners.map((runner, index) =>
+      sundayRunnerToWasm(runner, args.names[index] ?? `Runner ${index + 1}`)
+    ),
+    fillMobs: args.fillMobs,
     nsamples: args.nsamples,
     masterSeed: args.masterSeed
   };

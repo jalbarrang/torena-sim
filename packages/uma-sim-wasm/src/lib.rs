@@ -15,11 +15,12 @@ pub mod observer;
 use wasm_bindgen::prelude::*;
 
 use uma_sim_race::race::Race;
-use uma_sim_race::run_race_sim;
+use uma_sim_race::{run_contested_compare, run_race_sim};
 use uma_sim_vacuum::run_compare;
 
 use crate::dto::{
-    WasmCompareData, WasmCompareParams, WasmFinishEntry, WasmRaceSimParams, WasmRaceSimResult,
+    WasmCompareData, WasmCompareParams, WasmContestedCompareParams, WasmFinishEntry,
+    WasmRaceSimParams, WasmRaceSimResult,
 };
 use crate::observer::JsObserver;
 
@@ -68,6 +69,21 @@ pub fn run_compare_wasm(params: JsValue) -> Result<JsValue, JsError> {
         .into_domain()
         .map_err(|e| JsError::new(&e.to_string()))?;
     let result = run_compare(domain).map_err(|e| JsError::new(&e.to_string()))?;
+    to_js(&WasmCompareData::from_domain(&result))
+}
+
+/// Run a same-race compare-family simulation and return the serialized result.
+///
+/// `params` is a [`WasmContestedCompareParams`] JS object (2..=9 compared
+/// runners, optionally mob-filled). Returns the same [`WasmCompareData`] shape
+/// as vacuum compare so the TS reducer can be reused.
+#[wasm_bindgen(js_name = runContestedCompare)]
+pub fn run_contested_compare_wasm(params: JsValue) -> Result<JsValue, JsError> {
+    let dto: WasmContestedCompareParams = from_js(params)?;
+    let domain = dto
+        .into_domain()
+        .map_err(|e| JsError::new(&e.to_string()))?;
+    let result = run_contested_compare(domain).map_err(|e| JsError::new(&e.to_string()))?;
     to_js(&WasmCompareData::from_domain(&result))
 }
 

@@ -125,6 +125,16 @@ export type WasmCompareParams = {
   masterSeed: number;
 };
 
+export type WasmContestedCompareParams = {
+  course: WasmCourseData;
+  parameters: WasmRaceParameters;
+  settings?: WasmSettings;
+  runners: WasmCreateRunner[];
+  fillMobs?: boolean;
+  nsamples: number;
+  masterSeed: number;
+};
+
 export type WasmRaceSimParams = {
   course: WasmCourseData;
   parameters: WasmRaceParameters;
