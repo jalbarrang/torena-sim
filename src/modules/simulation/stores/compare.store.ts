@@ -20,7 +20,11 @@ export type CompareMode = 'contested' | 'vacuum';
 export type FieldComposition = 'duo' | 'mobs';
 
 export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
-export const DEFAULT_FIELD_COMPOSITION: FieldComposition = 'duo';
+// `mobs` (two umas + 7 generated mobs) is the default: the field-composition
+// experiment (docs/dev-process/spike-contested-compare.md) showed `duo` fails to
+// surface spot-struggle / dueling for asymmetric fields — the exact mechanics
+// contested compare exists to model. See contested-compare-ui t-003.
+export const DEFAULT_FIELD_COMPOSITION: FieldComposition = 'mobs';
 
 const isCompareMode = (value: unknown): value is CompareMode => {
   return value === 'contested' || value === 'vacuum';

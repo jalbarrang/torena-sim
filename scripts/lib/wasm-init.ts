@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type {
   WasmCompareData,
   WasmCompareParams,
+  WasmContestedCompareParams,
   WasmRaceSimParams,
   WasmRaceSimResult
 } from '@/lib/uma-sim-wasm/types';
@@ -13,6 +14,7 @@ type UmaSimWasmCliModule = {
   initSync: (options: { module: BufferSource }) => unknown;
   runRaceSim: (params: WasmRaceSimParams) => WasmRaceSimResult;
   runCompare: (params: WasmCompareParams) => WasmCompareData;
+  runContestedCompare: (params: WasmContestedCompareParams) => WasmCompareData;
 };
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

@@ -110,3 +110,40 @@ untouched — no breaking changes. TS side needs a new adapter path in
 - TS: adapter + orchestration + reducer wiring (medium) · settings UI +
   persistence + copy (small-medium) · ADR-0007 + docs (small).
 - Estimate: 3–5 focused sessions.
+
+## Field-composition decision: default is `mobs` (resolved)
+
+Outcome of the `duo` vs `mobs` experiment (contested-compare-ui t-003). Reproduce
+with `bun run wasm:build` then
+`bun scripts/run-contested-field-experiment.ts --samples 400 --seed 1`
+(`scripts/run-contested-field-experiment.ts`).
+
+400 samples/mode, seed 1, turf, balanced ~1200 spd builds:
+
+| Matchup | Metric | `duo` | `mobs` |
+|---------|--------|-------|--------|
+| Runaway vs Front Runner (2000m) | spot-struggle A / B | 0% / 0% | 80.5% / 38.5% |
+| Runaway vs Front Runner (2000m) | out-of-HP (either) | 0% | 81.0% |
+| Runaway vs Front Runner (2000m) | time-δ stdev | 0.072s | 0.873s |
+| Pace Chaser mirror (1600m) | dueling A / B | 0% / 0% | 70.5% / 72.5% |
+| Pace Chaser mirror (1600m) | time-δ stdev | 0.074s | 0.335s |
+| Front Runner mirror (2000m) | spot-struggle A / B | 81.3% / 81.3% | 43.3% / 42.3% |
+| Front Runner mirror (2000m) | time-δ stdev | 0.144s | 0.138s |
+
+**Decision: default `mobs`.** The spot-struggle group coordinator
+(`uma-sim-race/src/race.rs`) needs ≥2 same-strategy bunched front-runner
+position-keep runners; and proximity dueling needs nearby bodies. A 2-runner
+field only satisfies this when the two compared umas share a front-running
+strategy (the Front Runner mirror row). For asymmetric fields — including the
+exact **Runaway vs Front Runner** case from the original user report — `duo`
+surfaces **zero** spot-struggle, so the Runaway HP-drain the feature exists to
+show never fires. `mobs` surfaces both mechanics across every matchup.
+
+`duo`'s lower time-δ stdev is not "better precision" — it is the variance of a
+simulation that isn't modelling the contention. `mobs` trades higher per-round
+variance (budget more samples) for faithful emergence and more realistic
+order-dependent skill conditions in a full 9-field. `duo` remains available as a
+setting for isolated head-to-head reads.
+
+Set in `src/modules/simulation/stores/compare.store.ts`
+(`DEFAULT_FIELD_COMPOSITION = 'mobs'`).

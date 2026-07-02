@@ -58,6 +58,8 @@ describe('parseSnapshotJson', () => {
     const parsed = parseSnapshotJson(JSON.stringify(oldSnapshot));
 
     expect(parsed?.compareMode).toBe('vacuum');
-    expect(parsed?.fieldComposition).toBe('duo');
+    // field composition is moot for vacuum snapshots; it falls back to the
+    // current default (mobs) for consistency.
+    expect(parsed?.fieldComposition).toBe('mobs');
   });
 });
