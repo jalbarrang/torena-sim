@@ -302,6 +302,15 @@ function AppFooter() {
       className={footerLinkClass}
     >
       GitHub
+    </a>,
+    <a
+      key="discord"
+      href="https://discord.gg/qJ7EJTJtT7"
+      target="_blank"
+      rel="noopener noreferrer"
+      className={footerLinkClass}
+    >
+      Discord
     </a>
   ].filter(Boolean);
 
