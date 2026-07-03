@@ -62,16 +62,35 @@ import type { SkillEntry } from '@/modules/data/services/SkillService';
 let skillFamilyMapCache: Map<string, Array<string>> | null = null;
 
 function getSkillFamilyMap(): Map<string, Array<string>> {
-  if (!skillFamilyMapCache) {
-    const map = new Map<string, Array<string>>();
-    for (const skill of skillsService.getAll()) {
-      if (skill.versions && skill.versions.length > 0) {
-        map.set(skill.id, [skill.id, ...skill.versions.map(String)]);
-      }
-    }
-    skillFamilyMapCache = map;
+  if (skillFamilyMapCache) {
+    return skillFamilyMapCache;
   }
+
+  const skills = skillsService?.getAll() ?? [];
+  const map = new Map<string, Array<string>>();
+  for (const skill of skills) {
+    if (skill.versions && skill.versions.length > 0) {
+      map.set(skill.id, [skill.id, ...skill.versions.map(String)]);
+    }
+  }
+
+  // Do NOT cache a map built before the skill dataset finished bootstrapping.
+  // A lazily-built empty/partial map would otherwise be memoized permanently
+  // and degrade every family/tier lookup for the rest of the session.
+  if (skills.length === 0) {
+    return map;
+  }
+
+  skillFamilyMapCache = map;
   return skillFamilyMapCache;
+}
+
+/**
+ * Clear the memoized family map. Exposed for tests and for any future call site
+ * that reloads the skill dataset at runtime.
+ */
+export function invalidateSkillFamilyMap(): void {
+  skillFamilyMapCache = null;
 }
 
 // ============================================================================

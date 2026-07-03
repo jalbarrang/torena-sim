@@ -37,7 +37,10 @@ import { coursesService } from '@/modules/data/services/CourseService';
 import { racedefToParams } from '@/utils/races';
 import { useSettingsStore } from '@/store/settings.store';
 import { defaultSimulationOptions } from '@/components/bassin-chart/utils';
-import { getUnsatisfiedRepresentativePrerequisiteIds } from '../skill-family';
+import {
+  getUnsatisfiedRepresentativePrerequisiteIds,
+  isSkillCoveredByOwnedFamily
+} from '../skill-family';
 
 const createSkillPlannerWorker = () => new SkillPlannerWasmWorker();
 
@@ -201,9 +204,12 @@ export function useSkillPlannerOptimizer() {
     }));
 
     // Combination generation needs skill-family data, so it runs on the main
-    // thread; the worker receives the ready-made combinations.
+    // thread; the worker receives the ready-made combinations. Filter with
+    // family coverage (not raw id equality) so an obtained ○/◎/gold can never
+    // be re-offered as a purchase — e.g. owning Firm Conditions ○ must drop the
+    // ○ candidate. The worker keeps a cheap exact-match guard as a safety net.
     const filteredCandidates = candidatesWithNetCost.filter(
-      (candidate) => !obtainedSkills.includes(candidate.skillId)
+      (candidate) => !isSkillCoveredByOwnedFamily(candidate.skillId, obtainedSkills)
     );
     const combinations = generateCombinations(filteredCandidates, budget);
 

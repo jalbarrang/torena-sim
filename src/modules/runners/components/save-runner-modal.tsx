@@ -67,7 +67,8 @@ function SaveRunnerModalContent(props: SaveRunnerModalContentProps) {
       <DialogHeader>
         <DialogTitle>Save to Veterans</DialogTitle>
         <DialogDescription>
-          Save this runner configuration to your Veterans library for quick access later.
+          Save this build to your Veterans library. All of its skills are stored as already
+          obtained.
         </DialogDescription>
       </DialogHeader>
 

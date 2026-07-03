@@ -2,7 +2,9 @@ import { useCallback, useMemo } from 'react';
 import {
   getSkillPlanningMeta,
   removeCandidate,
+  removeObtainedSkill,
   setCandidateHintLevel,
+  setObtainedSkills,
   useSkillPlannerStore
 } from '../skill-planner.store';
 import type { CandidateSkill, HintLevel } from '../types';
@@ -37,6 +39,19 @@ export function CandidateSkillList() {
 
   const handleRemove = useCallback((skillId: string) => {
     removeCandidate(skillId);
+  }, []);
+
+  // Marking a candidate (or one of its prereqs) as obtained moves it into the
+  // obtained set (cost 0). setObtainedSkills prunes any matching candidate, so
+  // the skill leaves the pool automatically.
+  const handleBoughtChange = useCallback((skillId: string, bought: boolean) => {
+    const current = useSkillPlannerStore.getState().obtainedSkillIds;
+
+    if (bought) {
+      setObtainedSkills([...current, skillId]);
+    } else {
+      removeObtainedSkill(skillId);
+    }
   }, []);
 
   // Re-derive getSkillMeta when store meta or obtained skills change so
@@ -96,6 +111,7 @@ export function CandidateSkillList() {
                   hasFastLearner={hasFastLearner}
                   costSummary={costSummaryBySkillId[candidate.skillId]}
                   onHintLevelChange={handleHintLevelChange}
+                  onBoughtChange={handleBoughtChange}
                   onRemove={handleRemove}
                   getSkillMeta={getSkillMeta}
                 />
@@ -130,6 +146,7 @@ type CandidateSkillItemProps = {
   hasFastLearner: boolean;
   costSummary: SkillCostSummary;
   onHintLevelChange: (skillId: string, level: number) => void;
+  onBoughtChange: (skillId: string, bought: boolean) => void;
   onRemove: (skillId: string) => void;
   getSkillMeta: (skillId: string) => SkillMeta;
 };
@@ -151,8 +168,15 @@ function CandidateSkillRow() {
 }
 
 function CandidateSkillItem(props: Readonly<CandidateSkillItemProps>) {
-  const { candidate, hasFastLearner, costSummary, onHintLevelChange, onRemove, getSkillMeta } =
-    props;
+  const {
+    candidate,
+    hasFastLearner,
+    costSummary,
+    onHintLevelChange,
+    onBoughtChange,
+    onRemove,
+    getSkillMeta
+  } = props;
 
   return (
     <SkillItem
@@ -160,6 +184,7 @@ function CandidateSkillItem(props: Readonly<CandidateSkillItemProps>) {
       hasFastLearner={hasFastLearner}
       costSummary={costSummary}
       onHintLevelChange={onHintLevelChange}
+      onBoughtChange={onBoughtChange}
       onRemove={onRemove}
       getSkillMeta={getSkillMeta}
     >

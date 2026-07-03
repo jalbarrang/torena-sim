@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import {
   completeCurrentStep,
+  reconcilePlannerPersistedState,
   setCurrentStep,
   startOver,
   useSkillPlannerStore
@@ -38,6 +39,13 @@ const previousStepByStep: Partial<Record<WizardStep, WizardStep>> = {
 export function SkillPlannerLayout() {
   const { hasActiveSession, currentStep, runner } = useSkillPlannerStore();
   const [startOverOpen, setStartOverOpen] = useState(false);
+
+  // Runs only after DataBootGate has loaded the skill dataset (routes render
+  // post-bootstrap), so persisted state from an earlier stale-cache session is
+  // corrected here without requiring the user to re-click through the menus.
+  useEffect(() => {
+    reconcilePlannerPersistedState();
+  }, []);
 
   const canContinue = useMemo(() => {
     if (currentStep === 'runner') {

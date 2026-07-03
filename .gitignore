@@ -46,6 +46,7 @@ public/data/manifest.json
 public/data/sets/
 public/data/*.*.json
 .pi/context-folders.json
+.pi/discord.json
 src/lib/uma-sim-wasm/pkg/
 
 # Use bun.lock; npm/yarn/pnpm lockfiles are not used

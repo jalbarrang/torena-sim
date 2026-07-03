@@ -109,7 +109,8 @@ export function ImportVeteranDialog(props: Readonly<ImportVeteranDialogProps>) {
         <DialogHeader>
           <DialogTitle>Import from Veterans</DialogTitle>
           <DialogDescription>
-            Replace the current planner runner with a saved Veteran snapshot.
+            Load a saved Veteran as your planner runner. Its skills count as already obtained (cost
+            0), so the planner only optimizes the new skills you add.
           </DialogDescription>
         </DialogHeader>
 

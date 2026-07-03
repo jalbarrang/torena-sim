@@ -99,7 +99,16 @@ export const useSkillPlannerStore = create<SkillPlannerState>()(
   persist(() => createInitialState(), {
     name: 'umalator-skill-planner-v2',
     storage: createJSONStorage(() => localStorage),
-    partialize: toPersistedState
+    partialize: toPersistedState,
+    // A session that computed obtained/candidate sets while the skill-family
+    // cache was stale can persist a bad split (e.g. an obtained ○ that also
+    // lingers as a candidate). Re-resolve once after rehydration. Deferred via
+    // microtask so the module's helper bindings are fully initialized, and
+    // guarded so it no-ops until the skill dataset is ready (a later planner
+    // mount reconciles again once data has bootstrapped).
+    onRehydrateStorage: () => () => {
+      queueMicrotask(() => reconcilePlannerPersistedState());
+    }
   })
 );
 
@@ -702,6 +711,39 @@ export const importFromCode = (params: {
   useSkillPlannerStore.setState({
     completedSteps: ['home', 'runner', 'shop'],
     currentStep: 'review'
+  });
+};
+
+// Re-resolve the persisted obtained/candidate sets against the current runner
+// and the (now-ready) skill dataset. Idempotent and safe to call repeatedly.
+// No-ops when skill data is not yet available.
+export const reconcilePlannerPersistedState = () => {
+  if (!skillsService?.getAll?.().length) {
+    return;
+  }
+
+  useSkillPlannerStore.setState((state) => {
+    if (!state.runner.outfitId) {
+      return state;
+    }
+
+    const nextObtainedSkillIds = resolveObtainedSkillIds(
+      state.obtainedSkillIds,
+      state.runner.outfitId
+    );
+    const pruned = pruneCandidates(
+      state.candidates,
+      state.skillMetaById,
+      nextObtainedSkillIds,
+      state.runner.outfitId
+    );
+
+    return {
+      runner: syncRunnerSkills(state.runner, nextObtainedSkillIds),
+      obtainedSkillIds: nextObtainedSkillIds,
+      candidates: pruned.candidates,
+      skillMetaById: pruned.skillMetaById
+    };
   });
 };
 

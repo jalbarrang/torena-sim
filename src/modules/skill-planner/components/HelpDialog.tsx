@@ -47,6 +47,26 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
             </p>
           </div>
 
+          {/* How Veterans work */}
+          <div>
+            <h3 className="font-semibold mb-2">How Veterans work</h3>
+            <p className="text-muted-foreground mb-2">
+              A Veteran is a saved build — stats, aptitudes, and skills. Save one from the Compare
+              page or from your optimized results.
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+              <li>Saving stores the build&rsquo;s full skill list as obtained.</li>
+              <li>
+                Importing a Veteran — or an OCR screenshot, or a planner code — loads those skills
+                as already obtained; they cost 0 SP.
+              </li>
+              <li>
+                The planner optimizes only the candidate skills you add, using the Veteran&rsquo;s
+                obtained skills as the baseline.
+              </li>
+            </ul>
+          </div>
+
           {/* Step-by-step guide */}
           <div>
             <h3 className="font-semibold mb-2">Quick Start Guide</h3>
