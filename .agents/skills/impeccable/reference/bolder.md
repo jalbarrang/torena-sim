@@ -28,7 +28,7 @@ Analyze what makes the design feel too safe or boring:
    - Who is the audience?
    - What design system, tokens, components, and visual conventions already exist?
 
-If any of these are unclear from the codebase, ask the user directly to clarify what you cannot infer.
+If any of these are unclear from the codebase, STOP and use Codex's structured user-input/question tool when available; if unavailable, ask directly in chat to clarify what you cannot infer.
 
 **CRITICAL**: "Bolder" does not mean chaotic or garish. It means distinctive, memorable, and confident. Think intentional drama, not random noise.
 
@@ -117,4 +117,4 @@ Ensure amplification maintains usability and coherence:
 
 **The test**: If you showed this to someone and said "AI made this bolder," would they believe you immediately? If yes, you've failed. Bold means distinctive, not "more AI effects."
 
-When the result feels right, hand off to `/impeccable polish` for the final pass.
+When the result feels right, hand off to `$impeccable polish` for the final pass.
