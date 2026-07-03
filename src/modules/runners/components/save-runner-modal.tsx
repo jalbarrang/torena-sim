@@ -1,5 +1,5 @@
 import { BookmarkPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -24,13 +24,23 @@ type SaveRunnerModalProps = {
 
 type SaveRunnerModalContentProps = Pick<
   SaveRunnerModalProps,
-  'onOpenChange' | 'onSave' | 'showLinkOption'
+  'open' | 'onOpenChange' | 'onSave' | 'showLinkOption'
 >;
 
 function SaveRunnerModalContent(props: SaveRunnerModalContentProps) {
-  const { onOpenChange, onSave, showLinkOption = true } = props;
+  const { open, onOpenChange, onSave, showLinkOption = true } = props;
   const [name, setName] = useState('');
   const [shouldLink, setShouldLink] = useState(showLinkOption);
+
+  // Reset form state whenever the dialog closes so it reopens fresh.
+  // Done via effect (not a `key` remount) because remounting the Base UI
+  // popup mid close-transition leaves it stuck mounted so it never closes.
+  useEffect(() => {
+    if (!open) {
+      setName('');
+      setShouldLink(showLinkOption);
+    }
+  }, [open, showLinkOption]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -114,7 +124,7 @@ export const SaveRunnerModal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {triggerButton && <DialogTrigger render={triggerButton} />}
       <SaveRunnerModalContent
-        key={`${String(open)}-${String(showLinkOption)}`}
+        open={open}
         onOpenChange={onOpenChange}
         onSave={onSave}
         showLinkOption={showLinkOption}
