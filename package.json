@@ -133,7 +133,7 @@
   "engines": {
     "node": ">=24"
   },
-  "version": "0.23.0",
+  "version": "0.23.1",
   "workspaces": [
     "apps/*",
     "packages/*",

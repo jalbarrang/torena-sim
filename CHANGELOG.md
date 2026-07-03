@@ -1,3 +1,9 @@
+## [0.23.1](https://github.com/jalbarrang/torena-sim/compare/v0.23.0...v0.23.1) (2026-07-03)
+
+### Bug Fixes
+
+* **runners:** close Save to Veterans dialog via X button ([e5046e8](https://github.com/jalbarrang/torena-sim/commit/e5046e8c5d47167212a362f2579476664847bc2d))
+
 ## [0.23.0](https://github.com/jalbarrang/torena-sim/compare/v0.22.0...v0.23.0) (2026-07-02)
 
 ### Features
