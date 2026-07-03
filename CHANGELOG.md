@@ -1,3 +1,9 @@
+## [0.23.2](https://github.com/jalbarrang/torena-sim/compare/v0.23.1...v0.23.2) (2026-07-03)
+
+### Bug Fixes
+
+* runner card stuff ([f82d795](https://github.com/jalbarrang/torena-sim/commit/f82d795afed5854cbf28b446eb204465b812b922))
+
 ## [0.23.1](https://github.com/jalbarrang/torena-sim/compare/v0.23.0...v0.23.1) (2026-07-03)
 
 ### Bug Fixes
