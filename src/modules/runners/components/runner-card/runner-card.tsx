@@ -1,82 +1,30 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 
-import { strategyNames } from '@/lib/uma-domain/runner/definitions';
-
-import {
-  CopyPlus,
-  PlusIcon,
-  TrashIcon,
-  Upload,
-  Share2,
-  Code,
-  Download,
-  Camera,
-  ChevronDown,
-  ClipboardPaste
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+import { PlusIcon } from 'lucide-react';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { StatsTable } from './stats-table';
 import { AptitudeBucketsField } from '@/modules/runners/components/aptitude-buckets-field';
-import { aptitudesFromInnate, collapsedFromBuckets } from '@/modules/runners/aptitude-buckets';
-import { umasService } from '@/modules/data/services/UmaService';
 import { reconcileRunawayOnSkillsChange } from './types';
 import type { IRunnerState } from './types';
 import type { StatsKey } from './stats-table';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
-import {
-  SkillItemBody,
-  SkillItemIdentity,
-  SkillItemMain,
-  SkillItemRoot,
-  SkillItemRail,
-  SkillItemActions
-} from '@/modules/skills/components/skill-list/skill-item/primitives';
-import {
-  SkillItemCostAction,
-  SkillItemDetailsActions
-} from '@/modules/skills/components/skill-list/skill-item/actions';
 import { SkillItem } from '@/modules/skills/components/skill-list/skill-item/item';
-import type { SkillMeta } from '@/modules/skills/components/skill-list/skill-item/context';
-import { skillsService } from '@/modules/data/services/SkillService';
 
 import { getSelectableSkillsForUma, getUniqueSkillForByUmaId } from '@/modules/skills/utils';
-import { OcrImportDialog } from '@/modules/runners/components/ocr-import-dialog';
-import { UmaSelector } from '@/modules/runners/components/runner-selector';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { openSkillPicker, updateCurrentSkills } from '@/modules/skills/store';
-import {
-  setFastLearner,
-  setHintLevel,
-  setBought,
-  useSkillCostMetaStore,
-  useRunnerHasFastLearner,
-  getSkillCostMeta,
-  computeSkillCostSummary
-} from '@/modules/skills/stores/skill-cost-meta.store';
-import type { HintLevel } from '@/modules/skill-planner/types';
-import {
-  buildDedupedSkillListNetTotal,
-  type SkillCostSummary
-} from '@/modules/skills/skill-cost-summary';
 import { cn } from '@/lib/utils';
-import {
-  copyRosterViewCode,
-  copyScreenshot,
-  downloadJson,
-  getSkillsForShareCard
-} from '../../share/share-actions';
-import { ImportCodeDialog } from '../../share/import-code-dialog';
+import { useRunnerSkillCost } from './use-runner-skill-cost';
+import { getSkillsForShareCard } from '../../share/share-actions';
 import { ShareCard } from '../../share/share-card';
+import { RunnerCardActions } from './runner-card-actions';
+import { RunnerCardSkillRow } from './skill-row';
+import { buildOcrImportState, buildRunnerChangeState } from './runner-card.mutations';
 
 type RunnerCardProps = {
   value: IRunnerState;
@@ -96,47 +44,9 @@ type RunnerCardProps = {
   showShareButton?: boolean;
   courseId?: number;
   showStrategyMood?: boolean;
+  /** Bare keyboard shortcut (e.g. "k") to open the skill picker. Desktop only. */
+  skillHotkey?: string;
 };
-
-type RunnerCardSkillRowProps = {
-  dismissable: boolean;
-  inline: boolean;
-};
-
-function RunnerCardSkillRow(props: Readonly<RunnerCardSkillRowProps>) {
-  const { dismissable, inline = false } = props;
-
-  if (inline) {
-    <SkillItemRoot>
-      <SkillItemRail />
-      <SkillItemBody className="p-1 px-1">
-        <SkillItemMain>
-          <SkillItemIdentity labelProps={{ className: 'text-xs' }} />
-          <SkillItemActions>
-            <SkillItemCostAction layout="inline" />
-            <SkillItemDetailsActions dismissable={dismissable} />
-          </SkillItemActions>
-        </SkillItemMain>
-      </SkillItemBody>
-    </SkillItemRoot>;
-  }
-
-  return (
-    <SkillItemRoot>
-      <SkillItemRail />
-      <SkillItemBody className="flex-col">
-        <SkillItemMain className="p-1 px-1">
-          <SkillItemIdentity labelProps={{ className: 'text-xs' }} />
-        </SkillItemMain>
-
-        <SkillItemActions className="justify-end bg-card">
-          <SkillItemCostAction layout="inline" />
-          <SkillItemDetailsActions dismissable={dismissable} />
-        </SkillItemActions>
-      </SkillItemBody>
-    </SkillItemRoot>
-  );
-}
 
 export const RunnerCard = (props: RunnerCardProps) => {
   const {
@@ -149,15 +59,13 @@ export const RunnerCard = (props: RunnerCardProps) => {
     showSkillSpCosts = false,
     showShareButton = true,
     courseId,
-    showStrategyMood = true
+    showStrategyMood = true,
+    skillHotkey
   } = props;
 
   const isMobile = useIsMobile();
 
   const umaId = state.outfitId;
-
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [codeImportDialogOpen, setCodeImportDialogOpen] = useState(false);
 
   const shareCardRef = useRef<HTMLDivElement>(null);
 
@@ -183,78 +91,18 @@ export const RunnerCard = (props: RunnerCardProps) => {
     [onChange, state]
   );
 
-  // Handle OCR import apply
-  const handleOcrImportApply = (data: ExtractedUmaData) => {
-    const newState: Partial<IRunnerState> = {};
-
-    // Apply uma identity
-    if (data.outfitId) {
-      newState.outfitId = data.outfitId;
-    }
-
-    // Apply stats
-    if (data.speed) newState.speed = data.speed;
-    if (data.stamina) newState.stamina = data.stamina;
-    if (data.power) newState.power = data.power;
-    if (data.guts) newState.guts = data.guts;
-    if (data.wisdom) newState.wisdom = data.wisdom;
-
-    // Apply aptitudes and strategy
-    if (data.surfaceAptitude) newState.surfaceAptitude = data.surfaceAptitude;
-    if (data.distanceAptitude) newState.distanceAptitude = data.distanceAptitude;
-    if (data.strategyAptitude) newState.strategyAptitude = data.strategyAptitude;
-    if (data.strategy && strategyNames.includes(data.strategy)) {
-      newState.strategy = data.strategy;
-    }
-
-    // Apply skills - replace existing with OCR detected ones
-    if (data.skills && data.skills.length > 0) {
-      const skillIds = data.skills.map((s) => s.id);
-
-      // Add the unique skill for the uma if we detected one
-      if (data.outfitId) {
-        const uniqueSkillId = getUniqueSkillForByUmaId(data.outfitId);
-        if (!skillIds.includes(uniqueSkillId)) {
-          skillIds.unshift(uniqueSkillId);
-        }
-      }
-
-      newState.skills = skillIds;
-      updateCurrentSkills(skillIds);
-    }
-
-    onChange({ ...state, ...newState });
-  };
+  const handleOcrImportApply = useCallback(
+    (data: ExtractedUmaData) => {
+      const { next, syncSkills } = buildOcrImportState(state, data);
+      if (syncSkills) updateCurrentSkills(syncSkills);
+      onChange(next);
+    },
+    [onChange, state]
+  );
 
   const handleChangeRunner = useCallback(
     (outfitId: string) => {
-      const newSkills: Array<string> = [];
-
-      for (const skillId of state.skills) {
-        const skillData = skillsService.getById(skillId);
-
-        if (skillData?.rarity && skillData.rarity < 3) {
-          newSkills.push(skillId);
-        }
-      }
-
-      if (outfitId) {
-        // Add the unique skill for the uma at the beginning of the list
-        newSkills.unshift(getUniqueSkillForByUmaId(outfitId));
-      }
-
-      const innate = outfitId
-        ? umasService.getByOutfitId(outfitId)?.aptitudes[outfitId]
-        : undefined;
-
-      if (innate) {
-        const aptitudes = aptitudesFromInnate(innate);
-        const collapsed = collapsedFromBuckets(aptitudes, state.strategy, courseId);
-        onChange({ ...state, outfitId, skills: newSkills, aptitudes, ...collapsed });
-        return;
-      }
-
-      onChange({ ...state, outfitId: outfitId, skills: newSkills });
+      onChange(buildRunnerChangeState(state, outfitId, courseId));
     },
     [onChange, state, courseId]
   );
@@ -266,52 +114,22 @@ export const RunnerCard = (props: RunnerCardProps) => {
   const umaUniqueSkillId = useMemo(() => getUniqueSkillForByUmaId(umaId), [umaId]);
 
   const isSkillSpCostEnabled = showSkillSpCosts && props.runnerId !== 'pacer';
-  const hasFastLearner = useRunnerHasFastLearner(isSkillSpCostEnabled ? props.runnerId : '');
 
-  const skillMetaByKey = useSkillCostMetaStore((s) => s.skillMetaByKey);
-
-  const costSummaryBySkillId = useMemo<Record<string, SkillCostSummary>>(() => {
-    if (!isSkillSpCostEnabled) return {};
-
-    const map: Record<string, SkillCostSummary> = {};
-    for (const skillId of state.skills) {
-      map[skillId] = computeSkillCostSummary(
-        skillId,
-        props.runnerId,
-        skillMetaByKey,
-        hasFastLearner
-      );
-    }
-
-    return map;
-  }, [isSkillSpCostEnabled, props.runnerId, state.skills, skillMetaByKey, hasFastLearner]);
-
-  const totalSkillSp = useMemo(() => {
-    if (!isSkillSpCostEnabled) {
-      return null;
-    }
-
-    return buildDedupedSkillListNetTotal({
-      visibleSkillIds: state.skills,
-      hasFastLearner,
-      getSkillMeta: (targetSkillId) => {
-        const key = `${props.runnerId}:${targetSkillId}`;
-        return skillMetaByKey[key] ?? { hintLevel: 0 };
-      }
-    });
-  }, [isSkillSpCostEnabled, state.skills, hasFastLearner, props.runnerId, skillMetaByKey]);
+  const {
+    hasFastLearner,
+    costSummaryBySkillId,
+    totalSkillSp,
+    handleFastLearnerChange,
+    handleHintLevelChange,
+    handleBoughtChange,
+    getSkillMetaForRunner
+  } = useRunnerSkillCost({
+    runnerId: props.runnerId,
+    skills: state.skills,
+    enabled: isSkillSpCostEnabled
+  });
 
   const fastLearnerCheckboxId = `${props.runnerId}-fast-learner`;
-  const handleFastLearnerChange = useCallback(
-    (checked: boolean) => {
-      if (!isSkillSpCostEnabled) {
-        return;
-      }
-
-      setFastLearner(props.runnerId, checked);
-    },
-    [isSkillSpCostEnabled, props.runnerId]
-  );
 
   const handleRemoveSkill = useCallback(
     (skillId: string) => {
@@ -343,129 +161,33 @@ export const RunnerCard = (props: RunnerCardProps) => {
     });
   }, [umaId, selectableSkills, state.skills, handleSetSkills, onOpenSkillPicker]);
 
-  const handleHintLevelChange = useCallback(
-    (skillId: string, level: number) => {
-      if (!isSkillSpCostEnabled) return;
-      setHintLevel(props.runnerId, skillId, level as HintLevel);
+  // Desktop-only bare keyboard shortcut to open the skill picker.
+  // `enableOnFormTags` defaults to false, so it won't fire while typing in a field.
+  useHotkeys(
+    skillHotkey ?? '',
+    (event) => {
+      event.preventDefault();
+      handleOpenSkillPicker();
     },
-    [isSkillSpCostEnabled, props.runnerId]
-  );
-
-  const handleBoughtChange = useCallback(
-    (skillId: string, bought: boolean) => {
-      if (!isSkillSpCostEnabled) return;
-      setBought(props.runnerId, skillId, bought);
-    },
-    [isSkillSpCostEnabled, props.runnerId]
-  );
-
-  const getSkillMetaForRunner = useCallback(
-    (skillId: string): SkillMeta => {
-      if (!isSkillSpCostEnabled) return { hintLevel: 0 };
-      return getSkillCostMeta(props.runnerId, skillId);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- skillMetaByKey triggers new ref so cost-details re-reads fresh data
-    [isSkillSpCostEnabled, props.runnerId, skillMetaByKey]
+    { enabled: !!skillHotkey && !isMobile },
+    [handleOpenSkillPicker]
   );
 
   return (
     <div className="runner-card flex flex-col gap-4 p-2">
-      <div className="flex gap-2">
-        <UmaSelector
-          value={umaId}
-          select={handleChangeRunner}
-          onReset={onReset}
-          onImport={() => setImportDialogOpen(true)}
-          randomMobId={state.randomMobId}
-        />
-
-        <div className="grid grid-cols-2 gap-2">
-          {!isMobile && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="sm" variant="outline">
-                    <Upload />
-                    <span className="hidden md:inline!">Import</span>
-                    <ChevronDown />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
-                  <Upload className="size-4 mr-2" />
-                  From Screenshot (OCR)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCodeImportDialogOpen(true)}>
-                  <ClipboardPaste className="size-4 mr-2" />
-                  From Code
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          {props.runnerId !== 'pacer' && onCopy && (
-            <Button onClick={onCopy} size="sm" variant="outline" title="Copy to other runner">
-              <CopyPlus />
-              <span className="hidden md:inline!">Duplicate</span>
-            </Button>
-          )}
-
-          {showShareButton && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="sm" variant="outline" title="Share runner">
-                    <Share2 />
-                    <span className="hidden md:inline!">Share</span>
-                    <ChevronDown />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => copyRosterViewCode(state)}>
-                  <Code className="size-4 mr-2" />
-                  Copy RosterView Code
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => downloadJson(state, `runner-${umaInfo?.name ?? 'unknown'}.json`)}
-                >
-                  <Download className="size-4 mr-2" />
-                  Download JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    if (shareCardRef.current) copyScreenshot(shareCardRef.current);
-                  }}
-                >
-                  <Camera className="size-4 mr-2" />
-                  Copy Screenshot
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          <Button onClick={onReset} title="Reset runner" size="sm">
-            <span className="hidden md:inline!">Reset</span>
-            <TrashIcon />
-          </Button>
-        </div>
-      </div>
-
-      <OcrImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onApply={handleOcrImportApply}
-      />
-
-      <ImportCodeDialog
-        open={codeImportDialogOpen}
-        onOpenChange={setCodeImportDialogOpen}
-        mode="direct-import"
-        onDirectImport={(partialRunner) => {
-          onChange({ ...state, ...partialRunner } as IRunnerState);
-          setCodeImportDialogOpen(false);
-        }}
+      <RunnerCardActions
+        state={state}
+        umaId={umaId}
+        umaInfo={umaInfo}
+        runnerId={props.runnerId}
+        isMobile={isMobile}
+        showShareButton={showShareButton}
+        shareCardRef={shareCardRef}
+        onChange={onChange}
+        onChangeRunner={handleChangeRunner}
+        onReset={onReset}
+        onCopy={onCopy}
+        onOcrApply={handleOcrImportApply}
       />
 
       <div className="flex flex-col gap-2" data-tutorial="runner-stats">
@@ -506,6 +228,11 @@ export const RunnerCard = (props: RunnerCardProps) => {
           <Button variant="default" onClick={handleOpenSkillPicker} className="cursor-pointer">
             Add Skills
             <PlusIcon />
+            {skillHotkey && !isMobile && (
+              <kbd className="ml-1 inline-block rounded border border-primary-foreground/30 bg-primary-foreground/10 px-1 text-[0.65rem] font-medium leading-none">
+                {skillHotkey.toUpperCase()}
+              </kbd>
+            )}
           </Button>
         </div>
       )}

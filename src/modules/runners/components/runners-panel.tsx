@@ -14,6 +14,17 @@ import {
 } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/panel';
@@ -38,6 +49,12 @@ export const RunnersPanel = () => {
   const linkedRunner = isLinked ? getLibraryRunner(runner.linkedRunnerId!) : null;
 
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+
+  const handleResetAllRunners = () => {
+    resetAllRunners();
+    setResetDialogOpen(false);
+  };
 
   const handleCopyRunner = () => {
     if (runnerId === 'uma1') {
@@ -110,13 +127,34 @@ export const RunnersPanel = () => {
           </div>
 
           <div className="flex items-center p-2">
-            <Button
-              onClick={resetAllRunners}
-              title="Reset all runners to default stats and skills"
-              size="sm"
-            >
-              Reset all runners
-            </Button>
+            <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+              <AlertDialogTrigger
+                render={
+                  <Button
+                    variant="destructive"
+                    title="Reset all runners to default stats and skills"
+                    size="sm"
+                  />
+                }
+              >
+                Reset all runners
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset all runners?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This clears the stats and skills for both Uma 1 and Uma 2 back to their
+                    defaults. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={handleResetAllRunners}>
+                    Reset all runners
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </PanelHeader>
@@ -177,6 +215,7 @@ export const RunnersPanel = () => {
             onReset={resetRunner}
             onCopy={handleCopyRunner}
             onSwap={handleSwapRunners}
+            skillHotkey="k"
             showSkillSpCosts
           />
         </div>
