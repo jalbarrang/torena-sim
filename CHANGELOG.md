@@ -1,3 +1,9 @@
+## [0.23.3](https://github.com/jalbarrang/torena-sim/compare/v0.23.2...v0.23.3) (2026-07-04)
+
+### Bug Fixes
+
+* **skill-planner:** correct stackable-skill obtained handling and explain Veterans ([7065f47](https://github.com/jalbarrang/torena-sim/commit/7065f47eee9ad6d27807907f6ba66ce5e3897054))
+
 ## [0.23.2](https://github.com/jalbarrang/torena-sim/compare/v0.23.1...v0.23.2) (2026-07-03)
 
 ### Bug Fixes
