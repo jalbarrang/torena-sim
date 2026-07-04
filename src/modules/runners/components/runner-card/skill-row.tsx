@@ -10,6 +10,7 @@ import {
   SkillItemCostAction,
   SkillItemDetailsActions
 } from '@/modules/skills/components/skill-list/skill-item/actions';
+import { SkillItemHintStepper } from '@/modules/skills/components/skill-list/skill-item/hint-stepper';
 
 type RunnerCardSkillRowProps = {
   dismissable: boolean;
@@ -30,7 +31,10 @@ export function RunnerCardSkillRow(props: Readonly<RunnerCardSkillRowProps>) {
           <SkillItemIdentity labelProps={{ className: 'text-xs' }} />
         </SkillItemMain>
 
-        <SkillItemActions className="justify-end bg-card">
+        <SkillItemActions className="justify-end gap-2 bg-card">
+          {/* mr-auto pushes the stepper to the left; when it renders null
+              (obtained / SP cost disabled) the cost + actions stay right-aligned. */}
+          <SkillItemHintStepper className="mr-auto" />
           <SkillItemCostAction layout="inline" />
           <SkillItemDetailsActions dismissable={dismissable} />
         </SkillItemActions>
