@@ -28,11 +28,12 @@ type SkillItemHintStepperProps = {
  * action the cost popover's Select uses, so both stay in sync.
  *
  * Renders nothing when hint tuning does not apply: no `onHintLevelChange`
- * handler, or the skill is already obtained (cost 0, hint irrelevant).
+ * handler, the skill has no purchasable cost (e.g. unique skills), or the
+ * skill is already obtained (cost 0, hint irrelevant).
  */
 export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>) {
   const { className } = props;
-  const { skillId, getSkillMeta, onHintLevelChange, costSummary } = useSkillItem();
+  const { skillId, getSkillMeta, onHintLevelChange, costSummary, hasCost } = useSkillItem();
 
   const meta = useMemo(() => getSkillMeta(skillId), [getSkillMeta, skillId]);
   const isObtained = costSummary?.isObtained ?? meta.bought ?? false;
@@ -40,7 +41,7 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
   const level = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, meta.hintLevel)) as HintLevel;
   const step = HINT_STEPS[level];
 
-  if (!onHintLevelChange || isObtained) {
+  if (!onHintLevelChange || !hasCost || isObtained) {
     return null;
   }
 

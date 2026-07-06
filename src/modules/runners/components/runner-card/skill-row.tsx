@@ -31,10 +31,15 @@ export function RunnerCardSkillRow(props: Readonly<RunnerCardSkillRowProps>) {
           <SkillItemIdentity labelProps={{ className: 'text-xs' }} />
         </SkillItemMain>
 
-        <SkillItemActions className="justify-end gap-2 bg-card">
-          {/* mr-auto pushes the stepper to the left; when it renders null
-              (obtained / SP cost disabled) the cost + actions stay right-aligned. */}
-          <SkillItemHintStepper className="mr-auto" />
+        {/* Own row so the stepper never competes for width with the cost +
+            actions in the dense 2-column runner panel (that clipped the minus
+            button). `empty:hidden` collapses the row when the stepper renders
+            null (unique/obtained skills, or SP cost disabled). */}
+        <div className="flex px-1 pb-1 empty:hidden">
+          <SkillItemHintStepper />
+        </div>
+
+        <SkillItemActions className="justify-end bg-card">
           <SkillItemCostAction layout="inline" />
           <SkillItemDetailsActions dismissable={dismissable} />
         </SkillItemActions>
