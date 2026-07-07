@@ -38,6 +38,8 @@ export const config: AppConfig = {
   },
   ocr: {
     workerUrl: envString('VITE_OCR_WORKER_URL'),
-    turnstileSiteKey: envString('VITE_TURNSTILE_SITE_KEY')
+    // OCR has its own Turnstile widget; fall back to the shared site key if unset.
+    turnstileSiteKey:
+      envString('VITE_TURNSTILE_SITE_KEY_OCR') || envString('VITE_TURNSTILE_SITE_KEY')
   }
 };

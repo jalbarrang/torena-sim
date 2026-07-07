@@ -10,9 +10,11 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
   "power": 0,
   "guts": 0,
   "wisdom": 0,
-  "surfaceAptitude": "best visible surface grade: S, A, B, C, D, E, F, or G",
-  "distanceAptitude": "best visible distance grade: S, A, B, C, D, E, F, or G",
-  "strategyAptitude": "best visible strategy grade: S, A, B, C, D, E, F, or G",
+  "aptitudes": {
+    "turf": "grade", "dirt": "grade",
+    "sprint": "grade", "mile": "grade", "medium": "grade", "long": "grade",
+    "front": "grade", "pace": "grade", "late": "grade", "end": "grade"
+  },
   "strategy": "best visible strategy using only one of: Nige, Senkou, Sasi, Oikomi",
   "skills": ["every visible skill name exactly as shown, keeping any trailing ○/◎/× and any visible Lvl N marker"]
 }
@@ -20,7 +22,11 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
 Requirements:
 - Read the raw screenshot directly.
 - Include all five stat numbers.
-- Return the best surface grade, best distance grade, and best strategy grade.
+- Read EVERY aptitude grade individually from the screenshot, do not collapse or pick a best one.
+  - Track row -> "turf" and "dirt".
+  - Distance row -> "sprint", "mile", "medium", "long".
+  - Style row -> "front", "pace", "late", "end".
+- Each aptitude grade is exactly one of: S, A, B, C, D, E, F, G. A grade may show a small superscript + (e.g. A+); return just the base letter.
 - Return the single best strategy name using Nige, Senkou, Sasi, or Oikomi.
 - Include every visible skill name from the screenshot.
 - Preserve each skill's visible suffixes such as ○, ◎, ×, and preserve visible level markers like Lvl 1, Lvl 2, Lvl 3, or Lvl 4.

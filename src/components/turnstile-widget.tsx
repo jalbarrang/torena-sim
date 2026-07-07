@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { memo, useEffect, useRef, type RefObject } from 'react';
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 const SCRIPT_ID = 'cf-turnstile-script';
@@ -66,18 +66,20 @@ type TurnstileWidgetProps = {
   apiRef?: RefObject<TurnstileApiHandle | null>;
 };
 
-export function TurnstileWidget(props: TurnstileWidgetProps) {
+function TurnstileWidgetImpl(props: TurnstileWidgetProps) {
   const { siteKey, onVerify, onExpire, onError, theme = 'auto', className, apiRef } = props;
-
-  // Keep the latest apiRef without re-rendering the widget.
-  const apiRefHolder = useRef(apiRef);
-  apiRefHolder.current = apiRef;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Keep latest callbacks without re-rendering the widget.
+  // Mirror the latest callbacks/apiRef into refs so the render effect below can
+  // stay keyed to [siteKey, theme] only — the widget is created once and never
+  // torn down when these change. Updated in an effect (not during render).
+  const apiRefHolder = useRef(apiRef);
   const callbacks = useRef({ onVerify, onExpire, onError });
-  callbacks.current = { onVerify, onExpire, onError };
+  useEffect(() => {
+    apiRefHolder.current = apiRef;
+    callbacks.current = { onVerify, onExpire, onError };
+  });
 
   useEffect(() => {
     let widgetId: string | undefined;
@@ -115,3 +117,10 @@ export function TurnstileWidget(props: TurnstileWidgetProps) {
 
   return <div ref={containerRef} className={className} />;
 }
+
+/**
+ * Memoized so the widget is rendered exactly once (Cloudflare's explicit-render
+ * model). Callers MUST pass stable props — wrap callbacks in `useCallback` — so
+ * frequent parent re-renders (e.g. upload progress) never reach the iframe.
+ */
+export const TurnstileWidget = memo(TurnstileWidgetImpl);

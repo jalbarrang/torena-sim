@@ -6,25 +6,26 @@
   "observability": {
     "enabled": true
   },
-
   // Keep the public *.workers.dev URL (used as VITE_OCR_WORKER_URL).
   "workers_dev": true,
   // Per-version preview URLs aren't needed; disabling reduces exposed surface.
   "preview_urls": false,
-
   // Public, non-secret config. Comma-separated list of app origins allowed via CORS
   // and the origin gate. Includes local dev origins for `wrangler dev`.
   "vars": {
-    "ALLOWED_ORIGIN": "https://torena-sim.pages.dev,https://jalbarrang.github.io,http://localhost:5173,http://localhost:4173",
-    "GEMINI_MODEL": "gemini-2.0-flash"
+    "ALLOWED_ORIGIN": "https://torena-sim.pages.dev,http://localhost:5173,http://localhost:4173",
+    "GEMINI_MODEL": "gemini-2.5-flash"
   },
-
   // Per-IP + global rate limiting backed by KV. Create with
   // `wrangler kv namespace create RATE_LIMIT_KV` and paste the id below.
   // The Worker degrades gracefully (no rate limiting) when this binding is absent,
   // which is fine for `wrangler dev` (miniflare provisions a local KV automatically).
-  "kv_namespaces": [{ "binding": "RATE_LIMIT_KV", "id": "<your-kv-namespace-id>" }]
-
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "2baaac41e39d4571904b9ab4c606f5e6"
+    }
+  ]
   // ── Secrets (set via `wrangler secret put <NAME>`, never commit) ──
   //   GEMINI_API_KEY        - Google AI Studio API key (free tier) for gemini-2.0-flash
   //   TURNSTILE_SECRET_KEY  - Cloudflare Turnstile secret key (pairs with the public site key)

@@ -95,6 +95,7 @@ function parseStructuredResult(
   result.surfaceAptitude = structured.surfaceAptitude ?? result.surfaceAptitude;
   result.distanceAptitude = structured.distanceAptitude ?? result.distanceAptitude;
   result.strategyAptitude = structured.strategyAptitude ?? result.strategyAptitude;
+  result.aptitudes = structured.aptitudes ?? result.aptitudes;
   result.strategy = structured.strategy ?? result.strategy;
 
   if (structured.skills && structured.skills.length > 0) {
@@ -138,6 +139,7 @@ export function parseOcrResult(
     surfaceAptitude: existingData?.surfaceAptitude,
     distanceAptitude: existingData?.distanceAptitude,
     strategyAptitude: existingData?.strategyAptitude,
+    aptitudes: existingData?.aptitudes,
     strategy: existingData?.strategy,
     skills: existingData?.skills ? [...existingData.skills] : [],
     imageCount: (existingData?.imageCount ?? 0) + 1,

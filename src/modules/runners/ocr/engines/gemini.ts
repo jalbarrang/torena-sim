@@ -1,5 +1,6 @@
 import type { IStrategyName } from '@/lib/uma-domain/runner/definitions';
 import { skillsService } from '@/modules/data/services/SkillService';
+import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/types';
 import { findBestUmaMatch } from '@/modules/runners/data/search';
 import type { OcrEngine, OcrEngineResult } from '@/modules/runners/ocr/engine';
 import type { ExtractedSkill, ExtractedUmaData } from '@/modules/runners/ocr/types';
@@ -12,12 +13,24 @@ interface GeminiStructuredResponse {
   power: number;
   guts: number;
   wisdom: number;
-  surfaceAptitude: string;
-  distanceAptitude: string;
-  strategyAptitude: string;
+  aptitudes: RunnerAptitudes;
   strategy: string;
   skills: Array<string>;
 }
+
+// Maps the worker prompt's aptitude keys onto the runner's RunnerAptitudes shape.
+const APTITUDE_KEY_MAP: Record<keyof RunnerAptitudes, string> = {
+  turf: 'turf',
+  dirt: 'dirt',
+  distanceShort: 'sprint',
+  distanceMile: 'mile',
+  distanceMiddle: 'medium',
+  distanceLong: 'long',
+  nige: 'front',
+  senko: 'pace',
+  sashi: 'late',
+  oikomi: 'end'
+};
 
 const STRATEGY_NAME_MAP: Record<string, IStrategyName> = {
   nige: 'Front Runner',
@@ -80,17 +93,25 @@ function parseNumberField(
   throw new Error(`Gemini JSON is missing a valid numeric "${key}" value`);
 }
 
-function parseGradeField(
-  payload: Record<string, unknown>,
-  key: keyof GeminiStructuredResponse
-): string {
-  const value = parseStringField(payload, key).toUpperCase();
-
-  if (!/^[SABCDEFG]$/.test(value)) {
-    throw new Error(`Gemini JSON is missing a valid "${key}" grade`);
+/** Lenient grade coercion: a misread/absent grade falls back to 'G' rather than failing. */
+function coerceGrade(value: unknown): string {
+  if (typeof value === 'string') {
+    const letter = value.trim().toUpperCase().charAt(0);
+    if (/^[SABCDEFG]$/.test(letter)) return letter;
   }
 
-  return value;
+  return 'G';
+}
+
+function parseAptitudes(value: unknown): RunnerAptitudes {
+  const source = isRecord(value) ? value : {};
+  const result = {} as RunnerAptitudes;
+
+  for (const bucketKey of Object.keys(APTITUDE_KEY_MAP) as Array<keyof RunnerAptitudes>) {
+    result[bucketKey] = coerceGrade(source[APTITUDE_KEY_MAP[bucketKey]]);
+  }
+
+  return result;
 }
 
 function validateGeminiJson(value: unknown): GeminiStructuredResponse {
@@ -111,9 +132,7 @@ function validateGeminiJson(value: unknown): GeminiStructuredResponse {
     power: parseNumberField(value, 'power'),
     guts: parseNumberField(value, 'guts'),
     wisdom: parseNumberField(value, 'wisdom'),
-    surfaceAptitude: parseGradeField(value, 'surfaceAptitude'),
-    distanceAptitude: parseGradeField(value, 'distanceAptitude'),
-    strategyAptitude: parseGradeField(value, 'strategyAptitude'),
+    aptitudes: parseAptitudes(value.aptitudes),
     strategy: parseStringField(value, 'strategy'),
     skills: skillsValue.map((skill) => skill.trim()).filter(Boolean)
   };
@@ -182,9 +201,7 @@ function mapGeminiStructuredData(payload: GeminiStructuredResponse): Partial<Ext
     power: payload.power,
     guts: payload.guts,
     wisdom: payload.wisdom,
-    surfaceAptitude: payload.surfaceAptitude,
-    distanceAptitude: payload.distanceAptitude,
-    strategyAptitude: payload.strategyAptitude,
+    aptitudes: payload.aptitudes,
     strategy: mapGeminiStrategyName(payload.strategy),
     skills: mapGeminiSkills(payload.skills)
   };

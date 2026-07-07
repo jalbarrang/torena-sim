@@ -1,5 +1,8 @@
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
-import { aptitudesFromInnate, collapsedFromBuckets } from '@/modules/runners/aptitude-buckets';
+import {
+  aptitudesFromInnate,
+  collapsedFromBuckets
+} from '@/modules/runners/aptitude-buckets';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
 import { getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { skillsService } from '@/modules/data/services/SkillService';
@@ -33,6 +36,14 @@ export function buildOcrImportState(
   if (data.strategyAptitude) newState.strategyAptitude = data.strategyAptitude;
   if (data.strategy && strategyNames.includes(data.strategy)) {
     newState.strategy = data.strategy;
+  }
+
+  // Full 10-bucket aptitudes take priority: store them and derive the three
+  // collapsed grades (course-agnostic max) so the coarse view stays consistent.
+  if (data.aptitudes) {
+    newState.aptitudes = data.aptitudes;
+    const strategy = newState.strategy ?? state.strategy;
+    Object.assign(newState, collapsedFromBuckets(data.aptitudes, strategy));
   }
 
   let syncSkills: Array<string> | null = null;

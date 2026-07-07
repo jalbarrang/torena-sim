@@ -70,4 +70,6 @@ bun run deploy    # wrangler deploy
 After deploy, set in the app env:
 
 - `VITE_OCR_WORKER_URL` — the deployed Worker URL
-- `VITE_TURNSTILE_SITE_KEY` — the public Turnstile site key (shared with suggestions)
+- `VITE_TURNSTILE_SITE_KEY_OCR` — the public Turnstile site key for the OCR widget
+  (its secret must be set as `TURNSTILE_SECRET_KEY` on this Worker). Falls back to
+  `VITE_TURNSTILE_SITE_KEY` if unset.
