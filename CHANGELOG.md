@@ -1,3 +1,9 @@
+## [0.25.0](https://github.com/jalbarrang/torena-sim/compare/v0.24.0...v0.25.0) (2026-07-07)
+
+### Features
+
+* **ocr:** server-side Gemini screenshot import with full aptitudes ([#62](https://github.com/jalbarrang/torena-sim/issues/62)) ([d825c5a](https://github.com/jalbarrang/torena-sim/commit/d825c5a6872121169df6208d7f21cab3987e3404))
+
 ## [0.24.0](https://github.com/jalbarrang/torena-sim/compare/v0.23.3...v0.24.0) (2026-07-07)
 
 ### Features
