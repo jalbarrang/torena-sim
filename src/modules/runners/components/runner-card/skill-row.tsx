@@ -10,6 +10,7 @@ import {
   SkillItemCostAction,
   SkillItemDetailsActions
 } from '@/modules/skills/components/skill-list/skill-item/actions';
+import { SkillItemHintStepper } from '@/modules/skills/components/skill-list/skill-item/hint-stepper';
 
 type RunnerCardSkillRowProps = {
   dismissable: boolean;
@@ -22,18 +23,25 @@ type RunnerCardSkillRowProps = {
 export function RunnerCardSkillRow(props: Readonly<RunnerCardSkillRowProps>) {
   const { dismissable } = props;
 
+  // Mirrors the planner candidate card composition: identity + detail actions
+  // on the top row, hint stepper + cost sharing the bottom row on one axis.
+  // `empty:hidden` collapses the bottom row when both render null (unique
+  // skills, or SP cost editing disabled), leaving a compact single-row card.
   return (
     <SkillItemRoot>
       <SkillItemRail />
       <SkillItemBody className="flex-col">
         <SkillItemMain className="p-1 px-1">
           <SkillItemIdentity labelProps={{ className: 'text-xs' }} />
+          <SkillItemActions>
+            <SkillItemDetailsActions dismissable={dismissable} />
+          </SkillItemActions>
         </SkillItemMain>
 
-        <SkillItemActions className="justify-end bg-card">
-          <SkillItemCostAction layout="inline" />
-          <SkillItemDetailsActions dismissable={dismissable} />
-        </SkillItemActions>
+        <div className="flex items-center gap-2 px-1 pb-1 empty:hidden">
+          <SkillItemHintStepper />
+          <SkillItemCostAction layout="inline" className="ml-auto" />
+        </div>
       </SkillItemBody>
     </SkillItemRoot>
   );

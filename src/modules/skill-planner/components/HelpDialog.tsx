@@ -1,5 +1,12 @@
 import { HelpCircleIcon } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
+import {
+  getHintDiscountPercent,
+  HINT_LEVELS,
+  MAX_HINT_LEVEL,
+  MIN_HINT_LEVEL
+} from '@/modules/skill-planner/hint-levels';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -102,30 +109,28 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps) {
           <div>
             <h3 className="font-semibold mb-2">Understanding Hint Levels</h3>
             <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span>Hint Lvl 0 (No hint)</span>
-                <span className="font-medium">0% off</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hint Lvl 1</span>
-                <span className="font-medium text-blue-600">10% off</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hint Lvl 2</span>
-                <span className="font-medium text-blue-600">20% off</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hint Lvl 3</span>
-                <span className="font-medium text-green-600">30% off</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hint Lvl 4</span>
-                <span className="font-medium text-green-600">35% off</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Hint Lvl 5 (Max)</span>
-                <span className="font-medium text-green-600">40% off</span>
-              </div>
+              {HINT_LEVELS.map((level) => {
+                const percent = getHintDiscountPercent(level);
+                const suffix =
+                  level === MIN_HINT_LEVEL ? ' (No hint)' : level === MAX_HINT_LEVEL ? ' (Max)' : '';
+
+                return (
+                  <div key={level} className="flex justify-between">
+                    <span>
+                      Hint Lvl {level}
+                      {suffix}
+                    </span>
+                    <span
+                      className={cn('font-medium', {
+                        'text-blue-600': percent > 0 && percent < 30,
+                        'text-green-600': percent >= 30
+                      })}
+                    >
+                      {percent}% off
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

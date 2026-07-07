@@ -6,13 +6,7 @@ import i18n from '@/i18n';
 import { memo, useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { HintLevelStepper } from './skill-list/skill-item/hint-stepper';
 import type { HintLevel } from '@/modules/skill-planner/types';
 import { calculateSkillCost } from '@/modules/skill-planner/cost-calculator';
 import {
@@ -22,19 +16,6 @@ import {
 } from '@/modules/skill-planner/skill-family';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { buildSkillCostSummary } from '@/modules/skills/skill-cost-summary';
-
-const HINT_LEVEL_OPTIONS: Array<{ value: HintLevel; label: string }> = [
-  { value: 0, label: 'No hint' },
-  { value: 1, label: 'Lvl 1 (10%)' },
-  { value: 2, label: 'Lvl 2 (20%)' },
-  { value: 3, label: 'Lvl 3 (30%)' },
-  { value: 4, label: 'Lvl 4 (35%)' },
-  { value: 5, label: 'Lvl Max (40%)' }
-];
-
-const getHintLevelLabel = (hintLevel: HintLevel) => {
-  return HINT_LEVEL_OPTIONS.find((option) => option.value === hintLevel)?.label ?? 'None (0%)';
-};
 
 type PrereqItemProps = {
   prereqId: string;
@@ -94,22 +75,11 @@ const PrereqItem = memo((props: PrereqItemProps) => {
           <span className="font-medium">{prereqSkill.baseCost} SP</span>
 
           <span className="text-muted-foreground">Hint Lvl</span>
-          <Select
-            value={hintLevel}
-            onValueChange={(value) => onHintLevelChange?.(prereqId, value ?? 0)}
+          <HintLevelStepper
+            level={hintLevel}
+            onChange={(level) => onHintLevelChange?.(prereqId, level)}
             disabled={!onHintLevelChange}
-          >
-            <SelectTrigger className="h-7 w-[148px] text-xs">
-              <SelectValue>{getHintLevelLabel(hintLevel)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent align="end">
-              {HINT_LEVEL_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
 
           <span className="text-muted-foreground">Net Cost</span>
           <span className="font-semibold">{prereqNetCost} SP</span>
@@ -216,22 +186,11 @@ export const SkillCostDetails = () => {
 
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">Hint Lvl</span>
-              <Select
-                value={hintLevel}
-                onValueChange={(value) => onHintLevelChange?.(skillId, value ?? 0)}
+              <HintLevelStepper
+                level={hintLevel}
+                onChange={(level) => onHintLevelChange?.(skillId, level)}
                 disabled={!onHintLevelChange}
-              >
-                <SelectTrigger className="h-7 w-[148px] text-xs">
-                  <SelectValue>{getHintLevelLabel(hintLevel)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {HINT_LEVEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             <div className="grid grid-cols-[1fr_auto] gap-y-1 gap-x-3 items-center border-t pt-2">
@@ -270,22 +229,11 @@ export const SkillCostDetails = () => {
                 <span className="font-medium">{skill.baseCost} SP</span>
 
                 <span className="text-muted-foreground">Hint Lvl</span>
-                <Select
-                  value={hintLevel}
-                  onValueChange={(value) => onHintLevelChange?.(skillId, value ?? 0)}
+                <HintLevelStepper
+                  level={hintLevel}
+                  onChange={(level) => onHintLevelChange?.(skillId, level)}
                   disabled={!onHintLevelChange}
-                >
-                  <SelectTrigger className="h-7 w-[148px] text-xs">
-                    <SelectValue>{getHintLevelLabel(hintLevel)}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    {HINT_LEVEL_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
 
                 <span className="text-muted-foreground">Net Cost</span>
                 <span className="font-semibold">{netCost} SP</span>

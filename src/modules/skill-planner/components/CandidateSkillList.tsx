@@ -21,6 +21,7 @@ import {
   SkillItemDetailsActions
 } from '@/modules/skills/components/skill-list/skill-item/actions';
 import { SkillItem } from '@/modules/skills/components/skill-list/skill-item/item';
+import { SkillItemHintStepper } from '@/modules/skills/components/skill-list/skill-item/hint-stepper';
 import type { SkillMeta } from '@/modules/skills/components/skill-list/skill-item/context';
 import {
   buildDedupedSkillListNetTotal,
@@ -161,7 +162,10 @@ function CandidateSkillRow() {
           <SkillItemDetailsActions dismissable className="shrink-0" />
         </SkillItemMain>
 
-        <SkillItemCostAction layout="summary" />
+        <div className="flex items-center gap-2 px-2 pb-1">
+          <SkillItemHintStepper />
+          <SkillItemCostAction layout="summary" className="flex-1" />
+        </div>
       </SkillItemBody>
     </SkillItemRoot>
   );
