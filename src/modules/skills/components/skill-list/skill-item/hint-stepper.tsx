@@ -15,43 +15,38 @@ const getStepLabel = (level: HintLevel): string => {
   return `Lv ${level}`;
 };
 
-type SkillItemHintStepperProps = {
+const clampLevel = (level: number): HintLevel => {
+  return Math.min(MAX_HINT_LEVEL, Math.max(MIN_HINT_LEVEL, level)) as HintLevel;
+};
+
+type HintLevelStepperProps = {
+  level: HintLevel;
+  onChange: (level: HintLevel) => void;
+  disabled?: boolean;
   className?: string;
 };
 
 /**
- * Inline − / + control for a skill's hint level. Reads the current level from
- * the shared SkillItem context and writes through the same `onHintLevelChange`
- * action the cost popover's Select uses, so both stay in sync.
- *
- * Renders nothing when hint tuning does not apply: no `onHintLevelChange`
- * handler, the skill has no purchasable cost (e.g. unique skills), or the
- * skill is already obtained (cost 0, hint irrelevant).
+ * Controlled − / + hint level control (0–5). Shows the level label with the
+ * discount percentage when a hint is set. Used inline on skill cards (via
+ * SkillItemHintStepper) and per-row in the cost-details popover.
  */
-export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>) {
-  const { className } = props;
-  const { skillId, getSkillMeta, onHintLevelChange, costSummary, hasCost } = useSkillItem();
+export function HintLevelStepper(props: Readonly<HintLevelStepperProps>) {
+  const { level: rawLevel, onChange, disabled = false, className } = props;
 
-  const meta = useMemo(() => getSkillMeta(skillId), [getSkillMeta, skillId]);
-  const isObtained = costSummary?.isObtained ?? meta.bought ?? false;
-
-  const level = Math.min(MAX_HINT_LEVEL, Math.max(MIN_HINT_LEVEL, meta.hintLevel)) as HintLevel;
+  const level = clampLevel(rawLevel);
   const label = getStepLabel(level);
   const off = `${getHintDiscountPercent(level)}%`;
 
-  if (!onHintLevelChange || !hasCost || isObtained) {
-    return null;
-  }
-
   const setLevel = (next: number) => {
-    const clamped = Math.min(MAX_HINT_LEVEL, Math.max(MIN_HINT_LEVEL, next));
+    const clamped = clampLevel(next);
     if (clamped !== level) {
-      onHintLevelChange(skillId, clamped);
+      onChange(clamped);
     }
   };
 
-  const atMin = level <= MIN_HINT_LEVEL;
-  const atMax = level >= MAX_HINT_LEVEL;
+  const atMin = disabled || level <= MIN_HINT_LEVEL;
+  const atMax = disabled || level >= MAX_HINT_LEVEL;
 
   return (
     <div
@@ -101,5 +96,38 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
         <PlusIcon className="size-3.5" />
       </button>
     </div>
+  );
+}
+
+type SkillItemHintStepperProps = {
+  className?: string;
+};
+
+/**
+ * Context-wired stepper for a skill card. Reads the current level from the
+ * shared SkillItem context and writes through the same `onHintLevelChange`
+ * action the cost popover uses, so both stay in sync.
+ *
+ * Renders nothing when hint tuning does not apply: no `onHintLevelChange`
+ * handler, the skill has no purchasable cost (e.g. unique skills), or the
+ * skill is already obtained (cost 0, hint irrelevant).
+ */
+export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>) {
+  const { className } = props;
+  const { skillId, getSkillMeta, onHintLevelChange, costSummary, hasCost } = useSkillItem();
+
+  const meta = useMemo(() => getSkillMeta(skillId), [getSkillMeta, skillId]);
+  const isObtained = costSummary?.isObtained ?? meta.bought ?? false;
+
+  if (!onHintLevelChange || !hasCost || isObtained) {
+    return null;
+  }
+
+  return (
+    <HintLevelStepper
+      level={clampLevel(meta.hintLevel)}
+      onChange={(level) => onHintLevelChange(skillId, level)}
+      className={className}
+    />
   );
 }
