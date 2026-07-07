@@ -3,6 +3,20 @@ import { WorkerGeminiEngine } from './gemini';
 
 const WORKER_URL = 'https://ocr.test';
 
+// Worker prompt aptitude keys (front maps to the runner's `nige` bucket, etc.).
+const SAMPLE_APTITUDES = {
+  turf: 'A',
+  dirt: 'A',
+  sprint: 'A',
+  mile: 'A',
+  medium: 'A',
+  long: 'A',
+  front: 'S',
+  pace: 'A',
+  late: 'A',
+  end: 'A'
+};
+
 function mockWorkerFetch(text: string) {
   const fetchMock = vi.fn().mockResolvedValue(
     Response.json(
@@ -51,9 +65,7 @@ ${JSON.stringify({
   power: 1000,
   guts: 800,
   wisdom: 950,
-  surfaceAptitude: 'A',
-  distanceAptitude: 'A',
-  strategyAptitude: 'S',
+  aptitudes: SAMPLE_APTITUDES,
   strategy: 'Senkou',
   skills: ['Right-Handed ○']
 })}
@@ -91,9 +103,7 @@ ${JSON.stringify({
         power: 1000,
         guts: 800,
         wisdom: 950,
-        surfaceAptitude: 'A',
-        distanceAptitude: 'A',
-        strategyAptitude: 'S',
+        aptitudes: SAMPLE_APTITUDES,
         strategy: 'Nige',
         skills: []
       })
@@ -103,7 +113,7 @@ ${JSON.stringify({
     const result = await engine.recognize(new Blob(['image'], { type: 'image/png' }));
 
     expect(result.structured?.strategy).toBe('Front Runner');
-    expect(result.structured?.strategyAptitude).toBe('S');
+    expect(result.structured?.aptitudes?.nige).toBe('S');
   });
 
   it('resolves skill IDs based on whether Gemini preserved a level marker', async () => {
@@ -116,9 +126,7 @@ ${JSON.stringify({
         power: 1000,
         guts: 800,
         wisdom: 950,
-        surfaceAptitude: 'A',
-        distanceAptitude: 'A',
-        strategyAptitude: 'S',
+        aptitudes: SAMPLE_APTITUDES,
         strategy: 'Senkou',
         skills: ['Shooting Star Lvl 4', 'Shooting Star', 'Right-Handed ○']
       })
@@ -143,9 +151,7 @@ ${JSON.stringify({
         power: 1000,
         guts: 800,
         wisdom: 950,
-        surfaceAptitude: 'A',
-        distanceAptitude: 'A',
-        strategyAptitude: 'S',
+        aptitudes: SAMPLE_APTITUDES,
         strategy: 'Senkou',
         skills: ['Right-Handed ©', 'Right-Handed ®', 'Right-Handed ⊚']
       })
@@ -170,9 +176,7 @@ ${JSON.stringify({
         power: 1000,
         guts: 800,
         wisdom: 950,
-        surfaceAptitude: 'A',
-        distanceAptitude: 'A',
-        strategyAptitude: 'S',
+        aptitudes: SAMPLE_APTITUDES,
         strategy: 'Senkou',
         skills: []
       })
