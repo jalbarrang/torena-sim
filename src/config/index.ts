@@ -15,6 +15,10 @@ export type AppConfig = {
   timeline: {
     workerUrl?: string;
   };
+  ocr: {
+    workerUrl?: string;
+    turnstileSiteKey?: string;
+  };
 };
 
 export const config: AppConfig = {
@@ -31,5 +35,9 @@ export const config: AppConfig = {
   },
   timeline: {
     workerUrl: envString('VITE_TIMELINE_WORKER_URL')
+  },
+  ocr: {
+    workerUrl: envString('VITE_OCR_WORKER_URL'),
+    turnstileSiteKey: envString('VITE_TURNSTILE_SITE_KEY')
   }
 };

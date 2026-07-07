@@ -132,7 +132,7 @@ export function createOcrDialogStore(engineRef: RefObject<OcrEngine | null>) {
 
           const engine = state._engineRef.current;
           if (!engine) {
-            const msg = 'No OCR engine is ready. Enter your Gemini API key to get started.';
+            const msg = 'Screenshot import is not available (OCR service not configured).';
             set({ error: msg });
             throw new Error(msg);
           }

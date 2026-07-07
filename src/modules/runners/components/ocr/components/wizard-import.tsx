@@ -1,5 +1,5 @@
-import { useRef, type ChangeEvent, type DragEvent } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, ScanLine } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { AlertCircle, CheckCircle2, ScanLine, ShieldOff } from 'lucide-react';
 import type { PreparedImage } from '@/modules/runners/components/ocr/types';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
 import { createPreparedImage, WIZARD_STEPS } from '@/modules/runners/components/ocr/definitions';
@@ -7,12 +7,14 @@ import {
   useOcrActions,
   useOcrProcessing,
   useOcrResults,
+  useOcrTurnstileBroker,
   useOcrWizardState
 } from '@/modules/runners/components/ocr/ocr-dialog.provider';
 
 import { getIconById } from '@/modules/data/icons';
 import { cn } from '@/lib/utils';
-import { useGeminiApiKey } from '@/store/ocr.store';
+import { config } from '@/config';
+import { TurnstileWidget, type TurnstileApiHandle } from '@/components/turnstile-widget';
 import { OcrUmaSelector } from './uma-selector';
 import { OcrStatsEditor } from './stats-editor';
 import { OcrSkillsList } from './skill-list';
@@ -26,7 +28,7 @@ interface DropZoneProps {
   icon: React.ReactNode;
   accept?: string;
   disabled?: boolean;
-  noKey?: boolean;
+  unavailable?: boolean;
   thumbnails?: Array<PreparedImage>;
   onFiles: (files: Array<File>) => void;
 }
@@ -37,7 +39,7 @@ function DropZone({
   icon,
   accept = 'image/*',
   disabled = false,
-  noKey = false,
+  unavailable = false,
   thumbnails = EMPTY_THUMBNAILS,
   onFiles
 }: Readonly<DropZoneProps>) {
@@ -71,14 +73,14 @@ function DropZone({
     }
   };
 
-  if (noKey) {
+  if (unavailable) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-4 text-center">
-        <KeyRound className="size-8 text-muted-foreground" />
+        <ShieldOff className="size-8 text-muted-foreground" />
         <div className="space-y-1">
-          <p className="text-sm font-medium">Gemini API key required</p>
+          <p className="text-sm font-medium">Screenshot import unavailable</p>
           <p className="text-xs text-muted-foreground max-w-[220px]">
-            Enter your Gemini API key above to scan screenshots.
+            Screenshot import isn&apos;t configured for this build.
           </p>
         </div>
       </div>
@@ -138,14 +140,35 @@ function DropZone({
 }
 
 export function WizardImport() {
-  const geminiApiKey = useGeminiApiKey();
-  const hasApiKey = geminiApiKey.trim().length > 0;
+  const { workerUrl, turnstileSiteKey } = config.ocr;
+  const ocrAvailable = Boolean(workerUrl && turnstileSiteKey);
+
+  const broker = useOcrTurnstileBroker();
+  const turnstileApiRef = useRef<TurnstileApiHandle | null>(null);
+  const [tokenReady, setTokenReady] = useState(false);
 
   const results = useOcrResults();
   const { isProcessing, progress, error } = useOcrProcessing();
   const { step, preparedImages } = useOcrWizardState();
   const { processComposited, updateResults, removeSkill, reset, setStep, addPreparedImage } =
     useOcrActions();
+
+  // Wire the widget's imperative reset into the broker so it can mint fresh
+  // single-use tokens between the sequential per-screenshot worker calls.
+  useEffect(() => {
+    broker.attachReset(() => turnstileApiRef.current?.reset());
+    return () => broker.attachReset(null);
+  }, [broker]);
+
+  const handleTurnstileVerify = (token: string) => {
+    setTokenReady(true);
+    broker.deliver(token);
+  };
+
+  const handleTurnstileInvalidate = () => {
+    setTokenReady(false);
+    broker.invalidate();
+  };
 
   const handleFullDetailsFiles = async (files: Array<File>) => {
     if (files.length === 0) {
@@ -202,11 +225,26 @@ export function WizardImport() {
             label="Drop here"
             description="The screenshots of your runner, add more if she has a lot of skills."
             icon={<ScanLine className="size-8" />}
-            disabled={isProcessing}
-            noKey={!hasApiKey}
+            disabled={isProcessing || (ocrAvailable && !tokenReady)}
+            unavailable={!ocrAvailable}
             thumbnails={preparedImages}
             onFiles={(files) => void handleFullDetailsFiles(files)}
           />
+
+          {ocrAvailable && turnstileSiteKey && (
+            <div className="flex flex-col items-center gap-2">
+              <TurnstileWidget
+                siteKey={turnstileSiteKey}
+                apiRef={turnstileApiRef}
+                onVerify={handleTurnstileVerify}
+                onExpire={handleTurnstileInvalidate}
+                onError={handleTurnstileInvalidate}
+              />
+              {!tokenReady && (
+                <p className="text-xs text-muted-foreground">Verifying before upload…</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

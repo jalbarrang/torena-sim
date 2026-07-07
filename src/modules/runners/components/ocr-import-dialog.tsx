@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { ExternalLink, Eye, EyeOff } from 'lucide-react';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
 import {
   Dialog,
@@ -9,7 +7,6 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { WizardImport } from '@/modules/runners/components/ocr/components/wizard-import';
 import {
   OcrDialogProvider,
@@ -18,7 +15,6 @@ import {
   useOcrResults,
   useOcrWizardState
 } from '@/modules/runners/components/ocr/ocr-dialog.provider';
-import { setGeminiApiKey, useGeminiApiKey } from '@/store/ocr.store';
 import { getNextWizardStep, getPreviousWizardStep } from './ocr/definitions';
 import { hasDetectedData, toExtractedUmaData } from './ocr/helpers';
 
@@ -43,17 +39,14 @@ type OcrImportContentProps = {
 };
 
 const OcrImportContent = ({ open, onOpenChange, onApply }: Readonly<OcrImportContentProps>) => {
-  const [showGeminiApiKey, setShowGeminiApiKey] = useState(false);
   const { isProcessing } = useOcrProcessing();
   const results = useOcrResults();
   const { step } = useOcrWizardState();
   const { reset, setStep } = useOcrActions();
-  const geminiApiKey = useGeminiApiKey();
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       reset();
-      setShowGeminiApiKey(false);
     }
 
     onOpenChange(nextOpen);
@@ -95,43 +88,6 @@ const OcrImportContent = ({ open, onOpenChange, onApply }: Readonly<OcrImportCon
         <DialogHeader>
           <DialogTitle>Import from Screenshots</DialogTitle>
         </DialogHeader>
-
-        <div className="flex flex-col md:flex-row md:items-center gap-2">
-          <div className="w-28 shrink-0 text-sm font-medium">Gemini API key</div>
-
-          <div className="flex-1 flex items-center gap-2 min-w-0">
-            <Input
-              type={showGeminiApiKey ? 'text' : 'password'}
-              value={geminiApiKey}
-              onChange={(event) => setGeminiApiKey(event.target.value)}
-              placeholder="Required: use Gemini Flash for screenshot OCR"
-              disabled={isProcessing}
-              autoComplete="off"
-            />
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setShowGeminiApiKey((show) => !show)}
-              aria-label={showGeminiApiKey ? 'Hide Gemini API key' : 'Show Gemini API key'}
-            >
-              {showGeminiApiKey ? <EyeOff /> : <Eye />}
-            </Button>
-          </div>
-
-          <div>
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 shrink-0"
-            >
-              Get key
-              <ExternalLink className="size-3.5" />
-            </a>
-          </div>
-        </div>
 
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <WizardImport />

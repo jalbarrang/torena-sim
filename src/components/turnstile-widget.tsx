@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 const SCRIPT_ID = 'cf-turnstile-script';
@@ -51,6 +51,11 @@ function loadTurnstileScript(): Promise<void> {
   return scriptPromise;
 }
 
+/** Imperative handle callers can use to mint a fresh token (tokens are single-use). */
+export type TurnstileApiHandle = {
+  reset: () => void;
+};
+
 type TurnstileWidgetProps = {
   siteKey: string;
   onVerify: (token: string) => void;
@@ -58,10 +63,15 @@ type TurnstileWidgetProps = {
   onError?: () => void;
   theme?: 'auto' | 'light' | 'dark';
   className?: string;
+  apiRef?: RefObject<TurnstileApiHandle | null>;
 };
 
 export function TurnstileWidget(props: TurnstileWidgetProps) {
-  const { siteKey, onVerify, onExpire, onError, theme = 'auto', className } = props;
+  const { siteKey, onVerify, onExpire, onError, theme = 'auto', className, apiRef } = props;
+
+  // Keep the latest apiRef without re-rendering the widget.
+  const apiRefHolder = useRef(apiRef);
+  apiRefHolder.current = apiRef;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -83,11 +93,20 @@ export function TurnstileWidget(props: TurnstileWidgetProps) {
           'expired-callback': () => callbacks.current.onExpire?.(),
           'error-callback': () => callbacks.current.onError?.()
         });
+
+        if (apiRefHolder.current) {
+          apiRefHolder.current.current = {
+            reset: () => window.turnstile?.reset(widgetId)
+          };
+        }
       })
       .catch(() => callbacks.current.onError?.());
 
     return () => {
       cancelled = true;
+      if (apiRefHolder.current) {
+        apiRefHolder.current.current = null;
+      }
       if (widgetId && window.turnstile) {
         window.turnstile.remove(widgetId);
       }

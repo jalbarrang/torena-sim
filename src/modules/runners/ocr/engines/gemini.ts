@@ -4,9 +4,6 @@ import { findBestUmaMatch } from '@/modules/runners/data/search';
 import type { OcrEngine, OcrEngineResult } from '@/modules/runners/ocr/engine';
 import type { ExtractedSkill, ExtractedUmaData } from '@/modules/runners/ocr/types';
 
-export const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-
 interface GeminiStructuredResponse {
   name: string;
   outfit: string;
@@ -21,40 +18,6 @@ interface GeminiStructuredResponse {
   strategy: string;
   skills: Array<string>;
 }
-
-const EXTRACTION_PROMPT = `Analyze this Uma Musume screenshot and extract the runner data.
-
-Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
-{
-  "name": "character name",
-  "outfit": "outfit name in brackets, exactly as shown",
-  "speed": 0,
-  "stamina": 0,
-  "power": 0,
-  "guts": 0,
-  "wisdom": 0,
-  "surfaceAptitude": "best visible surface grade: S, A, B, C, D, E, F, or G",
-  "distanceAptitude": "best visible distance grade: S, A, B, C, D, E, F, or G",
-  "strategyAptitude": "best visible strategy grade: S, A, B, C, D, E, F, or G",
-  "strategy": "best visible strategy using only one of: Nige, Senkou, Sasi, Oikomi",
-  "skills": ["every visible skill name exactly as shown, keeping any trailing ○/◎/× and any visible Lvl N marker"]
-}
-
-Requirements:
-- Read the raw screenshot directly.
-- Include all five stat numbers.
-- Return the best surface grade, best distance grade, and best strategy grade.
-- Return the single best strategy name using Nige, Senkou, Sasi, or Oikomi.
-- Include every visible skill name from the screenshot.
-- Preserve each skill's visible suffixes such as ○, ◎, ×, and preserve visible level markers like Lvl 1, Lvl 2, Lvl 3, or Lvl 4.
-- The suffix symbols ○, ◎, and × are part of the official skill name, not annotations.
-- Many different skills exist in both ○ and ◎ versions. Do NOT simplify ◎ into ○ or guess based on familiarity.
-- A single circle ○ and a double circle ◎ are different characters and must be transcribed exactly as shown.
-- Pay special attention to the tiny symbol at the far right of the skill row; it may be faint but must be preserved exactly.
-- If the screenshot shows ◎, return ◎. If it shows ○, return ○. If it shows ×, return ×.
-- Example distinctions: "Right-Handed ○" != "Right-Handed ◎", "Hanshin Racecourse ○" != "Hanshin Racecourse ◎", "Long Straightaways ○" != "Long Straightaways ◎".
-- Do not add extra keys.
-- Do not wrap the JSON in markdown fences.`;
 
 const STRATEGY_NAME_MAP: Record<string, IStrategyName> = {
   nige: 'Front Runner',
@@ -75,94 +38,6 @@ const STRATEGY_NAME_MAP: Record<string, IStrategyName> = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function toBase64(buffer: ArrayBuffer): string {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(buffer).toString('base64');
-  }
-
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    const chunk = bytes.subarray(offset, offset + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  if (typeof btoa !== 'function') {
-    throw new TypeError('Base64 encoding is not available in this environment');
-  }
-
-  return btoa(binary);
-}
-
-async function blobToBase64(imageData: Blob | File): Promise<{
-  base64: string;
-  mimeType: string;
-}> {
-  const buffer = await imageData.arrayBuffer();
-
-  return {
-    base64: toBase64(buffer),
-    mimeType: imageData.type || 'image/png'
-  };
-}
-
-function buildGeminiRequestBody(imageBase64: string, mimeType: string) {
-  return {
-    contents: [
-      {
-        parts: [
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: imageBase64
-            }
-          },
-          {
-            text: EXTRACTION_PROMPT
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.1,
-      topK: 1,
-      topP: 0.8,
-      maxOutputTokens: 4096,
-      responseMimeType: 'application/json'
-    }
-  };
-}
-
-function extractGeminiResponseText(response: unknown): string {
-  if (!isRecord(response)) {
-    throw new Error('Gemini returned an invalid response payload');
-  }
-
-  const candidates = response.candidates;
-  if (!Array.isArray(candidates) || candidates.length === 0) {
-    throw new Error('Gemini returned no candidates');
-  }
-
-  const parts = candidates
-    .flatMap((candidate) => {
-      if (!isRecord(candidate) || !isRecord(candidate.content)) {
-        return [];
-      }
-
-      return Array.isArray(candidate.content.parts) ? candidate.content.parts : [];
-    })
-    .flatMap((part) => (isRecord(part) && typeof part.text === 'string' ? [part.text] : []));
-
-  const text = parts.join('\n').trim();
-  if (!text) {
-    throw new Error('Gemini returned no text content');
-  }
-
-  return text;
 }
 
 function stripMarkdownFences(value: string): string {
@@ -325,52 +200,109 @@ function mapGeminiStructuredData(payload: GeminiStructuredResponse): Partial<Ext
   return structured;
 }
 
-async function getGeminiErrorMessage(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (isRecord(body) && isRecord(body.error) && typeof body.error.message === 'string') {
-      return body.error.message;
-    }
-  } catch {
-    // Ignore JSON parsing errors and fall back to the generic message.
+/** Provides a single-use Cloudflare Turnstile token for one worker request. */
+export type TurnstileTokenProvider = () => Promise<string>;
+
+// Screenshots at or below this size go to the worker untouched. Larger images are
+// downscaled so the worker's body cap (and Gemini's ~20MB inline-data limit) are never hit.
+const IMAGE_PASSTHROUGH_MAX_BYTES = 3_000_000;
+const IMAGE_MAX_EDGE = 2160;
+const IMAGE_HARD_MAX_BYTES = 10_000_000;
+
+const WORKER_ERROR_MESSAGES: Record<string, string> = {
+  quota_exhausted: 'The shared screenshot-import quota is used up for now. Please try again later.',
+  rate_limited: 'Too many imports right now. Wait a minute and try again.',
+  turnstile: 'Verification failed. Complete the check and try again.',
+  too_large: 'Screenshot is too large to process.'
+};
+
+/**
+ * Downscales oversized screenshots before upload. Small images pass through untouched.
+ * The 2160px edge cap keeps the tiny ○/◎/× skill glyphs legible for OCR.
+ */
+async function prepareImageForOcr(imageData: Blob | File): Promise<Blob> {
+  if (imageData.size <= IMAGE_PASSTHROUGH_MAX_BYTES) {
+    return imageData;
   }
 
-  return `Gemini API request failed with status ${response.status}`;
+  if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas === 'undefined') {
+    if (imageData.size > IMAGE_HARD_MAX_BYTES) {
+      throw new Error('Screenshot is too large to process.');
+    }
+    return imageData;
+  }
+
+  const bitmap = await createImageBitmap(imageData);
+  try {
+    const longestEdge = Math.max(bitmap.width, bitmap.height);
+    const scale = longestEdge > IMAGE_MAX_EDGE ? IMAGE_MAX_EDGE / longestEdge : 1;
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Could not prepare the screenshot for processing.');
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+    if (blob.size > IMAGE_HARD_MAX_BYTES) {
+      throw new Error('Screenshot is too large to process.');
+    }
+    return blob;
+  } finally {
+    bitmap.close();
+  }
 }
 
-export class GeminiEngine implements OcrEngine {
-  private readonly apiKey: string;
+/**
+ * OCR engine backed by the `gemini-ocr` Cloudflare Worker. The worker holds the Gemini
+ * API key and runs the extraction prompt server-side; this engine validates and maps
+ * the returned text using client-side game data.
+ */
+export class WorkerGeminiEngine implements OcrEngine {
+  private readonly workerUrl: string;
+  private readonly getToken: TurnstileTokenProvider;
 
-  constructor(apiKey: string) {
-    this.apiKey = apiKey.trim();
+  constructor(workerUrl: string, getToken: TurnstileTokenProvider) {
+    this.workerUrl = workerUrl;
+    this.getToken = getToken;
   }
 
   async recognize(imageData: Blob | File): Promise<OcrEngineResult> {
-    if (!this.apiKey) {
-      throw new Error('Gemini API key is not configured');
+    const prepared = await prepareImageForOcr(imageData);
+    const token = await this.getToken();
+
+    // Send raw bytes as multipart (no base64 bloat on the wire); the worker
+    // base64-encodes server-side for Gemini's inline_data field.
+    const form = new FormData();
+    // Filename is irrelevant — the worker reads the mime type from the blob part.
+    form.append('image', prepared, 'screenshot');
+    form.append('token', token);
+
+    // Let the browser set the multipart Content-Type (with boundary) automatically.
+    const response = await fetch(this.workerUrl, { method: 'POST', body: form });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { ok: true; text: string }
+      | { ok: false; code?: string; error?: string }
+      | null;
+
+    if (!response.ok || !payload || payload.ok !== true) {
+      const code = payload && payload.ok === false ? payload.code : undefined;
+      const fallback =
+        (payload && payload.ok === false && payload.error) ||
+        'Screenshot import failed. Please try again.';
+      throw new Error((code && WORKER_ERROR_MESSAGES[code]) || fallback);
     }
 
-    const { base64, mimeType } = await blobToBase64(imageData);
-    const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(this.apiKey)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(buildGeminiRequestBody(base64, mimeType))
-    });
-
-    if (!response.ok) {
-      throw new Error(await getGeminiErrorMessage(response));
-    }
-
-    const payload = await response.json();
-    const text = extractGeminiResponseText(payload);
-    const structured = mapGeminiStructuredData(parseGeminiJsonResponse(text));
+    const structured = mapGeminiStructuredData(parseGeminiJsonResponse(payload.text));
 
     return { structured };
   }
 
   async destroy(): Promise<void> {
-    // No-op: the Gemini engine does not keep worker/process state alive.
+    // No-op: the worker engine does not keep worker/process state alive.
   }
 }

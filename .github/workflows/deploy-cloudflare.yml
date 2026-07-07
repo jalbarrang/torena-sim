@@ -29,6 +29,7 @@ jobs:
       VITE_SUGGESTION_WORKER_URL: ${{ vars.VITE_SUGGESTION_WORKER_URL }}
       VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
       VITE_TIMELINE_WORKER_URL: ${{ vars.VITE_TIMELINE_WORKER_URL }}
+      VITE_OCR_WORKER_URL: ${{ vars.VITE_OCR_WORKER_URL }}
 
     steps:
       - name: Checkout code
