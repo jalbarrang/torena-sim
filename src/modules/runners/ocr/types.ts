@@ -3,6 +3,7 @@
  */
 
 import type { IStrategyName } from '@/lib/uma-domain/runner/definitions';
+import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/types';
 import type { SkillMatch } from '@/modules/runners/data/types';
 
 /** Extracted skill with image source tracking */
@@ -29,6 +30,8 @@ export interface ExtractedUmaData {
   surfaceAptitude?: string;
   distanceAptitude?: string;
   strategyAptitude?: string;
+  // Full 10-bucket aptitude grades (higher fidelity than the 3 collapsed above).
+  aptitudes?: RunnerAptitudes;
   strategy?: IStrategyName;
 
   // Skills

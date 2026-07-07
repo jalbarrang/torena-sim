@@ -93,6 +93,14 @@
         "vitest": "^4.1.7",
       },
     },
+    "workers/gemini-ocr": {
+      "name": "@drekki/gemini-ocr",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@cloudflare/workers-types": "^4.20251201.0",
+        "wrangler": "^4.42.0",
+      },
+    },
     "workers/suggestion-bot": {
       "name": "@drekki/suggestion-bot",
       "version": "0.0.0",
@@ -272,6 +280,8 @@
     "@dnd-kit/utilities": ["@dnd-kit/utilities@3.2.2", "", { "dependencies": { "tslib": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-+MKAJEOfaBe5SmV6t34p80MMKhjvUz0vRrvVJbPT0WElzaOJ/1xs+D+KDv+tD/NE5ujfrChEcshd4fLn0wpiqg=="],
 
     "@dotenvx/dotenvx": ["@dotenvx/dotenvx@1.65.0", "", { "dependencies": { "commander": "^11.1.0", "dotenv": "^17.2.1", "eciesjs": "^0.4.10", "execa": "^5.1.1", "fdir": "^6.2.0", "ignore": "^5.3.0", "object-treeify": "1.1.33", "picomatch": "^4.0.4", "which": "^4.0.0", "yocto-spinner": "^1.1.0" }, "bin": { "dotenvx": "src/cli/dotenvx.js" } }, "sha512-v4FA/Lw3pTEloLxBqTOaYDX6MNo0Jo7lGBsPZhwnJBqRJp0AzQg1ZZNxrFsh6HVC6QWeWrfIKLn0y2eyIXaVDg=="],
+
+    "@drekki/gemini-ocr": ["@drekki/gemini-ocr@workspace:workers/gemini-ocr"],
 
     "@drekki/suggestion-bot": ["@drekki/suggestion-bot@workspace:workers/suggestion-bot"],
 

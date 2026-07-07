@@ -1,16 +1,21 @@
-import { createContext, use, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, use, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/shallow';
+import { config } from '@/config';
 import type { OcrEngine } from '@/modules/runners/ocr/engine';
-import { GeminiEngine } from '@/modules/runners/ocr/engines/gemini';
+import { WorkerGeminiEngine } from '@/modules/runners/ocr/engines/gemini';
 import {
   createOcrDialogStore,
   type IOcrDialogStore,
   type IOcrDialogStoreApi
 } from '@/modules/runners/components/ocr/ocr-dialog.store';
-import { useGeminiApiKey } from '@/store/ocr.store';
+import {
+  createTurnstileBroker,
+  type TurnstileBroker
+} from '@/modules/runners/components/ocr/turnstile-broker';
 
 const OcrDialogStoreContext = createContext<IOcrDialogStoreApi | null>(null);
+const OcrTurnstileBrokerContext = createContext<TurnstileBroker | null>(null);
 
 type OcrDialogProviderProps = {
   children: React.ReactNode;
@@ -18,13 +23,9 @@ type OcrDialogProviderProps = {
 
 export function OcrDialogProvider(props: Readonly<OcrDialogProviderProps>) {
   const { children } = props;
-  const geminiApiKey = useGeminiApiKey();
-
-  const normalizedKey = useMemo(() => {
-    return geminiApiKey.trim();
-  }, [geminiApiKey]);
 
   const engineRef = useRef<OcrEngine | null>(null);
+  const [broker] = useState(() => createTurnstileBroker());
   const [store] = useState(() => {
     return createOcrDialogStore(engineRef);
   });
@@ -37,15 +38,12 @@ export function OcrDialogProvider(props: Readonly<OcrDialogProviderProps>) {
   }, [store]);
 
   useEffect(() => {
-    const previous = engineRef.current;
-    engineRef.current = null;
-    void previous?.destroy();
-
-    if (normalizedKey.length === 0) {
+    const workerUrl = config.ocr.workerUrl;
+    if (!workerUrl) {
       return;
     }
 
-    const engine = new GeminiEngine(normalizedKey);
+    const engine = new WorkerGeminiEngine(workerUrl, broker.consume);
     engineRef.current = engine;
 
     return () => {
@@ -53,11 +51,27 @@ export function OcrDialogProvider(props: Readonly<OcrDialogProviderProps>) {
         engineRef.current = null;
       }
 
-      engine.destroy();
+      void engine.destroy();
     };
-  }, [normalizedKey]);
+  }, [broker]);
 
-  return <OcrDialogStoreContext.Provider value={store}>{children}</OcrDialogStoreContext.Provider>;
+  return (
+    <OcrDialogStoreContext.Provider value={store}>
+      <OcrTurnstileBrokerContext.Provider value={broker}>
+        {children}
+      </OcrTurnstileBrokerContext.Provider>
+    </OcrDialogStoreContext.Provider>
+  );
+}
+
+export function useOcrTurnstileBroker(): TurnstileBroker {
+  const broker = use(OcrTurnstileBrokerContext);
+
+  if (!broker) {
+    throw new Error('useOcrTurnstileBroker must be used within OcrDialogProvider');
+  }
+
+  return broker;
 }
 
 function useOcrDialogStore<T>(selector: (state: IOcrDialogStore) => T): T {

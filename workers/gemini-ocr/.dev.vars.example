@@ -1,0 +1,6 @@
+# Copy to `.dev.vars` for local `wrangler dev`. These are set as real secrets in
+# production via `wrangler secret put <NAME>`. Never commit the populated file.
+GEMINI_API_KEY=
+# Turnstile always-passes test secret for local dev:
+#   1x0000000000000000000000000000000AA
+TURNSTILE_SECRET_KEY=

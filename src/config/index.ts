@@ -15,6 +15,10 @@ export type AppConfig = {
   timeline: {
     workerUrl?: string;
   };
+  ocr: {
+    workerUrl?: string;
+    turnstileSiteKey?: string;
+  };
 };
 
 export const config: AppConfig = {
@@ -31,5 +35,11 @@ export const config: AppConfig = {
   },
   timeline: {
     workerUrl: envString('VITE_TIMELINE_WORKER_URL')
+  },
+  ocr: {
+    workerUrl: envString('VITE_OCR_WORKER_URL'),
+    // OCR has its own Turnstile widget; fall back to the shared site key if unset.
+    turnstileSiteKey:
+      envString('VITE_TURNSTILE_SITE_KEY_OCR') || envString('VITE_TURNSTILE_SITE_KEY')
   }
 };

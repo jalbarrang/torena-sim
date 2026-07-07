@@ -52,6 +52,7 @@ export function hasDetectedData(results: Partial<ExtractedUmaData> | null): bool
       results.surfaceAptitude ||
       results.distanceAptitude ||
       results.strategyAptitude ||
+      results.aptitudes ||
       results.strategy)
   );
 }
