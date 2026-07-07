@@ -69,7 +69,10 @@ export function HintLevelStepper(props: Readonly<HintLevelStepperProps>) {
         <MinusIcon className="size-3.5" />
       </button>
 
-      <div className="flex h-full items-center justify-center gap-1.5 border-x border-border px-2">
+      {/* Fixed width sized to the widest state ("Lv Max 40%" ≈ 85px) so the
+          control keeps a constant footprint across all levels — no layout
+          shift while stepping. */}
+      <div className="flex h-full w-22 items-center justify-center gap-1.5 border-x border-border px-1">
         <span className="text-xs font-semibold leading-none">{label}</span>
         {level > 0 && (
           <span
