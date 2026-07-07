@@ -1,3 +1,9 @@
+## [0.24.0](https://github.com/jalbarrang/torena-sim/compare/v0.23.3...v0.24.0) (2026-07-07)
+
+### Features
+
+* **skill-planner:** inline hint level steppers ([#61](https://github.com/jalbarrang/torena-sim/issues/61)) ([993633f](https://github.com/jalbarrang/torena-sim/commit/993633f8da909dda3a75bc981ce887df0461c850))
+
 ## [0.23.3](https://github.com/jalbarrang/torena-sim/compare/v0.23.2...v0.23.3) (2026-07-04)
 
 ### Bug Fixes
