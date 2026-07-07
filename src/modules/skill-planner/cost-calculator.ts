@@ -2,16 +2,7 @@ import type { CandidateSkill, CostBreakdown, HintLevel } from './types';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { getBaseTier, getUpgradeTier } from '@/modules/skills/skill-relationships';
 import { isSkillCoveredByOwnedFamily } from './skill-family';
-
-// Hint level discount mapping (as shown in game screenshots)
-const HINT_DISCOUNTS: Readonly<Record<HintLevel, number>> = {
-  0: 0, // No discount
-  1: 0.1, // 10% off (Hint Lvl 1)
-  2: 0.2, // 20% off (Hint Lvl 2)
-  3: 0.3, // 30% off (Hint Lvl 3)
-  4: 0.35, // 35% off (Hint Lvl 4)
-  5: 0.4 // 40% off (Hint Lvl 5 - max)
-} as const;
+import { HINT_DISCOUNTS } from './hint-levels';
 
 /**
  * Calculate the raw discounted cost of a skill before integer rounding.

@@ -2,21 +2,18 @@ import { useMemo } from 'react';
 import { MinusIcon, PlusIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { HintLevel } from '@/modules/skill-planner/types';
+import {
+  getHintDiscountPercent,
+  MAX_HINT_LEVEL,
+  MIN_HINT_LEVEL
+} from '@/modules/skill-planner/hint-levels';
 import { useSkillItem } from './context';
 
-// Presentation table for the stepper. Discount values mirror HINT_DISCOUNTS in
-// cost-calculator.ts (the canonical source); the short labels are stepper-only.
-const HINT_STEPS: ReadonlyArray<{ level: HintLevel; label: string; off: string }> = [
-  { level: 0, label: 'No hint', off: '0%' },
-  { level: 1, label: 'Lv 1', off: '10%' },
-  { level: 2, label: 'Lv 2', off: '20%' },
-  { level: 3, label: 'Lv 3', off: '30%' },
-  { level: 4, label: 'Lv 4', off: '35%' },
-  { level: 5, label: 'Lv Max', off: '40%' }
-];
-
-const MIN_LEVEL = 0;
-const MAX_LEVEL = 5;
+const getStepLabel = (level: HintLevel): string => {
+  if (level === MIN_HINT_LEVEL) return 'No hint';
+  if (level === MAX_HINT_LEVEL) return 'Lv Max';
+  return `Lv ${level}`;
+};
 
 type SkillItemHintStepperProps = {
   className?: string;
@@ -38,22 +35,23 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
   const meta = useMemo(() => getSkillMeta(skillId), [getSkillMeta, skillId]);
   const isObtained = costSummary?.isObtained ?? meta.bought ?? false;
 
-  const level = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, meta.hintLevel)) as HintLevel;
-  const step = HINT_STEPS[level];
+  const level = Math.min(MAX_HINT_LEVEL, Math.max(MIN_HINT_LEVEL, meta.hintLevel)) as HintLevel;
+  const label = getStepLabel(level);
+  const off = `${getHintDiscountPercent(level)}%`;
 
   if (!onHintLevelChange || !hasCost || isObtained) {
     return null;
   }
 
   const setLevel = (next: number) => {
-    const clamped = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, next));
+    const clamped = Math.min(MAX_HINT_LEVEL, Math.max(MIN_HINT_LEVEL, next));
     if (clamped !== level) {
       onHintLevelChange(skillId, clamped);
     }
   };
 
-  const atMin = level <= MIN_LEVEL;
-  const atMax = level >= MAX_LEVEL;
+  const atMin = level <= MIN_HINT_LEVEL;
+  const atMax = level >= MAX_HINT_LEVEL;
 
   return (
     <div
@@ -61,7 +59,7 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
         'inline-flex h-7 shrink-0 items-center overflow-hidden rounded-md border border-border bg-muted/30',
         className
       )}
-      title={`Hint ${step.label} · ${step.off} off`}
+      title={`Hint ${label} · ${off} off`}
     >
       <button
         type="button"
@@ -77,7 +75,7 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
       </button>
 
       <div className="flex h-full items-baseline gap-1.5 border-x border-border px-2">
-        <span className="text-xs font-semibold leading-none">{step.label}</span>
+        <span className="text-xs font-semibold leading-none">{label}</span>
         <span
           className={cn(
             'font-mono text-[11px] font-semibold leading-none',
@@ -87,7 +85,7 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
             level === 0 ? 'text-muted-foreground' : 'text-[#2f6b09] dark:text-primary'
           )}
         >
-          {step.off}
+          {off}
         </span>
       </div>
 

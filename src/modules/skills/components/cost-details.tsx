@@ -14,6 +14,12 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import type { HintLevel } from '@/modules/skill-planner/types';
+import {
+  getHintDiscountPercent,
+  HINT_LEVELS,
+  MAX_HINT_LEVEL,
+  MIN_HINT_LEVEL
+} from '@/modules/skill-planner/hint-levels';
 import { calculateSkillCost } from '@/modules/skill-planner/cost-calculator';
 import {
   getRelatedSkillIds,
@@ -23,14 +29,15 @@ import {
 import { skillsService } from '@/modules/data/services/SkillService';
 import { buildSkillCostSummary } from '@/modules/skills/skill-cost-summary';
 
-const HINT_LEVEL_OPTIONS: Array<{ value: HintLevel; label: string }> = [
-  { value: 0, label: 'No hint' },
-  { value: 1, label: 'Lvl 1 (10%)' },
-  { value: 2, label: 'Lvl 2 (20%)' },
-  { value: 3, label: 'Lvl 3 (30%)' },
-  { value: 4, label: 'Lvl 4 (35%)' },
-  { value: 5, label: 'Lvl Max (40%)' }
-];
+const getHintOptionLabel = (level: HintLevel): string => {
+  if (level === MIN_HINT_LEVEL) return 'No hint';
+  const name = level === MAX_HINT_LEVEL ? 'Lvl Max' : `Lvl ${level}`;
+  return `${name} (${getHintDiscountPercent(level)}%)`;
+};
+
+const HINT_LEVEL_OPTIONS: Array<{ value: HintLevel; label: string }> = HINT_LEVELS.map(
+  (level) => ({ value: level, label: getHintOptionLabel(level) })
+);
 
 const getHintLevelLabel = (hintLevel: HintLevel) => {
   return HINT_LEVEL_OPTIONS.find((option) => option.value === hintLevel)?.label ?? 'None (0%)';
