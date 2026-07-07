@@ -74,19 +74,18 @@ export function SkillItemHintStepper(props: Readonly<SkillItemHintStepperProps>)
         <MinusIcon className="size-3.5" />
       </button>
 
-      <div className="flex h-full items-baseline gap-1.5 border-x border-border px-2">
+      <div className="flex h-full items-center justify-center gap-1.5 border-x border-border px-2">
         <span className="text-xs font-semibold leading-none">{label}</span>
-        <span
-          className={cn(
-            'font-mono text-[11px] font-semibold leading-none',
+        {level > 0 && (
+          <span
             // Light `--primary` (#66bf0d) only clears ~2.3:1 on the light control
             // surface — below AA for this small text. Use a deeper green in light
             // mode; dark `--primary` (#57a112) already passes on charcoal.
-            level === 0 ? 'text-muted-foreground' : 'text-[#2f6b09] dark:text-primary'
-          )}
-        >
-          {off}
-        </span>
+            className="font-mono text-[11px] font-semibold leading-none text-[#2f6b09] dark:text-primary"
+          >
+            {off}
+          </span>
+        )}
       </div>
 
       <button
