@@ -14,6 +14,18 @@ export function useSkillTooltip() {
     const textEl = g?.querySelector('text');
     if (!g || !bg || !textEl) return;
 
+    // SVG paints in document order (no z-index): raise the hovered marker's
+    // group chain to the end of each parent so the tooltip is not covered by
+    // sibling chips rendered after it. Stops at the skill-section <svg>.
+    let node: Element = g;
+    while (node.parentElement && !(node.parentNode instanceof SVGSVGElement)) {
+      const parent = node.parentNode as Element;
+      if (parent.lastElementChild !== node) {
+        parent.appendChild(node);
+      }
+      node = parent;
+    }
+
     g.style.display = '';
     g.setAttribute('transform', '');
 
