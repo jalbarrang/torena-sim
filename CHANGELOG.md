@@ -1,3 +1,9 @@
+## [0.26.0](https://github.com/jalbarrang/torena-sim/compare/v0.25.0...v0.26.0) (2026-07-08)
+
+### Features
+
+* **compare:** contested-only same-race compare (2–12 field) + mechanics fidelity from real race data ([#63](https://github.com/jalbarrang/torena-sim/issues/63)) ([625cdba](https://github.com/jalbarrang/torena-sim/commit/625cdbaefe38b6047dd56c79f36c627f7b48b7ff))
+
 ## [0.25.0](https://github.com/jalbarrang/torena-sim/compare/v0.24.0...v0.25.0) (2026-07-07)
 
 ### Features
