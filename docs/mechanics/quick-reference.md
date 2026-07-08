@@ -160,25 +160,29 @@ This document is a quick reference for the race mechanics that are available cur
 
 ### Spot Struggle ✅
 
-- ✅ Sections `1-6` (150m to section 6 end)
-- ✅ 2+ `FrontRunner` or `Runaway` required
-- ✅ Position requirements:
-  - `FrontRunner`: <3.75m, <0.165 course width
-  - `Runaway`: <5.0m, <0.416 course width
+Real-data amendments from [hakuraku.moe/notes/spot-struggle](https://hakuraku.moe/notes/spot-struggle):
+
+- ✅ Sections `1-6` (150m to section 6 end); the 150m unlock is **field-global** (any uma passing 150m unlocks it for everyone); only one grouped uma needs to still be within section 6
+- ✅ 2+ `FrontRunner` or 2+ `Runaway` required (styles never mix); each style triggers **once per race**
+- ✅ Entry (both styles — Oonige is NOT wider): <3.75m behind the **frontmost** uma of the style, <0.165 course width laterally; everyone in range of the frontmost enters together
 - ✅ Speed boost: `(500*GutsStat)^0.6 * 0.0001` m/s
-- ✅ Duration: `(700*GutsStat)^0.5 * 0.012` s (always ends at section 9)
+- ✅ Duration: `(700*GutsStat)^0.5 * 0.012` s **× strategy proficiency modifier** (S 1.1, A 1.0, B 0.85, C 0.75, D 0.6, E 0.4, F 0.2, G 0.1); always ends at section 9
+- ✅ Early exit: ≥5.0m behind ALL other active strugglers of the style, or ≥0.416 course width laterally from all (`DistanceGap2`/`LaneGap2` are exit constants, not Oonige entry); when all others distance-exited, the last struggler exits too (natural expiry does not cascade)
 - ✅ HP consumption multipliers:
   - `FrontRunner`: `1.4x` (3.6x if rushed)
   - `Runaway`: `3.5x` (7.7x if rushed)
 
 ### Dueling ✅
 
-- ✅ `FinalStraight` only
-- ✅ 2+ Uma within `3.0m`, `0.25` course width
-- ✅ `2s` proximity, top 50%, speed gap `<0.6 m/s`
+Real-data amendments from [hakuraku.moe/notes/dueling](https://hakuraku.moe/notes/dueling):
+
+- ✅ `FinalStraight` only; no strategy exclusion (front runners can duel)
+- ✅ 2+ Uma within `3.0m`, `0.25` course width for `2s` — the 2s window applies to **proximity only**; during the window only the **target** must be on the final straight (initiator checked at trigger frame)
+- ✅ Trigger-frame checks (single frame after the window): both ≥15% HP, speed gap `<0.6 m/s`, at least **one** of the pair in the top 50% (that uma is the target)
 - ✅ Speed: `(200*GutsStat)^0.708 * 0.0001` m/s
 - ✅ Accel: `(160*GutsStat)^0.59 * 0.0001` m/s²
-- ✅ Cannot trigger `<15%` HP, ends at `<5%` HP
+- ✅ Exits: `<5%` HP, or ≥5m (ahead OR behind) from every current-or-former duel participant
+- ✅ Former participants cannot re-enter or be new targets, but still count for keeping nearby duels alive
 
 ### Downhill Mode ✅
 

@@ -1182,20 +1182,25 @@ Note: Info in this section is inferred from the game’s parameter file, which i
 
 When there are 2 or more Front Runners or Runaways, Spot Struggle may be triggered between 150m from start to the 6th section.
 
+> Real-data amendments ([hakuraku.moe/notes/spot-struggle](https://hakuraku.moe/notes/spot-struggle)): the 150m unlock is field-global — any uma passing 150m unlocks the mechanic for everyone, so trailing Front Runners can trigger before their own 150m mark. Only one of the umas involved needs to still be within section 6. The reference for the distance check is the FRONTMOST uma of the style: all umas within range of her enter together. Each style triggers at most once per race.
+
 For Front Runners, their relative position must be:
 DistanceGap\<3.75m
 LaneGap\<0.165\*CourseWidth
 
-For Runaway, their relative position must be :
-DistanceGap\<5.0m
-LaneGap\<0.416\*CourseWidth
+> Real-data amendment: Runaway (Oonige) entry uses the same 3.75m / 0.165\*CourseWidth thresholds — replay data does not support a wider Oonige entry range. The `DistanceGap2: 5.0` / `LaneGap2: 0.416` constants are exit thresholds (see below).
 
 Front Runners may compete with each other, Runaways may compete with each other, but a regular Front Runner does not compete with an Runaway.
 
 During Spot Struggle, the Front Runners gain additional speed based on their guts stat.
 TargetSpeed+=(500\*GutsStat)0.6\*0.0001\[m/s\]
-Duration=(700\*GutsStat)0.5\*0.012\[s\]
+Duration=(700\*GutsStat)0.5\*0.012\*StrategyProficiencyModifier\[s\]
+
+> Real-data amendment: duration is scaled by the runner's strategy proficiency modifier (S 1.1, A 1.0, B 0.85, C 0.75, D 0.6, E 0.4, F 0.2, G 0.1) — the same table as the wit adjustment.
+
 Lead competition always ends when the 9th section is reached, regardless of whether duration has expired.
+
+> Real-data amendment (exit conditions): an uma also exits early once she is ≥5m behind ALL other active spot strugglers of her style, or ≥0.416\*CourseWidth away laterally from all of them. If every other participant left via this distance exit, the final struggler exits as well; natural duration expiry does NOT cascade.
 
 During Spot Struggle, the HP consumption rate is multiplied by the following number:
 
@@ -1218,6 +1223,14 @@ TargetSpeed+=(200\*GutsStat)0.708\*0.0001\[m/s\]
 Accel+=(160\*GutsStat)0.59\*0.0001\[m/s\]
 
 Competition cannot occur when HP is less than 15%, and will end if HP is reduced to below 5%.
+
+> Real-data amendments ([hakuraku.moe/notes/dueling](https://hakuraku.moe/notes/dueling)):
+>
+> - The 2-second window applies to the proximity requirements only (distance + lane). HP, placement, and speed need to hold together on just one frame after the window elapses.
+> - The final-straight requirement during the window applies to the duel TARGET only; the initiator may still be in the final corner and must be on the straight only at the trigger frame (replay: Maru duels 1.93s after entering the straight, kv=eJ1U_z6Sk6kzpkJeRhK48PXj).
+> - Only ONE of the pair needs top-50% placement — that uma acts as the duel target. Both umas need ≥15% HP.
+> - There is no strategy exclusion; front runners that fall back into the pack can duel. There is also no deadline — duels can begin even after the winner finishes.
+> - Distance exit: an uma leaves a duel once separated by ≥5m (ahead OR behind) from every uma who has participated in a duel this race. Former participants cannot re-enter a duel or become new targets, but still count for keeping nearby duels alive — so the last active dueler does not automatically exit.
 
 # Fully Charged {#fully-charged}
 

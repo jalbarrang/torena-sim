@@ -27,7 +27,7 @@ use uma_sim_primitives::runner::physics::{
 use uma_sim_primitives::runner::skills::FieldView;
 use uma_sim_primitives::runner::Runner;
 use uma_sim_primitives::shared_kernel::ids::RunnerId;
-use uma_sim_primitives::shared_kernel::language::{strategy_matches, GroundCondition, Strategy};
+use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
 use uma_sim_primitives::shared_kernel::params::RaceParameters;
 use uma_sim_primitives::shared_kernel::region::{Region, RegionList};
 use uma_sim_primitives::shared_kernel::rng::{Prng, Xoshiro256StarStar};
@@ -121,6 +121,13 @@ pub struct Race {
     strategy_counts: HashMap<Strategy, u32>,
     /// Common (shared) skills across the field.
     common_skills: HashMap<String, u32>,
+    /// Field-global spot-struggle unlock: set once ANY runner passes 150m this
+    /// round (hakuraku.moe/notes/spot-struggle: one uma passing 150m unlocks
+    /// the mechanic for the whole field).
+    spot_struggle_unlocked: bool,
+    /// Styles that already triggered spot struggle this round (each style
+    /// triggers at most once per race).
+    spot_struggle_triggered: Vec<Strategy>,
 
     /// Lifecycle observers.
     observers: RaceObservers,
@@ -170,6 +177,8 @@ impl Race {
             order_tracker: FieldOrderTracker::new(),
             strategy_counts: HashMap::new(),
             common_skills: HashMap::new(),
+            spot_struggle_unlocked: false,
+            spot_struggle_triggered: Vec::new(),
             observers: RaceObservers::new(),
             course,
         }
@@ -221,6 +230,8 @@ impl Race {
         self.accumulated_time = 0.0;
         self.finished_runners.clear();
         self.order_tracker.reset();
+        self.spot_struggle_unlocked = false;
+        self.spot_struggle_triggered.clear();
 
         self.prepare_race();
 
@@ -376,6 +387,7 @@ impl Race {
         }
         if self.settings.spot_struggle {
             self.coordinate_spot_struggle_groups();
+            self.coordinate_spot_struggle_exits();
         }
 
         update_first_position_in_late_race(&mut self.runners, self.course.distance);
@@ -447,6 +459,9 @@ impl Race {
     fn coordinate_proximity_dueling(&mut self) {
         const MAX_DISTANCE_GAP: f64 = 3.0;
         const MAX_SPEED_GAP: f64 = 0.6;
+        /// `TargetContinueDistance`: exit once separated by >=5m (either
+        /// direction) from every current-or-former duel participant.
+        const EXIT_DISTANCE_GAP: f64 = 5.0;
 
         let order = self.order_tracker.runner_order.clone();
         let num = order.len();
@@ -464,7 +479,11 @@ impl Race {
             position: f64,
             lane: f64,
             speed: f64,
+            hp_ratio: f64,
             on_final_straight: bool,
+            is_dueling: bool,
+            forced_dueling: bool,
+            has_dueled: bool,
             eligible: bool,
         }
         let rows: Vec<Row> = self
@@ -473,25 +492,39 @@ impl Race {
             .filter(|r| !r.finished)
             .map(|r| {
                 let on_final = r.is_on_final_straight(&self.course);
-                let eligible = r.dueling_enabled
-                    && !r.is_dueling
-                    && !r.is_in_forced_dueling
-                    && !strategy_matches(r.position_keep_strategy, Strategy::FrontRunner)
-                    && r.health_policy.health_ratio_remaining() >= 0.15
-                    && on_final;
+                // No strategy exclusion (canon: docs/mechanics/README.md
+                // "Dueling"; hakuraku.moe/notes/dueling). Former duel
+                // participants never re-enter a duel. The initiator does NOT
+                // need to be on the final straight during the window - only
+                // the target does; the initiator's own straight check happens
+                // at the trigger frame (replay evidence: Maru duels 1.93s
+                // after entering the straight, so her window ran while she
+                // was still in the corner).
+                let eligible =
+                    r.dueling_enabled && !r.is_dueling && !r.is_in_forced_dueling && !r.has_dueled;
                 Row {
                     id: r.id,
                     order: order.get(&r.id).copied(),
                     position: r.position,
                     lane: r.current_lane,
                     speed: r.current_speed,
+                    hp_ratio: r.health_policy.health_ratio_remaining(),
                     on_final_straight: on_final,
+                    is_dueling: r.is_dueling,
+                    forced_dueling: r.is_in_forced_dueling,
+                    has_dueled: r.has_dueled,
                     eligible,
                 }
             })
             .collect();
 
         // Phase 2: decide each eligible runner's dueling transition.
+        //
+        // The 2s window (`TargetContinueTime`) applies to PROXIMITY only
+        // (<=3m, <=0.25*CourseWidth). Speed, HP, and placement are
+        // single-frame checks once the window has elapsed
+        // (hakuraku.moe/notes/dueling, "Which conditions must be maintained
+        // for 2 seconds?").
         enum DuelDecision {
             ClearCanDuel,
             ArmCanDuel,
@@ -503,44 +536,74 @@ impl Race {
             if !row.eligible {
                 continue;
             }
-            match row.order {
-                Some(o) if o <= top_half_cutoff => {}
-                _ => {
-                    decisions.push((row.id, DuelDecision::ClearCanDuel));
-                    continue;
-                }
-            }
-            let mut nearby = 0;
-            for other in &rows {
-                if other.id == row.id {
-                    continue;
-                }
-                match other.order {
-                    Some(o) if o <= top_half_cutoff => {}
-                    _ => continue,
-                }
-                let within_distance = (other.position - row.position).abs() <= MAX_DISTANCE_GAP;
-                let lane_gap = (other.lane - row.lane).abs() * course_width;
-                let within_lane = lane_gap <= max_lane_gap;
-                let within_speed = (other.speed - row.speed).abs() < MAX_SPEED_GAP;
-                if within_distance && within_lane && within_speed && other.on_final_straight {
-                    nearby += 1;
-                }
-            }
-            if nearby + 1 < 2 {
+            // Proximity partners sustain the window. Former duelers cannot be
+            // targets; ACTIVE duelers can (joining an ongoing duel).
+            let partners: Vec<&Row> = rows
+                .iter()
+                .filter(|other| {
+                    other.id != row.id
+                        && !other.has_dueled
+                        && other.on_final_straight
+                        && (other.position - row.position).abs() <= MAX_DISTANCE_GAP
+                        && (other.lane - row.lane).abs() <= max_lane_gap
+                })
+                .collect();
+            if partners.is_empty() {
                 decisions.push((row.id, DuelDecision::ClearCanDuel));
                 continue;
             }
-            // Bunched: arm `can_duel`, then start the duel after the 2s cadence.
             let Some(runner) = self.runners.iter().find(|r| r.id == row.id) else {
                 continue;
             };
             if runner.can_duel != Some(true) {
                 decisions.push((row.id, DuelDecision::ArmCanDuel));
-            } else if runner.dueling_timer.t >= 2.0 {
-                decisions.push((row.id, DuelDecision::StartDuel));
-            } else {
+                continue;
+            }
+            if runner.dueling_timer.t < 2.0 {
                 decisions.push((row.id, DuelDecision::None));
+                continue;
+            }
+            // Trigger-frame checks: the initiator is on the final straight,
+            // both umas >=15% HP, speed gap <0.6 m/s, and at least ONE of the
+            // pair in the top half (that uma is the duel target - only the
+            // target needs the placement).
+            let row_top_half = matches!(row.order, Some(o) if o <= top_half_cutoff);
+            let triggered = row.on_final_straight
+                && row.hp_ratio >= 0.15
+                && partners.iter().any(|p| {
+                    let p_top_half = matches!(p.order, Some(o) if o <= top_half_cutoff);
+                    p.hp_ratio >= 0.15
+                        && (p.speed - row.speed).abs() < MAX_SPEED_GAP
+                        && (row_top_half || p_top_half)
+                });
+            decisions.push((
+                row.id,
+                if triggered {
+                    DuelDecision::StartDuel
+                } else {
+                    // Window persists while proximity holds; the trigger
+                    // conditions only need one frame to line up.
+                    DuelDecision::None
+                },
+            ));
+        }
+
+        // Phase 2b: distance-based exits. An active dueler leaves once she is
+        // >=5m away (ahead OR behind) from EVERY current-or-former duel
+        // participant; former participants still count for keeping a duel
+        // alive (hakuraku.moe/notes/dueling, "Exit conditions").
+        let mut exits: Vec<RunnerId> = Vec::new();
+        for row in rows.iter().filter(|r| r.is_dueling && !r.forced_dueling) {
+            let participants: Vec<&Row> = rows
+                .iter()
+                .filter(|o| o.id != row.id && (o.is_dueling || o.has_dueled))
+                .collect();
+            if !participants.is_empty()
+                && participants
+                    .iter()
+                    .all(|o| (o.position - row.position).abs() >= EXIT_DISTANCE_GAP)
+            {
+                exits.push(row.id);
             }
         }
 
@@ -561,77 +624,180 @@ impl Race {
                 }
             }
         }
+        for id in exits {
+            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
+                runner.is_dueling = false;
+                runner.has_dueled = true;
+                runner.dueling_end_position = runner.position;
+            }
+        }
     }
 
     /// **Spot-struggle group activation** coordinator (port of the group-trigger
     /// branch of `updateSpotStruggle`). A bunched cluster of same-strategy
     /// front-runners near the front all enter spot-struggle together.
     fn coordinate_spot_struggle_groups(&mut self) {
+        // Field-global unlock: ANY uma passing 150m unlocks spot struggle for
+        // the whole field, so trailing front runners can trigger before their
+        // own 150m mark (hakuraku.moe/notes/spot-struggle, "Entry conditions").
+        if !self.spot_struggle_unlocked {
+            self.spot_struggle_unlocked = self
+                .runners
+                .iter()
+                .any(|r| r.finished || r.position >= 150.0);
+        }
+        if !self.spot_struggle_unlocked {
+            return;
+        }
+
+        // Entry thresholds are identical for both styles: real data shows
+        // Oonige does NOT get a wider entry range; the 5.0 / 0.416 constants
+        // (`DistanceGap2`/`LaneGap2`) are EXIT thresholds instead.
+        const ENTRY_DISTANCE_GAP: f64 = 3.75;
+        let entry_lane_gap = 0.165 * self.course.course_width;
+
         // Phase 1: read-only snapshot.
         struct Row {
             id: RunnerId,
             strategy: Strategy,
-            pos_keep: Strategy,
             position: f64,
             lane: f64,
             section_length: f64,
-            is_trigger: bool,
         }
         let rows: Vec<Row> = self
             .runners
             .iter()
-            .filter(|r| !r.finished)
-            .map(|r| {
-                let in_section =
-                    r.position >= 150.0 && r.position <= (r.section_length * 5.0).floor();
-                let is_trigger = r.spot_struggle_start_position.is_none()
-                    && in_section
-                    && strategy_matches(r.position_keep_strategy, Strategy::FrontRunner);
-                Row {
-                    id: r.id,
-                    strategy: r.strategy,
-                    pos_keep: r.position_keep_strategy,
-                    position: r.position,
-                    lane: r.current_lane,
-                    section_length: r.section_length,
-                    is_trigger,
-                }
+            .filter(|r| !r.finished && r.spot_struggle_start_position.is_none())
+            .map(|r| Row {
+                id: r.id,
+                strategy: r.strategy,
+                position: r.position,
+                lane: r.current_lane,
+                section_length: r.section_length,
             })
             .collect();
 
-        // Phase 2: each trigger gathers its same-strategy bunched group.
-        let mut activations: HashMap<RunnerId, (f64, f64)> = HashMap::new();
-        for trigger in rows.iter().filter(|r| r.is_trigger) {
-            let (distance_gap, lane_gap) = if trigger.pos_keep == Strategy::FrontRunner {
-                (3.75, 0.165)
-            } else {
-                (5.0, 0.416)
-            };
-            // `runnersPerStrategy` is keyed by immutable strategy, looked up by
-            // the (possibly promoted) position-keep strategy.
-            let group: Vec<&Row> = rows
+        // Phase 2: per style, gather the group bunched behind the FRONTMOST
+        // uma of that style (the frontmost is the reference for the distance
+        // check). Each style triggers at most once per race.
+        let mut activations: Vec<(RunnerId, f64)> = Vec::new();
+        for style in [Strategy::FrontRunner, Strategy::Runaway] {
+            if self.spot_struggle_triggered.contains(&style) {
+                continue;
+            }
+            let members: Vec<&Row> = rows.iter().filter(|u| u.strategy == style).collect();
+            if members.len() < 2 {
+                continue;
+            }
+            let Some(frontmost) = members
                 .iter()
-                .filter(|u| u.strategy == trigger.pos_keep)
+                .max_by(|a, b| a.position.total_cmp(&b.position))
+            else {
+                continue;
+            };
+            let group: Vec<&&Row> = members
+                .iter()
                 .filter(|u| {
-                    (u.position - trigger.position).abs() <= distance_gap
-                        && (u.lane - trigger.lane).abs() < lane_gap
+                    let behind = frontmost.position - u.position;
+                    (0.0..ENTRY_DISTANCE_GAP).contains(&behind)
+                        && (u.lane - frontmost.lane).abs() < entry_lane_gap
                 })
                 .collect();
-            if group.len() >= 2 {
-                let end_span = (trigger.section_length * 8.0).floor();
-                for uma in group {
-                    activations.insert(uma.id, (uma.position, uma.position + end_span));
-                }
+            if group.len() < 2 {
+                continue;
+            }
+            // Window: at least one grouped uma must still be within section 6
+            // (the 150m lower bound is the field-global unlock above).
+            let window_end = (frontmost.section_length * 6.0).floor();
+            if !group.iter().any(|u| u.position <= window_end) {
+                continue;
+            }
+            self.spot_struggle_triggered.push(style);
+            // Spot struggle always ends once section 9 is reached (absolute
+            // position), regardless of remaining duration.
+            let section9 = (frontmost.section_length * 8.0).floor();
+            for uma in group {
+                activations.push((uma.id, section9));
             }
         }
 
         // Phase 3: apply.
-        for (id, (start, end)) in activations {
+        for (id, end) in activations {
             if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
                 runner.spot_struggle_timer.t = 0.0;
                 runner.in_spot_struggle = true;
-                runner.spot_struggle_start_position = Some(start);
+                runner.spot_struggle_start_position = Some(runner.position);
                 runner.spot_struggle_end_position = end;
+            }
+        }
+    }
+
+    /// **Spot-struggle distance/lateral exit** coordinator
+    /// (hakuraku.moe/notes/spot-struggle, "Exit conditions"). An active
+    /// struggler exits early when she is >=5m behind ALL other strugglers of
+    /// her style, or >=0.416*CourseWidth laterally from all of them. When every
+    /// other participant has left via the distance exit, the final struggler
+    /// exits too (natural duration expiry does NOT cascade).
+    fn coordinate_spot_struggle_exits(&mut self) {
+        const EXIT_DISTANCE_GAP: f64 = 5.0;
+        let exit_lane_gap = 0.416 * self.course.course_width;
+
+        struct Row {
+            id: RunnerId,
+            strategy: Strategy,
+            position: f64,
+            lane: f64,
+            active: bool,
+            distance_exited: bool,
+        }
+        let rows: Vec<Row> = self
+            .runners
+            .iter()
+            .filter(|r| r.spot_struggle_start_position.is_some() && !r.is_in_forced_spot_struggle)
+            .map(|r| Row {
+                id: r.id,
+                strategy: r.strategy,
+                position: r.position,
+                lane: r.current_lane,
+                active: r.in_spot_struggle,
+                distance_exited: r.spot_struggle_distance_exited,
+            })
+            .collect();
+
+        let mut exits: Vec<RunnerId> = Vec::new();
+        for row in rows.iter().filter(|r| r.active) {
+            let others: Vec<&Row> = rows
+                .iter()
+                .filter(|o| o.id != row.id && o.strategy == row.strategy)
+                .collect();
+            if others.is_empty() {
+                continue;
+            }
+            let actives: Vec<&&Row> = others.iter().filter(|o| o.active).collect();
+            if actives.is_empty() {
+                // Cascade: the last active struggler exits only when every
+                // other participant left via the distance exit.
+                if others.iter().all(|o| o.distance_exited) {
+                    exits.push(row.id);
+                }
+                continue;
+            }
+            let behind_all = actives
+                .iter()
+                .all(|o| o.position - row.position >= EXIT_DISTANCE_GAP);
+            let lateral_all = actives
+                .iter()
+                .all(|o| (o.lane - row.lane).abs() >= exit_lane_gap);
+            if behind_all || lateral_all {
+                exits.push(row.id);
+            }
+        }
+
+        for id in exits {
+            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
+                runner.in_spot_struggle = false;
+                runner.spot_struggle_distance_exited = true;
+                runner.spot_struggle_end_position = runner.position;
             }
         }
     }
@@ -993,16 +1159,22 @@ mod tests {
         .collect();
 
         race.coordinate_proximity_dueling();
-        // Bunched leaders arm can_duel; trailing runners do not.
+        // The 2s window arms on PROXIMITY alone - every bunched pair arms,
+        // regardless of placement (rank is a trigger-frame check).
         assert_eq!(race.runners[0].can_duel, Some(true));
         assert_eq!(race.runners[1].can_duel, Some(true));
-        assert!(race.runners[2].can_duel != Some(true));
+        assert_eq!(race.runners[2].can_duel, Some(true));
 
-        // After the 2s cadence elapses, the duel starts.
+        // After the 2s proximity window, the top-half pair starts dueling...
         race.runners[0].dueling_timer.t = 2.0;
+        race.runners[2].dueling_timer.t = 2.0;
         race.coordinate_proximity_dueling();
         assert!(race.runners[0].is_dueling);
         assert_eq!(race.runners[0].dueling_start_position, 2300.0);
+        // ...but the all-bottom-half pair cannot: neither is a valid target
+        // (at least one of the pair must be in the top 50%).
+        assert!(!race.runners[2].is_dueling);
+        assert!(!race.runners[3].is_dueling);
     }
 
     #[test]
@@ -1022,8 +1194,9 @@ mod tests {
                 runner.position = in_section_pos;
                 runner.current_lane = 0.5;
             } else {
-                runner.position = in_section_pos + 50.0;
-                runner.current_lane = 0.9;
+                // Trailing beyond the 3.75m entry gap behind the frontmost.
+                runner.position = in_section_pos - 50.0;
+                runner.current_lane = 0.5;
             }
         }
 
@@ -1031,8 +1204,222 @@ mod tests {
         assert!(race.runners[0].in_spot_struggle);
         assert!(race.runners[1].in_spot_struggle);
         assert!(race.runners[0].spot_struggle_start_position.is_some());
-        // The far/wide runner is outside the lane gap and stays out.
+        // Spot struggle ends at section 9 (absolute), not start + 8 sections.
+        let section9 = (section * 8.0).floor();
+        assert_eq!(race.runners[0].spot_struggle_end_position, section9);
+        // The trailing runner is outside the entry distance and stays out.
         assert!(!race.runners[2].in_spot_struggle);
+
+        // Each style triggers only once per race: the trailing runner cannot
+        // start a second FrontRunner spot struggle later, even if bunched.
+        race.runners[2].position = in_section_pos;
+        race.coordinate_spot_struggle_groups();
+        assert!(!race.runners[2].in_spot_struggle);
+    }
+
+    #[test]
+    fn spot_struggle_distance_exit_and_cascade() {
+        let mut race = pace_chaser_race(3);
+        race.prepare_round(7);
+        let section9 = (race.runners[0].section_length * 8.0).floor();
+        for runner in &mut race.runners {
+            runner.strategy = Strategy::FrontRunner;
+            runner.in_spot_struggle = true;
+            runner.spot_struggle_start_position = Some(200.0);
+            runner.spot_struggle_end_position = section9;
+            runner.spot_struggle_distance_exited = false;
+            runner.position = 250.0;
+            runner.current_lane = 0.5;
+        }
+        // Runner 2 falls >=5m behind BOTH active strugglers -> distance exit.
+        race.runners[2].position = 244.0;
+        race.coordinate_spot_struggle_exits();
+        assert!(race.runners[0].in_spot_struggle);
+        assert!(race.runners[1].in_spot_struggle);
+        assert!(!race.runners[2].in_spot_struggle);
+        assert!(race.runners[2].spot_struggle_distance_exited);
+
+        // Runner 1 falls behind runner 0 -> distance exit; runner 0 is then the
+        // last active struggler and every other participant distance-exited, so
+        // the cascade removes her too.
+        race.runners[1].position = 244.5;
+        race.coordinate_spot_struggle_exits();
+        assert!(!race.runners[1].in_spot_struggle);
+        assert!(race.runners[0].in_spot_struggle);
+        race.coordinate_spot_struggle_exits();
+        assert!(!race.runners[0].in_spot_struggle);
+    }
+
+    #[test]
+    fn spot_struggle_natural_expiry_does_not_cascade() {
+        let mut race = pace_chaser_race(2);
+        race.prepare_round(7);
+        let section9 = (race.runners[0].section_length * 8.0).floor();
+        for runner in &mut race.runners {
+            runner.strategy = Strategy::FrontRunner;
+            runner.spot_struggle_start_position = Some(200.0);
+            runner.spot_struggle_end_position = section9;
+            runner.position = 250.0;
+            runner.current_lane = 0.5;
+        }
+        // Runner 1 already expired naturally (not a distance exit).
+        race.runners[0].in_spot_struggle = true;
+        race.runners[1].in_spot_struggle = false;
+        race.runners[1].spot_struggle_distance_exited = false;
+        race.coordinate_spot_struggle_exits();
+        // No cascade: the remaining struggler keeps going on her own duration.
+        assert!(race.runners[0].in_spot_struggle);
+    }
+
+    #[test]
+    fn spot_struggle_unlocks_for_field_when_any_runner_passes_150m() {
+        let mut race = pace_chaser_race(3);
+        race.prepare_round(7);
+        for (idx, runner) in race.runners.iter_mut().enumerate() {
+            runner.strategy = Strategy::FrontRunner;
+            runner.position_keep_strategy = Strategy::FrontRunner;
+            runner.in_spot_struggle = false;
+            runner.spot_struggle_start_position = None;
+            runner.current_lane = 0.5;
+            // Bunched pair below 150m; a third (any style) ahead of 150m.
+            runner.position = if idx < 2 { 140.0 } else { 400.0 };
+        }
+        race.runners[2].strategy = Strategy::PaceChaser;
+        race.coordinate_spot_struggle_groups();
+        // The pair triggers even though neither has passed 150m herself.
+        assert!(race.runners[0].in_spot_struggle);
+        assert!(race.runners[1].in_spot_struggle);
+    }
+
+    #[test]
+    fn dueling_distance_exit_and_former_participants() {
+        let mut race = pace_chaser_race(4);
+        race.prepare_round(7);
+        race.course.straights = vec![uma_sim_primitives::course::model::Straight {
+            start: 2000.0,
+            end: 2400.0,
+            front_type: 0,
+        }];
+        race.order_tracker.runner_order = [
+            (RunnerId(0), 1),
+            (RunnerId(1), 2),
+            (RunnerId(2), 3),
+            (RunnerId(3), 4),
+        ]
+        .into_iter()
+        .collect();
+        for runner in &mut race.runners {
+            runner.position = 2300.0;
+            runner.current_lane = 0.5;
+            runner.current_speed = 18.0;
+            runner.is_dueling = false;
+            runner.has_dueled = false;
+            runner.can_duel = None;
+        }
+        race.runners[0].is_dueling = true;
+        race.runners[1].is_dueling = true;
+
+        // Bunched: nobody exits.
+        race.coordinate_proximity_dueling();
+        assert!(race.runners[0].is_dueling);
+
+        // Runner 0 pulls >=5m ahead of every current/former participant.
+        race.runners[0].position = 2306.0;
+        race.coordinate_proximity_dueling();
+        assert!(!race.runners[0].is_dueling);
+        assert!(race.runners[0].has_dueled);
+        // Runner 1 keeps dueling: former participant 0 is within 5m again once
+        // positions close, and 1 was never separated from everyone.
+        // (0 at 2306 vs 1 at 2300 -> gap 6m: 1 has no other current/former
+        // participant within 5m, so she exits too.)
+        assert!(!race.runners[1].is_dueling);
+        assert!(race.runners[1].has_dueled);
+
+        // Former duelers cannot rejoin: bunch everyone again, arm, and elapse
+        // the window - 0 and 1 stay out while 2 and 3 cannot duel either
+        // (bottom-half pair), leaving no new duels.
+        race.runners[0].position = 2300.0;
+        race.coordinate_proximity_dueling();
+        assert_eq!(race.runners[0].can_duel, None);
+        assert!(!race.runners[0].is_dueling);
+    }
+
+    #[test]
+    fn dueling_window_arms_before_initiator_reaches_final_straight() {
+        let mut race = pace_chaser_race(2);
+        race.prepare_round(7);
+        race.course.straights = vec![uma_sim_primitives::course::model::Straight {
+            start: 2000.0,
+            end: 2400.0,
+            front_type: 0,
+        }];
+        race.order_tracker.runner_order =
+            [(RunnerId(0), 1), (RunnerId(1), 2)].into_iter().collect();
+        for runner in &mut race.runners {
+            runner.current_lane = 0.5;
+            runner.current_speed = 18.0;
+            runner.is_dueling = false;
+            runner.has_dueled = false;
+            runner.can_duel = None;
+        }
+        // Initiator still in the corner; TARGET already on the straight,
+        // within 3m (replay evidence: the 2s window is anchored to the
+        // target's presence on the straight, not the initiator's).
+        race.runners[0].position = 1998.5;
+        race.runners[1].position = 2001.0;
+
+        race.coordinate_proximity_dueling();
+        assert_eq!(race.runners[0].can_duel, Some(true));
+
+        // Window elapsed but the initiator has not reached the straight yet:
+        // no duel on this frame.
+        race.runners[0].dueling_timer.t = 2.0;
+        race.coordinate_proximity_dueling();
+        assert!(!race.runners[0].is_dueling);
+
+        // The initiator reaches the straight: the duel fires immediately
+        // (trigger conditions only need one frame).
+        race.runners[0].position = 2001.0;
+        race.runners[1].position = 2003.5;
+        race.coordinate_proximity_dueling();
+        assert!(race.runners[0].is_dueling);
+    }
+
+    #[test]
+    fn dueling_former_participant_keeps_duel_alive() {
+        let mut race = pace_chaser_race(3);
+        race.prepare_round(7);
+        race.course.straights = vec![uma_sim_primitives::course::model::Straight {
+            start: 2000.0,
+            end: 2400.0,
+            front_type: 0,
+        }];
+        race.order_tracker.runner_order = [(RunnerId(0), 1), (RunnerId(1), 2), (RunnerId(2), 3)]
+            .into_iter()
+            .collect();
+        for runner in &mut race.runners {
+            runner.position = 2300.0;
+            runner.current_lane = 0.5;
+            runner.current_speed = 18.0;
+            runner.is_dueling = false;
+            runner.has_dueled = false;
+            runner.can_duel = None;
+        }
+        // Runner 0 actively duels; runner 1 is a FORMER participant nearby;
+        // runner 2 far away.
+        race.runners[0].is_dueling = true;
+        race.runners[1].has_dueled = true;
+        race.runners[2].position = 2200.0;
+
+        race.coordinate_proximity_dueling();
+        // The former participant within 5m keeps the duel alive.
+        assert!(race.runners[0].is_dueling);
+
+        // Once the former participant is also >=5m away, the last active
+        // dueler exits.
+        race.runners[1].position = 2294.0;
+        race.coordinate_proximity_dueling();
+        assert!(!race.runners[0].is_dueling);
     }
 
     #[test]
