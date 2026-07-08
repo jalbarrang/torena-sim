@@ -108,7 +108,9 @@ mod tests {
         assert_eq!(runners.len(), 11);
         assert_eq!(runners[9].strategy, MOB_STRATEGIES[0]);
         assert_eq!(runners[10].strategy, MOB_STRATEGIES[1]);
-        assert!(runners.iter().all(|r| r.stats.speed == 600 && r.stats.guts == 600));
+        assert!(runners
+            .iter()
+            .all(|r| r.stats.speed == 600 && r.stats.guts == 600));
 
         assert!(generate_mob_runners(0, CONTESTED_FILL_MOB_STATS).is_empty());
     }

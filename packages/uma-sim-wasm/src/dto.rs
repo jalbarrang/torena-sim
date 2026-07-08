@@ -1512,10 +1512,9 @@ mod tests {
 
     #[test]
     fn contested_compare_mob_stats_passes_through() {
-        let dto: WasmContestedCompareParams = serde_json::from_str(&minimal_contested_json(
-            r#" "fillTo": 9, "mobStats": 700,"#,
-        ))
-        .expect("contested compare params deserialize with mobStats");
+        let dto: WasmContestedCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "fillTo": 9, "mobStats": 700,"#))
+                .expect("contested compare params deserialize with mobStats");
         let domain = dto.into_domain().expect("params convert to domain");
         assert_eq!(domain.mob_stats, Some(700));
     }
