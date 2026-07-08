@@ -26,6 +26,7 @@ import {
   useCompareShareCardProps,
   CompareShareCard,
   copyCompareScreenshot,
+  downloadCompareResults,
   downloadSnapshot,
   ImportSnapshotDialog
 } from '@/modules/simulation/share';
@@ -183,6 +184,17 @@ export default function CompareHomePage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => downloadCompareResults()}
+          disabled={isSimulationRunning || results.length === 0}
+          title="Download the compare results as a JSON file"
+        >
+          <Download className="mr-1" />
+          Download results
+        </Button>
 
         <ImportSnapshotDialog open={importSnapshotOpen} onOpenChange={setImportSnapshotOpen} />
       </div>

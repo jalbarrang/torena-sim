@@ -3,17 +3,34 @@ import type { WitVarianceSettings, StaminaDrainOverrides } from '@/store/setting
 import type { RaceConditions } from '@/utils/races';
 import type { InjectedDebuffsMap, ScenarioOverridesMap } from '@/modules/simulation/types';
 
-export const SIMULATION_SNAPSHOT_VERSION = 1 as const;
+export type CompareMode = 'contested' | 'vacuum';
 
+export const SIMULATION_SNAPSHOT_VERSION = 2 as const;
+
+/**
+ * Simulation snapshot, codec v2. The field is a runner array (2..=12) plus the
+ * two compare-pair indices. Pair-scoped data (forced positions, injected
+ * debuffs, scenario overrides) stays keyed by role (`uma1` = slot A, `uma2` =
+ * slot B). The v2 decoder in `snapshot.ts` also accepts the v1 (`uma1`/`uma2` +
+ * `fieldComposition`) and pre-versioned legacy shapes.
+ */
 export type SimulationSnapshot = {
   version: typeof SIMULATION_SNAPSHOT_VERSION;
   timestamp: number;
-  uma1: IRunnerState;
-  uma2: IRunnerState;
+  runners: Array<IRunnerState>;
+  /** Index into {@link runners} for compare slot A. */
+  compareA: number;
+  /** Index into {@link runners} for compare slot B. */
+  compareB: number;
   courseId: number;
   racedef: RaceConditions;
   seed: number | null;
   nsamples: number;
+  compareMode: CompareMode;
+  /** True when a legacy/vacuum share was coerced to contested + 2-field on decode. */
+  coercedFromVacuum?: boolean;
+  /** Target field size (total gates); real umas fill first, mobs pad the rest. */
+  fieldSize: number;
   witVarianceSettings: WitVarianceSettings;
   staminaDrainOverrides: StaminaDrainOverrides;
   forcedPositions: {

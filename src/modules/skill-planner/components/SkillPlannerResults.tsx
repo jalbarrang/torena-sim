@@ -17,7 +17,7 @@ import {
 } from '@/modules/skills/components/skill-list/skill-item/primitives';
 import { SkillItemDetailsActions } from '@/modules/skills/components/skill-list/skill-item/actions';
 import { SkillItem } from '@/modules/skills/components/skill-list/skill-item/item';
-import { setRunner } from '@/store/runners.store';
+import { getCompareFieldId, setRunner } from '@/store/runners.store';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import { useSettingsStore } from '@/store/settings.store';
 import { toast } from 'sonner';
@@ -110,11 +110,11 @@ function CombinationCard(props: Readonly<CombinationCardProps>) {
           </Button>
 
           <Button size="sm" variant="outline" onClick={() => onSendToCompare('uma1', combination)}>
-            Uma 1
+            Compare A
           </Button>
 
           <Button size="sm" variant="outline" onClick={() => onSendToCompare('uma2', combination)}>
-            Uma 2
+            Compare B
           </Button>
         </div>
       )}
@@ -379,8 +379,8 @@ export function SkillPlannerResults(props: SkillPlannerResultsProps) {
 
   const handleSendToCompare = useCallback(
     (slot: 'uma1' | 'uma2', combination: CombinationResult) => {
-      setRunner(slot, buildRunnerSnapshot(combination));
-      toast.success(`Loaded build into ${slot === 'uma1' ? 'Uma 1' : 'Uma 2'}`);
+      setRunner(getCompareFieldId(slot), buildRunnerSnapshot(combination));
+      toast.success(`Loaded build into ${slot === 'uma1' ? 'Compare A' : 'Compare B'}`);
     },
     [buildRunnerSnapshot]
   );

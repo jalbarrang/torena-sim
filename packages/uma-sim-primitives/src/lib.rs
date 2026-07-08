@@ -38,6 +38,9 @@ pub mod shared_kernel;
 pub mod course;
 pub mod skills;
 
+/// Shared compare-grade telemetry collector used by both race engines.
+pub mod compare;
+
 pub mod stamina;
 
 pub mod position_keep;

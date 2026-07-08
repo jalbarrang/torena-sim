@@ -10,6 +10,7 @@ import type {
   RunnerTickSnapshot,
   WasmCompareData,
   WasmCompareParams,
+  WasmContestedCompareParams,
   WasmRaceSimParams,
   WasmRaceSimResult
 } from './types';
@@ -22,6 +23,7 @@ type UmaSimWasmModule = {
   default: (options?: { module_or_path?: WebAssembly.Module }) => Promise<unknown>;
   runRaceSim: (params: WasmRaceSimParams) => WasmRaceSimResult;
   runCompare: (params: WasmCompareParams) => WasmCompareData;
+  runContestedCompare: (params: WasmContestedCompareParams) => WasmCompareData;
   WasmRaceSimulator: new (params: WasmRaceSimParams) => WasmRaceSimulatorHandle;
 };
 
@@ -106,6 +108,14 @@ export async function runRaceSim(params: WasmRaceSimParams): Promise<WasmRaceSim
 export async function runCompare(params: WasmCompareParams): Promise<WasmCompareData> {
   const mod = await loadModule();
   return mod.runCompare(params);
+}
+
+/** Run a same-race compare-family simulation. Ensures the module is initialized first. */
+export async function runContestedCompare(
+  params: WasmContestedCompareParams
+): Promise<WasmCompareData> {
+  const mod = await loadModule();
+  return mod.runContestedCompare(params);
 }
 
 /** Streaming callbacks for {@link createRaceSimulator}. */

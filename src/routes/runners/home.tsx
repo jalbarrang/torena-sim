@@ -40,7 +40,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
+import { getCompareFieldId, loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
 import { RosterImportDialog } from '@/modules/runners/roster/import-dialog';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { aptitudeNames, strategyNames } from '@/lib/uma-domain/runner/definitions';
@@ -333,8 +333,9 @@ export default function RosterHomePage() {
     (slot: 'uma1' | 'uma2') => {
       if (!page.runnerToLoad) return;
 
-      loadRunnerFromLibrary(slot, page.runnerToLoad);
-      showRunner(slot);
+      const fieldId = getCompareFieldId(slot);
+      loadRunnerFromLibrary(fieldId, page.runnerToLoad);
+      showRunner(fieldId);
       dispatch({ type: 'load:completed' });
       navigate('/');
     },
@@ -664,18 +665,18 @@ export default function RosterHomePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Load Runner to Compare pages</DialogTitle>
-            <DialogDescription>Choose which Uma slot to load this runner into.</DialogDescription>
+            <DialogDescription>Choose which compare slot to load this runner into.</DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" className="h-25" onClick={() => handleLoadToSlot('uma1')}>
               <div className="text-center">
-                <div className="text-lg font-semibold text-[#2a77c5]">Uma 1</div>
+                <div className="text-lg font-semibold text-[#2a77c5]">Compare A</div>
               </div>
             </Button>
             <Button variant="outline" className="h-25" onClick={() => handleLoadToSlot('uma2')}>
               <div className="text-center">
-                <div className="text-lg font-semibold text-[#c52a2a]">Uma 2</div>
+                <div className="text-lg font-semibold text-[#c52a2a]">Compare B</div>
               </div>
             </Button>
           </div>

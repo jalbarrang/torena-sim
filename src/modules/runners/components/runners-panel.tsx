@@ -1,17 +1,30 @@
-import { useMemo, useState } from 'react';
-import { Link2, Link2Off, Save } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, Link2, Link2Off, Repeat2, Save } from 'lucide-react';
 import { RunnerCard } from './runner-card/runner-card';
 import { SaveRunnerModal } from './save-runner-modal';
+import { FieldManager } from './field-manager/field-manager';
+import {
+  COMPARE_A_COLOR,
+  COMPARE_B_COLOR,
+  RunnerAvatar
+} from './field-manager/field-manager-content';
 import {
   copyToRunner,
+  showRunner,
   linkRunner,
   resetAllRunners,
-  showRunner,
   swapWithRunner,
   syncRunnerToLibrary,
   unlinkRunner,
-  useRunner
+  useCompareRoles,
+  useRunner,
+  useRunners,
+  MIN_RUNNERS,
+  type CompareRole,
+  type FieldRunner
 } from '@/store/runners.store';
+import { getUmaDisplayInfo } from '@/modules/runners/utils';
+import { useCompareSettings } from '@/modules/simulation/stores/compare.store';
 import { useSettingsStore } from '@/store/settings.store';
 
 import {
@@ -22,8 +35,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,8 +46,74 @@ import { coursesService } from '@/modules/data/services/CourseService';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import './style.css';
 
+const runnerDisplayName = (runner: FieldRunner | undefined): string => {
+  if (!runner?.outfitId) return 'New runner';
+  return getUmaDisplayInfo(runner.outfitId)?.name ?? 'New runner';
+};
+
+type VersusSlotProps = {
+  compareRole: CompareRole;
+  runner: FieldRunner | undefined;
+  isEditing: boolean;
+  /** Show this runner in the runner card below. */
+  onClick: () => void;
+  /** Open the field manager to pick a different runner for this slot. */
+  onChangeRunner: () => void;
+};
+
+const VersusSlot = (props: VersusSlotProps) => {
+  const { compareRole, runner, isEditing, onClick, onChangeRunner } = props;
+  const isA = compareRole === 'uma1';
+  const color = isA ? COMPARE_A_COLOR : COMPARE_B_COLOR;
+  const letter = isA ? 'A' : 'B';
+  const name = runnerDisplayName(runner);
+
+  return (
+    <div
+      className={cn(
+        'relative flex min-h-16 min-w-0 items-stretch bg-card transition-colors',
+        isEditing && 'bg-muted/40'
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Compare ${letter}: ${name}. Tap to edit`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 py-2 pl-3 pr-9 text-left hover:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      >
+        <span
+          aria-hidden
+          className={cn('absolute top-1.5 text-[10px] font-extrabold', isA ? 'left-2' : 'right-2')}
+          style={{ color }}
+        >
+          {letter}
+        </span>
+        {runner && <RunnerAvatar runner={runner} compareRole={compareRole} />}
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold">{name}</span>
+          <span className="block truncate text-xs text-muted-foreground">{runner?.strategy}</span>
+        </span>
+      </button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onChangeRunner}
+        aria-label={`Change Compare ${letter} runner`}
+        title={`Change Compare ${letter} runner`}
+        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+      >
+        <Repeat2 />
+      </Button>
+    </div>
+  );
+};
+
 export const RunnersPanel = () => {
   const { runnerId, runner, updateRunner, resetRunner } = useRunner();
+  const { compareA, compareB } = useCompareRoles();
+  const runners = useRunners();
+  const { fieldSize } = useCompareSettings();
+  const isEditingA = runnerId === compareA;
   const { courseId } = useSettingsStore();
   const {
     updateRunner: updateLibraryRunner,
@@ -49,27 +127,37 @@ export const RunnersPanel = () => {
   const linkedRunner = isLinked ? getLibraryRunner(runner.linkedRunnerId!) : null;
 
   const [saveModalOpen, setSaveModalOpen] = useState(false);
-  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [pickRole, setPickRole] = useState<CompareRole | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const fieldPillRef = useRef<HTMLButtonElement>(null);
 
-  const handleResetAllRunners = () => {
+  const runnerA = runners.find((r) => r.fieldId === compareA);
+  const runnerB = runners.find((r) => r.fieldId === compareB);
+
+  const openManager = (role: CompareRole | null) => {
+    setPickRole(role);
+    setManagerOpen(true);
+  };
+
+  const handleResetAll = () => {
+    if (runners.length > MIN_RUNNERS) {
+      setResetConfirmOpen(true);
+      return;
+    }
     resetAllRunners();
-    setResetDialogOpen(false);
   };
 
   const handleCopyRunner = () => {
-    if (runnerId === 'uma1') {
-      copyToRunner('uma1', 'uma2');
-    } else if (runnerId === 'uma2') {
-      copyToRunner('uma2', 'uma1');
+    if (isEditingA) {
+      copyToRunner(compareA, compareB);
+    } else {
+      copyToRunner(compareB, compareA);
     }
   };
 
   const handleSwapRunners = () => {
-    if (runnerId === 'uma1') {
-      swapWithRunner('uma1', 'uma2');
-    } else if (runnerId === 'uma2') {
-      swapWithRunner('uma2', 'uma1');
-    }
+    swapWithRunner(compareA, compareB);
   };
 
   const handleSyncToLibrary = () => {
@@ -96,65 +184,49 @@ export const RunnersPanel = () => {
 
   return (
     <Panel>
-      <PanelHeader className="p-0 h-[48px]">
-        <div className="flex h-full w-full items-center justify-between">
-          <div className="grid grid-cols-2 h-full flex-1 items-center">
-            <button
-              type="button"
-              className={cn(
-                'px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer h-full',
-                runnerId === 'uma1'
-                  ? 'bg-[#2a77c5] text-white'
-                  : 'bg-background text-muted-foreground hover:bg-muted'
-              )}
-              onClick={() => showRunner('uma1')}
-            >
-              Uma 1
-            </button>
-
-            <button
-              type="button"
-              className={cn(
-                'px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer h-full',
-                runnerId === 'uma2'
-                  ? 'bg-[#c52a2a] text-white'
-                  : 'bg-background text-muted-foreground hover:bg-muted'
-              )}
-              onClick={() => showRunner('uma2')}
-            >
-              Uma 2
-            </button>
+      <PanelHeader className="p-0">
+        <div data-tutorial="versus-slots" className="flex flex-col">
+          <div className="grid grid-cols-2 gap-px border-b bg-border">
+            <VersusSlot
+              compareRole="uma1"
+              runner={runnerA}
+              isEditing={isEditingA}
+              onClick={() => showRunner(compareA)}
+              onChangeRunner={() => openManager('uma1')}
+            />
+            <VersusSlot
+              compareRole="uma2"
+              runner={runnerB}
+              isEditing={!isEditingA && runnerId === compareB}
+              onClick={() => showRunner(compareB)}
+              onChangeRunner={() => openManager('uma2')}
+            />
           </div>
 
-          <div className="flex items-center p-2">
-            <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-              <AlertDialogTrigger
-                render={
-                  <Button
-                    variant="destructive"
-                    title="Reset all runners to default stats and skills"
-                    size="sm"
-                  />
-                }
-              >
-                Reset all runners
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Reset all runners?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This clears the stats and skills for both Uma 1 and Uma 2 back to their
-                    defaults. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction variant="destructive" onClick={handleResetAllRunners}>
-                    Reset all runners
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+          <div className="relative flex items-center justify-between px-2 py-1.5">
+            <Button
+              ref={fieldPillRef}
+              variant="outline"
+              size="sm"
+              onClick={() => openManager(null)}
+              aria-haspopup="dialog"
+              className="rounded-full bg-popover text-xs font-semibold shadow-sm"
+            >
+              Field{' '}
+              <span className="font-medium text-muted-foreground tabular-nums">
+                {runners.length} / {Math.max(fieldSize, runners.length)}
+              </span>
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </Button>
+
+            <Button
+              onClick={handleResetAll}
+              title="Reset the field back to two default runners"
+              size="sm"
+              variant="destructive"
+            >
+              Reset field
+            </Button>
           </div>
         </div>
       </PanelHeader>
@@ -226,6 +298,36 @@ export const RunnersPanel = () => {
         onOpenChange={setSaveModalOpen}
         onSave={handleSaveToVeterans}
       />
+
+      <FieldManager
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        pickRole={pickRole}
+        anchor={fieldPillRef}
+      />
+
+      <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset the field?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes all {runners.length} runners and starts over with two default runners.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                resetAllRunners();
+                setResetConfirmOpen(false);
+              }}
+            >
+              Reset field
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Panel>
   );
 };

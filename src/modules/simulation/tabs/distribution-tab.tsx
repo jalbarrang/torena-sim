@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { useRaceStore } from '@/modules/simulation/stores/compare.store';
 import { ChartLoadingFallback } from '@/components/charts/chart-loading-fallback';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 
 const LazyHistogram = lazy(() =>
   import('@/components/Histogram').then((module) => ({ default: module.Histogram }))
@@ -16,6 +17,7 @@ import {
 
 export const DistributionTab = () => {
   const { results } = useRaceStore();
+  const names = useComparePairNames();
 
   const distributionStats = useMemo(() => {
     if (results.length === 0) return null;
@@ -143,7 +145,9 @@ export const DistributionTab = () => {
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-[#2a77c5] dark:text-blue-500 font-medium">Uma 1 Wins</span>
+                <span className="max-w-56 truncate text-[#2a77c5] dark:text-blue-500 font-medium">
+                  {names.uma1} wins
+                </span>
                 <span className="font-mono font-bold text-[#2a77c5]">
                   {distributionStats.winRates.uma1}%
                 </span>
@@ -157,7 +161,9 @@ export const DistributionTab = () => {
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-[#c52a2a] font-medium">Uma 2 Wins</span>
+                <span className="max-w-56 truncate text-[#c52a2a] font-medium">
+                  {names.uma2} wins
+                </span>
                 <span className="font-mono font-bold text-[#c52a2a]">
                   {distributionStats.winRates.uma2}%
                 </span>

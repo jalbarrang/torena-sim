@@ -1,4 +1,5 @@
 import { SkillType } from '@/lib/uma-domain/skills/definitions';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import { colors, debuffColors } from '@/utils/colors';
 import { EffectSymbol } from '../primitives/effect-symbol';
 import React from 'react';
@@ -11,20 +12,26 @@ const EFFECT_ITEMS = [
   { label: 'Lane', type: SkillType.LaneMovementSpeed }
 ] as const;
 
-const RUNNER_PAIRS = [
+const RUNNER_PAIR_COLORS = [
   {
-    label: 'Uma 1',
+    key: 'uma1',
     skill: colors[0],
     debuff: debuffColors[0]
   },
   {
-    label: 'Uma 2',
+    key: 'uma2',
     skill: colors[1],
     debuff: debuffColors[1]
   }
 ] as const;
 
 export const TrackLegend = React.memo(() => {
+  const names = useComparePairNames();
+  const runnerPairs = RUNNER_PAIR_COLORS.map((pair) => ({
+    ...pair,
+    label: names[pair.key]
+  }));
+
   return (
     <div className="flex flex-wrap items-center gap-3 px-2 text-xs text-foreground">
       <span className="pr-2 font-semibold tracking-wide text-foreground">Legend</span>
@@ -51,9 +58,9 @@ export const TrackLegend = React.memo(() => {
       <Separator orientation="vertical" />
 
       <div className="flex flex-wrap items-center gap-2">
-        {RUNNER_PAIRS.map((pair) => (
+        {runnerPairs.map((pair) => (
           <div
-            key={pair.label}
+            key={pair.key}
             className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-zinc-100/70 px-1.5 py-1 dark:bg-zinc-900/45"
           >
             <span className="text-[11px] font-medium text-foreground/95">{pair.label}</span>

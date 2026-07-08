@@ -16,6 +16,7 @@ import type {
 } from '@/lib/uma-domain/race/types';
 import type {
   WasmCompareParams,
+  WasmContestedCompareParams,
   WasmCourseData,
   WasmCreateRunner,
   WasmDuelingRates,
@@ -176,6 +177,42 @@ export function compareParamsToWasm(args: CompareParamsToWasmArgs): WasmCompareP
     settings: compareSettingsToWasm(args.settings),
     duelingRates: duelingRatesToWasm(args.duelingRates),
     runners: [sundayRunnerToWasm(args.runner, args.name)],
+    nsamples: args.nsamples,
+    masterSeed: args.masterSeed
+  };
+}
+
+/** Inputs to {@link contestedCompareParamsToWasm} — same-race compare runners over N rounds. */
+export type ContestedCompareParamsToWasmArgs = {
+  course: CourseData;
+  parameters: SundayRaceParameters;
+  settings: SimulationSettings;
+  runners: [CreateRunner, CreateRunner, ...CreateRunner[]];
+  names: [string, string, ...string[]];
+  /** Pad the field with generated mobs to exactly this many runners (runners.length..=12). */
+  fillTo?: number;
+  /** @deprecated Legacy shim: `true` maps to `fillTo: 9` when `fillTo` is absent. Use `fillTo`. */
+  fillMobs?: boolean;
+  /** Flat stat line for fill mobs. Omit for the engine default (600). */
+  mobStats?: number;
+  nsamples: number;
+  masterSeed: number;
+};
+
+/** Build the WASM contested compare params for same-race comparison. */
+export function contestedCompareParamsToWasm(
+  args: ContestedCompareParamsToWasmArgs
+): WasmContestedCompareParams {
+  return {
+    course: courseDataToWasm(args.course),
+    parameters: raceParametersToWasm(args.parameters),
+    settings: compareSettingsToWasm(args.settings),
+    runners: args.runners.map((runner, index) =>
+      sundayRunnerToWasm(runner, args.names[index] ?? `Runner ${index + 1}`)
+    ),
+    fillTo: args.fillTo,
+    fillMobs: args.fillMobs,
+    mobStats: args.mobStats,
     nsamples: args.nsamples,
     masterSeed: args.masterSeed
   };

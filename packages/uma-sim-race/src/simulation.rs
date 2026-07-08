@@ -6,7 +6,9 @@
 
 use crate::collectors::{CollectedData, RaceEventLog, RaceEventLogCollector, RaceSimDataCollector};
 use crate::race::{Race, SimulationSettings};
+use uma_sim_primitives::compare::{CompareData, CompareDataCollector};
 use uma_sim_primitives::course::model::CourseData;
+use uma_sim_primitives::mob::{generate_mob_runners, CONTESTED_FILL_MOB_STATS};
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
 use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
@@ -14,6 +16,9 @@ use uma_sim_primitives::shared_kernel::params::RaceParameters;
 
 /// The number of runners a standard race expects.
 pub const FIELD_SIZE: usize = 9;
+
+/// The maximum field size for a contested compare (compared runners + mobs).
+pub const MAX_CONTESTED_FIELD: usize = 12;
 
 /// Inputs to [`run_race_sim`].
 pub struct RaceSimParams {
@@ -33,6 +38,31 @@ pub struct RaceSimParams {
     pub master_seed: u64,
     /// Runner ids whose per-tick telemetry is captured.
     pub focus_runner_ids: Vec<RunnerId>,
+}
+
+/// Inputs to [`run_contested_compare`].
+pub struct ContestedCompareParams {
+    /// The course to race.
+    pub course: CourseData,
+    /// Ground condition.
+    pub ground: GroundCondition,
+    /// Race-wide parameters.
+    pub parameters: RaceParameters,
+    /// Simulation settings (contested mechanics toggles).
+    pub settings: SimulationSettings,
+    /// Compared runners, added first and captured by the compare collector.
+    pub runners: Vec<CreateRunner>,
+    /// When `Some(n)`, pad the field with generated mobs to exactly `n`
+    /// runners (`runners.len()..=MAX_CONTESTED_FIELD`; `n == runners.len()` is
+    /// an accepted no-op). `None` runs only the compared runners.
+    pub fill_to: Option<usize>,
+    /// Flat stat line for fill mobs. `None` uses
+    /// [`CONTESTED_FILL_MOB_STATS`] (600).
+    pub mob_stats: Option<i32>,
+    /// Number of rounds to simulate.
+    pub nsamples: usize,
+    /// Master seed (round `i` uses `master_seed + i`).
+    pub master_seed: u64,
 }
 
 /// One runner's finishing record for a round.
@@ -68,6 +98,15 @@ pub enum SimError {
     InvalidSamples,
     /// The field must contain exactly [`FIELD_SIZE`] runners.
     WrongRunnerCount(usize),
+    /// Contested compare requires 2..=[`MAX_CONTESTED_FIELD`] compared runners.
+    ContestedRunnerCount(usize),
+    /// `fill_to` must be within `runners.len()..=MAX_CONTESTED_FIELD`.
+    ContestedFillTo {
+        /// The rejected `fill_to` value.
+        fill_to: usize,
+        /// The compared runner count.
+        runners: usize,
+    },
 }
 
 impl std::fmt::Display for SimError {
@@ -80,6 +119,14 @@ impl std::fmt::Display for SimError {
                     "run_race_sim expects exactly {FIELD_SIZE} runners, got {n}"
                 )
             }
+            SimError::ContestedRunnerCount(n) => write!(
+                f,
+                "run_contested_compare expects 2..={MAX_CONTESTED_FIELD} compared runners, got {n}"
+            ),
+            SimError::ContestedFillTo { fill_to, runners } => write!(
+                f,
+                "fill_to must be within {runners}..={MAX_CONTESTED_FIELD} (compared runners..=max field), got {fill_to}"
+            ),
         }
     }
 }
@@ -128,6 +175,68 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
     })
 }
 
+/// Run a same-race compare over `nsamples` contested rounds.
+///
+/// Compared runners are added first and are the only runners captured by the
+/// compare collector. When `fill_to` is `Some(n)`, generated mob runners pad
+/// the field to exactly `n` so field-dependent mechanics can emerge around the
+/// compared runners without increasing compare payload size.
+pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareData, SimError> {
+    if params.nsamples == 0 {
+        return Err(SimError::InvalidSamples);
+    }
+    let nsamples = params.nsamples;
+    let master_seed = params.master_seed;
+    let (mut race, focus_runner_ids) = build_contested_race(params)?;
+
+    let collector = CompareDataCollector::for_runner_ids(focus_runner_ids);
+    race.subscribe(collector.handle());
+
+    for i in 0..nsamples {
+        race.prepare_round(master_seed + i as u64);
+        race.run();
+    }
+
+    Ok(collector.result())
+}
+
+/// Validate contested params and construct the race field: compared runners
+/// first (their ids become the compare focus), then mob padding to `fill_to`.
+fn build_contested_race(params: ContestedCompareParams) -> Result<(Race, Vec<RunnerId>), SimError> {
+    if !(2..=MAX_CONTESTED_FIELD).contains(&params.runners.len()) {
+        return Err(SimError::ContestedRunnerCount(params.runners.len()));
+    }
+    if let Some(fill_to) = params.fill_to {
+        if !(params.runners.len()..=MAX_CONTESTED_FIELD).contains(&fill_to) {
+            return Err(SimError::ContestedFillTo {
+                fill_to,
+                runners: params.runners.len(),
+            });
+        }
+    }
+
+    let mut race = Race::new(
+        params.course,
+        params.ground,
+        params.settings,
+        params.parameters,
+    );
+    let mut focus_runner_ids = Vec::with_capacity(params.runners.len());
+    for runner in params.runners {
+        focus_runner_ids.push(race.add_runner(runner));
+    }
+
+    if let Some(fill_to) = params.fill_to {
+        let open_slots = fill_to - focus_runner_ids.len();
+        let mob_stats = params.mob_stats.unwrap_or(CONTESTED_FILL_MOB_STATS);
+        for mob in generate_mob_runners(open_slots, mob_stats) {
+            race.add_runner(mob);
+        }
+    }
+
+    Ok((race, focus_runner_ids))
+}
+
 /// Build the finish order for the just-completed round.
 fn collect_finish_order(race: &Race) -> Vec<FinishEntry> {
     race.finished_runners()
@@ -150,8 +259,12 @@ fn collect_finish_order(race: &Race) -> Vec<FinishEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use uma_sim_primitives::mob::generate_mob_field;
+    use uma_sim_primitives::runner::lifecycle::RunnerAptitudes;
     use uma_sim_primitives::runner::test_support::{test_course, test_race_params};
+    use uma_sim_primitives::shared_kernel::language::{Aptitude, Mood};
+    use uma_sim_primitives::shared_kernel::params::StatLine;
 
     fn params(nsamples: usize) -> RaceSimParams {
         RaceSimParams {
@@ -163,6 +276,53 @@ mod tests {
             nsamples,
             master_seed: 9001,
             focus_runner_ids: vec![RunnerId(0)],
+        }
+    }
+
+    fn runner_props(name: &str, strategy: Strategy) -> CreateRunner {
+        CreateRunner {
+            outfit_id: "100302".to_owned(),
+            name: name.to_owned(),
+            mood: Mood::Normal,
+            strategy,
+            popularity: 0,
+            aptitudes: RunnerAptitudes {
+                distance: Aptitude::A,
+                strategy: Aptitude::A,
+                surface: Aptitude::A,
+            },
+            stats: StatLine {
+                speed: 1000,
+                stamina: 1000,
+                power: 1000,
+                guts: 1000,
+                wit: 800,
+            },
+            skills: vec![],
+            forced_positions: HashMap::new(),
+            injected_debuffs: vec![],
+            forced_rushed_regions: vec![],
+            forced_dueling_regions: vec![],
+            forced_spot_struggle_regions: vec![],
+            forced_rank: vec![],
+        }
+    }
+
+    fn contested_params(
+        nsamples: usize,
+        runners: Vec<CreateRunner>,
+        fill_to: Option<usize>,
+    ) -> ContestedCompareParams {
+        ContestedCompareParams {
+            course: test_course(),
+            ground: GroundCondition::Firm,
+            parameters: test_race_params(),
+            settings: SimulationSettings::default(),
+            runners,
+            fill_to,
+            mob_stats: None,
+            nsamples,
+            master_seed: 9001,
         }
     }
 
@@ -205,5 +365,249 @@ mod tests {
         let order_a: Vec<RunnerId> = a.finish_orders[0].iter().map(|e| e.runner_id).collect();
         let order_b: Vec<RunnerId> = b.finish_orders[0].iter().map(|e| e.runner_id).collect();
         assert_eq!(order_a, order_b);
+    }
+
+    #[test]
+    fn contested_compare_rejects_invalid_runner_count() {
+        assert!(matches!(
+            run_contested_compare(contested_params(
+                1,
+                vec![runner_props("solo", Strategy::FrontRunner)],
+                None,
+            )),
+            Err(SimError::ContestedRunnerCount(1))
+        ));
+    }
+
+    /// `count` compared runners cycling the strategy mix.
+    fn field_of(count: usize) -> Vec<CreateRunner> {
+        let strategies = [
+            Strategy::Runaway,
+            Strategy::FrontRunner,
+            Strategy::PaceChaser,
+            Strategy::LateSurger,
+            Strategy::EndCloser,
+        ];
+        (0..count)
+            .map(|i| runner_props(&format!("R{i}"), strategies[i % strategies.len()]))
+            .collect()
+    }
+
+    #[test]
+    fn contested_compare_rejects_thirteen_runners() {
+        assert!(matches!(
+            run_contested_compare(contested_params(1, field_of(13), None)),
+            Err(SimError::ContestedRunnerCount(13))
+        ));
+    }
+
+    #[test]
+    fn contested_compare_rejects_out_of_range_fill_to() {
+        for fill_to in [1, 13] {
+            assert!(matches!(
+                run_contested_compare(contested_params(1, field_of(2), Some(fill_to))),
+                Err(SimError::ContestedFillTo {
+                    fill_to: f,
+                    runners: 2
+                }) if f == fill_to
+            ));
+        }
+    }
+
+    #[test]
+    fn contested_compare_fill_to_runner_count_is_noop() {
+        let data = run_contested_compare(contested_params(1, field_of(2), Some(2)))
+            .expect("no-op fill_to accepted");
+        assert_eq!(data.rounds[0].runners.len(), 2);
+    }
+
+    #[test]
+    fn contested_compare_twelve_runner_field_completes() {
+        let data = run_contested_compare(contested_params(1, field_of(12), None))
+            .expect("12-runner contested compare runs");
+
+        assert_eq!(data.rounds.len(), 1);
+        let round = &data.rounds[0];
+        assert_eq!(round.runners.len(), 12);
+        assert!(round.runners.iter().all(|runner| runner.finished));
+        assert!(round
+            .runners
+            .iter()
+            .all(|runner| !runner.position.is_empty()));
+    }
+
+    #[test]
+    fn contested_compare_deterministic_at_ten_and_twelve() {
+        for size in [10, 12] {
+            let a = run_contested_compare(contested_params(2, field_of(size), None)).expect("a");
+            let b = run_contested_compare(contested_params(2, field_of(size), None)).expect("b");
+            assert_eq!(a, b, "field of {size} must be deterministic per seed");
+        }
+    }
+
+    #[test]
+    fn contested_compare_fill_to_twelve_builds_true_twelve_field() {
+        // Regression guard: generate_mob_field() only ever produced 9 mobs, so
+        // 2 + fill_to(12) silently built an 11-field.
+        let (race, focus) =
+            build_contested_race(contested_params(1, field_of(2), Some(12))).expect("field builds");
+        assert_eq!(focus.len(), 2);
+        assert_eq!(race.runners().len(), 12);
+
+        // Telemetry stays scoped to the compared runners.
+        let data = run_contested_compare(contested_params(1, field_of(2), Some(12)))
+            .expect("contested compare runs");
+        assert_eq!(data.rounds[0].runners.len(), 2);
+        assert!(data.rounds[0].runners.iter().all(|runner| runner.finished));
+    }
+
+    #[test]
+    fn contested_compare_twelve_field_assigns_twelve_distinct_gates() {
+        // Regression guard: the gate vector was hard-coded to 9 entries and
+        // panicked (index out of bounds) beyond 9 runners.
+        let (mut race, _) =
+            build_contested_race(contested_params(1, field_of(12), None)).expect("field builds");
+        race.prepare_round(9001);
+        let mut gates: Vec<i64> = race.runners().iter().map(|r| r.gate).collect();
+        gates.sort_unstable();
+        assert_eq!(gates, (0..12).collect::<Vec<i64>>());
+    }
+
+    #[test]
+    fn contested_compare_spot_struggle_emerges_in_twelve_field() {
+        let mut params = contested_params(
+            1,
+            vec![
+                runner_props("a", Strategy::FrontRunner),
+                runner_props("b", Strategy::FrontRunner),
+            ],
+            Some(12),
+        );
+        // Narrow lanes keep the front-runner pair close enough for the live
+        // group coordinator to activate naturally even in a full 12-field.
+        params.course.horse_lane = 0.01;
+        let data = run_contested_compare(params).expect("contested compare runs");
+
+        assert!(data.rounds[0]
+            .runners
+            .iter()
+            .any(|runner| runner.spot_struggle_region.is_some()));
+    }
+
+    #[test]
+    fn contested_compare_runs_two_runner_field() {
+        let data = run_contested_compare(contested_params(
+            2,
+            vec![
+                runner_props("a", Strategy::FrontRunner),
+                runner_props("b", Strategy::FrontRunner),
+            ],
+            None,
+        ))
+        .expect("contested compare runs");
+
+        assert_eq!(data.rounds.len(), 2);
+        for round in &data.rounds {
+            assert_eq!(round.runners.len(), 2);
+            assert_eq!(round.primary_runner_id, Some(0));
+            assert!(round.runners.iter().all(|runner| runner.finished));
+            assert!(round
+                .runners
+                .iter()
+                .all(|runner| !runner.position.is_empty()));
+        }
+    }
+
+    #[test]
+    fn contested_compare_fill_mobs_keeps_telemetry_to_compared_runners() {
+        let data = run_contested_compare(contested_params(
+            1,
+            vec![
+                runner_props("a", Strategy::FrontRunner),
+                runner_props("b", Strategy::FrontRunner),
+            ],
+            Some(FIELD_SIZE),
+        ))
+        .expect("contested compare runs");
+
+        assert_eq!(data.rounds.len(), 1);
+        assert_eq!(data.rounds[0].runners.len(), 2);
+        assert_eq!(data.rounds[0].primary_runner_id, Some(0));
+        assert_eq!(data.rounds[0].runners[0].runner_id, 0);
+        assert_eq!(data.rounds[0].runners[1].runner_id, 1);
+    }
+
+    #[test]
+    fn contested_compare_can_surface_natural_spot_struggle() {
+        let mut params = contested_params(
+            1,
+            vec![
+                runner_props("a", Strategy::FrontRunner),
+                runner_props("b", Strategy::FrontRunner),
+            ],
+            None,
+        );
+        // Narrow test course keeps same-strategy front-runners lane-close enough
+        // for the live group coordinator to activate naturally.
+        params.course.horse_lane = 0.01;
+        let data = run_contested_compare(params).expect("contested compare runs");
+
+        assert!(data.rounds[0]
+            .runners
+            .iter()
+            .any(|runner| runner.spot_struggle_region.is_some()));
+
+        // Per-tick race order is recorded for focus runners (1-based rank,
+        // aligned with the time/position channels).
+        for runner in &data.rounds[0].runners {
+            assert_eq!(runner.order.len(), runner.time.len());
+            assert!(runner.order.iter().any(|&o| o >= 1));
+        }
+    }
+
+    #[test]
+    fn runaway_spot_struggle_hp_drain_exceeds_front_runner() {
+        use uma_sim_primitives::runner::ForcedRegion;
+
+        let mut runaway = runner_props("runaway", Strategy::Runaway);
+        runaway.forced_spot_struggle_regions = vec![ForcedRegion {
+            start: 300.0,
+            end: 500.0,
+        }];
+        let mut front = runner_props("front", Strategy::FrontRunner);
+        front.forced_spot_struggle_regions = vec![ForcedRegion {
+            start: 300.0,
+            end: 500.0,
+        }];
+
+        let data = run_contested_compare(contested_params(1, vec![runaway, front], None))
+            .expect("contested compare runs");
+        let round = &data.rounds[0];
+        let runaway = round
+            .runners
+            .iter()
+            .find(|runner| runner.runner_id == 0)
+            .expect("runaway telemetry");
+        let front = round
+            .runners
+            .iter()
+            .find(|runner| runner.runner_id == 1)
+            .expect("front telemetry");
+
+        fn hp_drain_in_region(position: &[f64], hp: &[f64], start: f64, end: f64) -> f64 {
+            let first = position.iter().position(|&pos| pos >= start).unwrap_or(0);
+            let last = position
+                .iter()
+                .rposition(|&pos| pos <= end)
+                .unwrap_or(position.len().saturating_sub(1));
+            hp[first] - hp[last]
+        }
+
+        assert!(runaway.spot_struggle_region.is_some());
+        assert!(front.spot_struggle_region.is_some());
+        assert!(
+            hp_drain_in_region(&runaway.position, &runaway.hp, 300.0, 500.0)
+                > hp_drain_in_region(&front.position, &front.hp, 300.0, 500.0)
+        );
     }
 }

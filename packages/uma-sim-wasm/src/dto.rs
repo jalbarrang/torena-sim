@@ -24,7 +24,7 @@ use uma_sim_primitives::shared_kernel::params::{RaceParameters, StatLine};
 use uma_sim_primitives::skills::effect::{SkillRarity, SkillTarget};
 use uma_sim_primitives::skills::model::{RawSkillEffect, Skill, SkillAlternative};
 use uma_sim_race::collectors::{CollectedData, RaceEventLog, RaceLogEvent, RaceLogEventKind};
-use uma_sim_race::simulation::{FinishEntry, RaceSimParams, RaceSimResult};
+use uma_sim_race::simulation::{ContestedCompareParams, FinishEntry, RaceSimParams, RaceSimResult};
 use uma_sim_race::SimulationSettings as RaceSettings;
 use uma_sim_vacuum::collectors::{CompareData, CompareRoundData};
 use uma_sim_vacuum::simulation::CompareSimParams;
@@ -853,6 +853,72 @@ impl WasmCompareParams {
     }
 }
 
+/// Inputs to a same-race compare-family run.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmContestedCompareParams {
+    /// The course.
+    pub course: WasmCourseData,
+    /// Race parameters.
+    pub parameters: WasmRaceParameters,
+    /// Optional settings (contested mechanics toggles).
+    #[serde(default)]
+    pub settings: WasmSettings,
+    /// Compared runners, added first and captured by the compare collector.
+    pub runners: Vec<WasmCreateRunner>,
+    /// Pad the field with generated mobs to exactly this many runners
+    /// (`runners.len()..=12`). Omit for no padding.
+    #[serde(default)]
+    pub fill_to: Option<usize>,
+    /// Deprecated back-compat shim: legacy `fillMobs: true` maps to
+    /// `fill_to: Some(9)` when `fillTo` is absent. Retire once the store
+    /// plan migrates callers to `fillTo`. `Option` so a present-but-`undefined`
+    /// value from the JS boundary deserializes to `None` (serde only applies
+    /// `default` to absent keys, not explicit unit values).
+    #[serde(default)]
+    pub fill_mobs: Option<bool>,
+    /// Flat stat line for fill mobs. Omit for the default (600).
+    #[serde(default)]
+    pub mob_stats: Option<i32>,
+    /// Number of rounds.
+    pub nsamples: usize,
+    /// Master seed.
+    pub master_seed: u64,
+}
+
+impl WasmContestedCompareParams {
+    /// Convert to the domain [`ContestedCompareParams`].
+    pub fn into_domain(self) -> Result<ContestedCompareParams, DtoError> {
+        let settings = self.settings.into_race_settings();
+        let parameters = self.parameters.to_domain()?;
+        let ground = to_ground(self.parameters.ground)?;
+        let course = self.course.into_domain()?;
+        let runners = self
+            .runners
+            .into_iter()
+            .map(WasmCreateRunner::into_domain)
+            .collect::<Result<Vec<_>, _>>()?;
+        // Legacy `fillMobs: true` → fill to the classic 9-runner field when no
+        // explicit `fillTo` is given (back-compat shim, see field docs).
+        let fill_to = match (self.fill_to, self.fill_mobs) {
+            (Some(n), _) => Some(n),
+            (None, Some(true)) => Some(9),
+            (None, Some(false) | None) => None,
+        };
+        Ok(ContestedCompareParams {
+            course,
+            ground,
+            parameters,
+            settings,
+            runners,
+            fill_to,
+            mob_stats: self.mob_stats,
+            nsamples: self.nsamples,
+            master_seed: self.master_seed,
+        })
+    }
+}
+
 /// Inputs to a batch simulation run.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1189,6 +1255,8 @@ pub struct WasmCompareRoundData {
     pub current_lane: Vec<f64>,
     /// Per-tick gap to the pacer.
     pub pacer_gap: Vec<f64>,
+    /// Per-tick race order (1-based rank; 0 when untracked).
+    pub order: Vec<i64>,
     /// Self-cast skill-effect activation logs, keyed by skill id.
     pub skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
     /// Externally-targeted skill-effect activation logs, keyed by skill id.
@@ -1242,6 +1310,7 @@ impl From<&CompareRoundData> for WasmCompareRoundData {
             hp: d.hp.clone(),
             current_lane: d.current_lane.clone(),
             pacer_gap: d.pacer_gap.clone(),
+            order: d.order.clone(),
             skill_activations: skill_activation_map_to_wasm(&d.skill_activations),
             targeted_skill_activations: skill_activation_map_to_wasm(&d.targeted_skill_activations),
             start_delay: d.start_delay,
@@ -1302,5 +1371,222 @@ impl WasmCompareData {
                 })
                 .collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contested_compare_params_deserialize_into_domain() {
+        let dto: WasmContestedCompareParams = serde_json::from_str(
+            r#"{
+                "course": {
+                    "courseId": 10101,
+                    "raceTrackId": 101,
+                    "distance": 2000.0,
+                    "distanceType": 3,
+                    "surface": 1,
+                    "turn": 2,
+                    "courseSetStatus": [1, 2],
+                    "corners": [{ "start": 400.0, "length": 100.0 }],
+                    "straights": [{ "start": 0.0, "end": 400.0 }],
+                    "slopes": [{ "start": 900.0, "length": 50.0, "slope": -1.5 }],
+                    "laneMax": 18.0,
+                    "courseWidth": 30.0,
+                    "horseLane": 1.2,
+                    "laneChangeAcceleration": 0.1,
+                    "laneChangeAccelerationPerFrame": 0.01,
+                    "maxLaneDistance": 2.0,
+                    "moveLanePoint": 0.5,
+                    "isAbroad": false
+                },
+                "parameters": {
+                    "ground": 1,
+                    "weather": 1,
+                    "season": 1,
+                    "timeOfDay": 1,
+                    "grade": 100
+                },
+                "settings": {
+                    "spotStruggle": true,
+                    "dueling": false,
+                    "positionKeepMode": 2
+                },
+                "runners": [
+                    {
+                        "outfitId": "test-outfit",
+                        "name": "Alpha",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                        "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 },
+                        "forcedSpotStruggleRegions": [{ "start": 200.0, "end": 260.0 }]
+                    },
+                    {
+                        "outfitId": "test-outfit",
+                        "name": "Beta",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                        "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 },
+                        "forcedSpotStruggleRegions": [{ "start": 200.0, "end": 260.0 }]
+                    }
+                ],
+                "fillMobs": true,
+                "nsamples": 7,
+                "masterSeed": 42
+            }"#,
+        )
+        .expect("contested compare params deserialize");
+
+        let domain = dto.into_domain().expect("params convert to domain");
+
+        assert_eq!(domain.course.course_id, 10101);
+        assert_eq!(domain.runners.len(), 2);
+        assert_eq!(domain.runners[0].name, "Alpha");
+        assert_eq!(domain.runners[0].forced_spot_struggle_regions.len(), 1);
+        // Legacy `fillMobs: true` maps to the classic 9-runner fill.
+        assert_eq!(domain.fill_to, Some(9));
+        assert_eq!(domain.nsamples, 7);
+        assert_eq!(domain.master_seed, 42);
+        assert!(domain.settings.spot_struggle);
+        assert!(!domain.settings.dueling);
+    }
+
+    fn minimal_contested_json(fill_fields: &str) -> String {
+        format!(
+            r#"{{
+                "course": {{
+                    "courseId": 10101,
+                    "raceTrackId": 101,
+                    "distance": 2000.0,
+                    "distanceType": 3,
+                    "surface": 1,
+                    "turn": 2,
+                    "laneMax": 18.0,
+                    "courseWidth": 30.0,
+                    "horseLane": 1.2,
+                    "laneChangeAcceleration": 0.1,
+                    "laneChangeAccelerationPerFrame": 0.01,
+                    "maxLaneDistance": 2.0,
+                    "moveLanePoint": 0.5
+                }},
+                "parameters": {{
+                    "ground": 1,
+                    "weather": 1,
+                    "season": 1,
+                    "timeOfDay": 1,
+                    "grade": 100
+                }},
+                "runners": [
+                    {{
+                        "outfitId": "test-outfit",
+                        "name": "Alpha",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": {{ "distance": 1, "strategy": 1, "surface": 1 }},
+                        "stats": {{ "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }}
+                    }},
+                    {{
+                        "outfitId": "test-outfit",
+                        "name": "Beta",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": {{ "distance": 1, "strategy": 1, "surface": 1 }},
+                        "stats": {{ "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }}
+                    }}
+                ],{fill_fields}
+                "nsamples": 1,
+                "masterSeed": 1
+            }}"#
+        )
+    }
+
+    #[test]
+    fn contested_compare_fill_to_passes_through() {
+        let dto: WasmContestedCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "fillTo": 12,"#))
+                .expect("contested compare params deserialize with fillTo");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, Some(12));
+        // mobStats omitted -> engine default (600).
+        assert_eq!(domain.mob_stats, None);
+    }
+
+    #[test]
+    fn contested_compare_mob_stats_passes_through() {
+        let dto: WasmContestedCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "fillTo": 9, "mobStats": 700,"#))
+                .expect("contested compare params deserialize with mobStats");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.mob_stats, Some(700));
+    }
+
+    #[test]
+    fn contested_compare_fill_to_wins_over_legacy_fill_mobs() {
+        let dto: WasmContestedCompareParams = serde_json::from_str(&minimal_contested_json(
+            r#" "fillTo": 11, "fillMobs": true,"#,
+        ))
+        .expect("contested compare params deserialize with both fill fields");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, Some(11));
+    }
+
+    #[test]
+    fn contested_compare_fill_mobs_defaults_false() {
+        let dto: WasmContestedCompareParams = serde_json::from_str(
+            r#"{
+                "course": {
+                    "courseId": 10101,
+                    "raceTrackId": 101,
+                    "distance": 2000.0,
+                    "distanceType": 3,
+                    "surface": 1,
+                    "turn": 2,
+                    "laneMax": 18.0,
+                    "courseWidth": 30.0,
+                    "horseLane": 1.2,
+                    "laneChangeAcceleration": 0.1,
+                    "laneChangeAccelerationPerFrame": 0.01,
+                    "maxLaneDistance": 2.0,
+                    "moveLanePoint": 0.5
+                },
+                "parameters": {
+                    "ground": 1,
+                    "weather": 1,
+                    "season": 1,
+                    "timeOfDay": 1,
+                    "grade": 100
+                },
+                "runners": [
+                    {
+                        "outfitId": "test-outfit",
+                        "name": "Alpha",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                        "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }
+                    },
+                    {
+                        "outfitId": "test-outfit",
+                        "name": "Beta",
+                        "mood": 0,
+                        "strategy": 1,
+                        "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                        "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 }
+                    }
+                ],
+                "nsamples": 1,
+                "masterSeed": 1
+            }"#,
+        )
+        .expect("contested compare params deserialize with default fillMobs");
+
+        assert_eq!(dto.fill_mobs, None);
+        assert_eq!(dto.fill_to, None);
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.fill_to, None);
     }
 }

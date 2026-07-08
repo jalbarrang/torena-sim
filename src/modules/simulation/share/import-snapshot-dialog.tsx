@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { parseSnapshotJson, importSnapshot } from './snapshot';
 import type { SimulationSnapshot } from './types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { trackDescription } from '@/modules/racetrack/labels';
 
@@ -70,6 +71,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
     if (!preview) return;
     importSnapshot(preview);
     toast.success('Simulation settings loaded');
+    if (preview.coercedFromVacuum) {
+      toast.warning(
+        'This share was created with the removed vacuum mode. It was imported as a same-race head-to-head, so results will differ.'
+      );
+    }
     handleOpenChange(false);
   };
 
@@ -77,15 +83,19 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
     document.getElementById('snapshot-file-input')?.click();
   };
 
-  const uma1Name = preview
-    ? preview.uma1.outfitId
-      ? (getUmaDisplayInfo(preview.uma1.outfitId)?.name ?? preview.uma1.outfitId)
-      : '(no uma)'
-    : '';
-  const uma2Name = preview
-    ? preview.uma2.outfitId
-      ? (getUmaDisplayInfo(preview.uma2.outfitId)?.name ?? preview.uma2.outfitId)
-      : '(no uma)'
+  const runnerName = (runner: IRunnerState | undefined) =>
+    runner
+      ? runner.outfitId
+        ? (getUmaDisplayInfo(runner.outfitId)?.name ?? runner.outfitId)
+        : '(no uma)'
+      : '';
+  const uma1Name = preview ? runnerName(preview.runners[preview.compareA]) : '';
+  const uma2Name = preview ? runnerName(preview.runners[preview.compareB]) : '';
+  const runnerCount = preview ? preview.runners.length : 0;
+  const compareModeLabel = preview
+    ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
+        runnerCount === 1 ? '' : 's'
+      })`
     : '';
 
   return (
@@ -161,11 +171,15 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
               <span className="font-medium">{preview.seed === null ? '(none)' : preview.seed}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Uma 1: </span>
+              <span className="text-muted-foreground">Compare mode: </span>
+              <span className="font-medium">{compareModeLabel}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Compare A: </span>
               <span className="font-medium">{uma1Name}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Uma 2: </span>
+              <span className="text-muted-foreground">Compare B: </span>
               <span className="font-medium">{uma2Name}</span>
             </div>
           </div>

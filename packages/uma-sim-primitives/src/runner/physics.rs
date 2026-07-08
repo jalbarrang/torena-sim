@@ -803,6 +803,7 @@ mod tests {
             position_keep: PositionKeepContext {
                 position_keep_mode: 0,
                 num_runners: 1,
+                field_size: 1,
                 pacer_position: None,
                 pacer_strategy: None,
                 pacer_is_self: false,

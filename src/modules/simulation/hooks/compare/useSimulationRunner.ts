@@ -5,11 +5,12 @@ import type { CompareResult } from '@/modules/simulation/compare.types';
 import {
   setIsCompareSimRunning,
   setResults,
-  setSimulationProgress
+  setSimulationProgress,
+  useCompareSettings
 } from '@/modules/simulation/stores/compare.store';
 import { racedefToParams } from '@/utils/races';
 import { useSettingsStore, useWitVariance } from '@/store/settings.store';
-import { useRunnersStore } from '@/store/runners.store';
+import { useComparePairRunners, useRunners } from '@/store/runners.store';
 import { useDebuffs } from '@/modules/simulation/stores/compare.store';
 import { useForcedPositions } from '@/modules/simulation/stores/forced-positions.store';
 import {
@@ -40,7 +41,12 @@ type WorkerMessage<T> =
     };
 
 export function useSimulationRunner() {
-  const { uma1, uma2 } = useRunnersStore();
+  const { uma1, uma2 } = useComparePairRunners();
+  const allRunners = useRunners();
+  const contextRunners = useMemo(
+    () => allRunners.filter((r) => r.fieldId !== uma1.fieldId && r.fieldId !== uma2.fieldId),
+    [allRunners, uma1.fieldId, uma2.fieldId]
+  );
 
   const { racedef, nsamples, courseId, staminaDrainOverrides } = useSettingsStore();
 
@@ -60,6 +66,7 @@ export function useSimulationRunner() {
 
   const { uma1: forcedUma1, uma2: forcedUma2 } = useForcedPositions();
   const { uma1: debuffsUma1, uma2: debuffsUma2 } = useDebuffs();
+  const { fieldSize } = useCompareSettings();
   const scenarioOverrides = useScenarioOverrides();
 
   const webWorkerRef = useRef<Worker | null>(null);
@@ -160,7 +167,7 @@ export function useSimulationRunner() {
     // worker never touches the dataset.
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params)
+      data: buildComparePlan(params, { fieldSize, contextRunners })
     });
   };
 
@@ -213,7 +220,7 @@ export function useSimulationRunner() {
 
     worker.postMessage({
       type: 'compare',
-      data: buildComparePlan(params)
+      data: buildComparePlan(params, { fieldSize, contextRunners })
     });
   }
 

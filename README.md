@@ -115,6 +115,7 @@ Special thanks to:
 - **alpha123** for the original simulator and UI foundations.
 - **Transparent Dino**, **jechtoff2dudes** and **Kachi** for extensive fixes, systems rework, and simulator enhancements made in VFalator.
 - **[GameTora](https://gametora.com/)** for game data, including the entity catalog (skills, umas, support cards), event rewards, and skill hint mappings that power this tool.
+- **Ayaliz**, who runs **[hakuraku.moe](https://hakuraku.moe/)**, for race-mechanics findings grounded in real recorded race data — the spot-struggle and dueling behavior in this simulator is calibrated against that research.
 
 ## Copyright and Fair Use Notice
 

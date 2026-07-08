@@ -13,8 +13,29 @@ import type {
 import type { InjectedDebuffsMap } from '@/modules/simulation/types';
 import { generateSeed } from '@/utils/crypto';
 import { SpurtCandidate } from '@/lib/uma-domain/race/spurt-calculator';
+import { MIN_RUNNERS, useRunnersStore } from '@/store/runners.store';
 
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
+
+// The user-facing "field size" (total gates). Real umas fill first; remaining
+// gates are padded with generated 600-stat mobs. Default 9: the
+// field-composition experiment (docs/dev-process/spike-contested-compare.md)
+// showed an unpadded duo fails to surface spot-struggle / dueling for
+// asymmetric fields — the exact mechanics contested compare exists to model.
+export const DEFAULT_FIELD_SIZE = 9;
+export const MIN_FIELD_SIZE = 2;
+export const MAX_FIELD_SIZE = 12;
+
+/** Clamp an arbitrary value into a valid field size. */
+export const clampFieldSize = (value: number): number => {
+  if (!Number.isFinite(value)) return DEFAULT_FIELD_SIZE;
+  return Math.min(MAX_FIELD_SIZE, Math.max(MIN_FIELD_SIZE, Math.round(value)));
+};
+
+type PersistedRaceStore = {
+  injectedDebuffs?: InjectedDebuffsMap;
+  fieldSize?: number;
+};
 
 type IRaceStore = {
   seed: number | null;
@@ -25,12 +46,14 @@ type IRaceStore = {
   rushedStats: Stats | null;
   fullyChargedStats: Stats | null;
   leadCompetitionStats: Stats | null;
+  duelingStats: Stats | null;
   spurtInfo: SpurtCandidate | null;
   staminaStats: StaminaStats | null;
   firstUmaStats: FirstUMAStats | null;
   isSimulationRunning: boolean;
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
+  fieldSize: number;
 };
 
 export const useRaceStore = create<IRaceStore>()(
@@ -44,25 +67,68 @@ export const useRaceStore = create<IRaceStore>()(
       rushedStats: null,
       fullyChargedStats: null,
       leadCompetitionStats: null,
+      duelingStats: null,
       spurtInfo: null,
       staminaStats: null,
       firstUmaStats: null,
       isSimulationRunning: false,
       simulationProgress: null,
-      injectedDebuffs: { uma1: [], uma2: [] }
+      injectedDebuffs: { uma1: [], uma2: [] },
+      fieldSize: DEFAULT_FIELD_SIZE
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
+      // v4 drops `compareMode`: compare is contested-only (persisted 'vacuum'
+      // silently migrates away).
+      version: 4,
+      migrate: (persistedState, version) => migrateComparePersisted(persistedState, version),
       partialize: (state) => ({
-        injectedDebuffs: state.injectedDebuffs
+        injectedDebuffs: state.injectedDebuffs,
+        fieldSize: state.fieldSize
       })
     }
   )
 );
 
+/** Persist migration for the compare store (exported for unit tests). */
+export const migrateComparePersisted = (
+  persistedState: unknown,
+  version: number
+): PersistedRaceStore => {
+  const state = (persistedState ?? {}) as PersistedRaceStore & {
+    fieldComposition?: string;
+    fillWithMobs?: boolean;
+  };
+
+  // v1 stored `fieldComposition: 'duo' | 'mobs'`; v2 stored
+  // `fillWithMobs: boolean`; v3+ stores the explicit `fieldSize` (total
+  // gates). v4 drops `compareMode` entirely (contested-only compare); any
+  // persisted 'vacuum' from v3 is silently discarded.
+  let fieldSize: number;
+  if (version >= 3) {
+    fieldSize = clampFieldSize(state.fieldSize ?? DEFAULT_FIELD_SIZE);
+  } else if (version === 2) {
+    fieldSize = (state.fillWithMobs ?? true) ? DEFAULT_FIELD_SIZE : MIN_FIELD_SIZE;
+  } else {
+    fieldSize =
+      state.fieldComposition === undefined || state.fieldComposition === 'mobs'
+        ? DEFAULT_FIELD_SIZE
+        : MIN_FIELD_SIZE;
+  }
+
+  return {
+    injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
+    fieldSize
+  } satisfies PersistedRaceStore;
+};
+
 export const setCompareSeed = (seed: number | null) => {
   useRaceStore.setState({ seed });
+};
+
+export const setFieldSize = (fieldSize: number) => {
+  useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });
 };
 
 export const createNewCompareSeed = () => {
@@ -85,6 +151,7 @@ export const setResults = (results: CompareResult) => {
     rushedStats: results.rushedStats,
     fullyChargedStats: results.fullyChargedStats,
     leadCompetitionStats: results.leadCompetitionStats,
+    duelingStats: results.duelingStats,
     spurtInfo: results.spurtInfo ?? undefined,
     staminaStats: results.staminaStats,
     firstUmaStats: results.firstUmaStats
@@ -111,6 +178,7 @@ export const resetResults = () => {
     rushedStats: null,
     fullyChargedStats: null,
     leadCompetitionStats: null,
+    duelingStats: null,
     spurtInfo: null,
     staminaStats: null,
     firstUmaStats: null,
@@ -192,6 +260,14 @@ export const useDebuffs = (): InjectedDebuffsMap => {
     useShallow((state) => ({
       uma1: state.injectedDebuffs.uma1,
       uma2: state.injectedDebuffs.uma2
+    }))
+  );
+};
+
+export const useCompareSettings = () => {
+  return useRaceStore(
+    useShallow((state) => ({
+      fieldSize: state.fieldSize
     }))
   );
 };

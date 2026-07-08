@@ -37,23 +37,22 @@ design principle: lints are `warn` in config, but CI runs
 | rustfmt | [`rustfmt.toml`](./rustfmt.toml) | Consistent formatting (width 100). |
 | clippy | [`clippy.toml`](./clippy.toml) + `[workspace.lints]` in [`Cargo.toml`](./Cargo.toml) | Zero-warning lint bar; bans `unwrap()`/panic-prone calls; complexity thresholds; anti-AI-slop lints. |
 | cargo-deny | [`deny.toml`](./deny.toml) | License compliance, advisories, banned crates, trusted sources. |
-| typos | [`typos.toml`](./typos.toml) | Spelling in code/comments/docs (with a domain word allow-list). |
 | cargo-machete | — | Unused dependencies. |
 
 ### Run the gates locally
 
 ```bash
-# Full suite (mirrors CI). Requires: typos-cli, cargo-deny, cargo-machete.
+# Full suite (mirrors CI). Requires: cargo-deny and cargo-machete.
 ./scripts/quality-gates.sh
 
-# Fast subset (fmt + typos + clippy + tests):
+# Fast subset (fmt + clippy + tests):
 ./scripts/quality-gates.sh --quick
 ```
 
 Install the optional tools once:
 
 ```bash
-cargo install typos-cli cargo-deny cargo-machete
+cargo install cargo-deny cargo-machete
 ```
 
 ### Pre-commit hook

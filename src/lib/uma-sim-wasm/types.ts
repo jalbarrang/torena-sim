@@ -125,6 +125,21 @@ export type WasmCompareParams = {
   masterSeed: number;
 };
 
+export type WasmContestedCompareParams = {
+  course: WasmCourseData;
+  parameters: WasmRaceParameters;
+  settings?: WasmSettings;
+  runners: WasmCreateRunner[];
+  /** Pad the field with generated mobs to exactly this many runners (runners.length..=12). */
+  fillTo?: number;
+  /** @deprecated Legacy shim: `true` maps to `fillTo: 9` when `fillTo` is absent. Use `fillTo`. */
+  fillMobs?: boolean;
+  /** Flat stat line for fill mobs. Omit for the engine default (600). */
+  mobStats?: number;
+  nsamples: number;
+  masterSeed: number;
+};
+
 export type WasmRaceSimParams = {
   course: WasmCourseData;
   parameters: WasmRaceParameters;
@@ -200,6 +215,7 @@ export type WasmCompareRoundData = {
   hp: number[];
   currentLane: number[];
   pacerGap: number[];
+  order: number[];
   skillActivations: Record<string, WasmSkillEffectLog[]>;
   targetedSkillActivations: Record<string, WasmSkillEffectLog[]>;
   startDelay: number;

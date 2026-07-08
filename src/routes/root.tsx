@@ -18,7 +18,7 @@ import { TutorialProvider, TutorialRoot } from '@/components/tutorial';
 import { Navbar } from '@/modules/app/components/navbar';
 import { ImportCodeDialog } from '@/modules/runners/share/import-code-dialog';
 import { useRoosterImport } from '@/modules/runners/share/use-rooster-import';
-import { setRunner } from '@/store/runners.store';
+import { getCompareFieldId, setRunner } from '@/store/runners.store';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
 import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import { toast } from 'sonner';
@@ -78,9 +78,9 @@ export function RootComponent() {
   const handleRoosterImport = useCallback(
     (slot: 'uma1' | 'uma2', partialRunner: Partial<IRunnerState>) => {
       const fullRunner = createRunnerState(partialRunner);
-      setRunner(slot, fullRunner);
+      setRunner(getCompareFieldId(slot), fullRunner);
       setDialogOpen(false);
-      toast.success(`Runner loaded to ${slot === 'uma1' ? 'Uma 1' : 'Uma 2'}`);
+      toast.success(`Runner loaded to ${slot === 'uma1' ? 'Compare A' : 'Compare B'}`);
     },
     [setDialogOpen]
   );

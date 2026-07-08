@@ -292,6 +292,10 @@ pub struct Runner {
     pub is_dueling: bool,
     /// Whether the runner is in a spot-struggle.
     pub in_spot_struggle: bool,
+    /// Whether the runner's spot-struggle ended via the distance/lateral exit
+    /// (as opposed to natural duration expiry); drives the cascade exit for
+    /// the last remaining struggler.
+    pub spot_struggle_distance_exited: bool,
     /// Whether Fully Charged release acceleration is active.
     pub is_fully_charged: bool,
 

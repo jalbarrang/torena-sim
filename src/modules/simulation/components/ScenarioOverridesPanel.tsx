@@ -24,6 +24,7 @@ import {
   hasAnyScenarioOverrides
 } from '@/modules/simulation/stores/scenario-overrides.store';
 import type { CompareRunnerId } from '../compare.types';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import type { ForcedRegion } from '../types';
 
 // function updateRegionField(
@@ -43,10 +44,7 @@ import type { ForcedRegion } from '../types';
 //   }));
 // }
 
-const RUNNERS: Array<{ id: CompareRunnerId; label: string }> = [
-  { id: 'uma1', label: 'Uma 1' },
-  { id: 'uma2', label: 'Uma 2' }
-];
+const RUNNER_IDS: Array<CompareRunnerId> = ['uma1', 'uma2'];
 
 type SingleRegionOverrideProps = {
   runnerId: CompareRunnerId;
@@ -107,6 +105,7 @@ function SingleRegionOverride(props: SingleRegionOverrideProps) {
 
 export function ScenarioOverridesPanel() {
   const overrides = useScenarioOverrides();
+  const names = useComparePairNames();
   const hasAny = hasAnyScenarioOverrides(overrides.uma1) || hasAnyScenarioOverrides(overrides.uma2);
 
   return (
@@ -138,11 +137,11 @@ export function ScenarioOverridesPanel() {
             Forced Rushed
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-2 pt-2">
-            {RUNNERS.map(({ id, label }) => (
+            {RUNNER_IDS.map((id) => (
               <SingleRegionOverride
                 key={id}
                 runnerId={id}
-                label={label}
+                label={id === 'uma1' ? names.uma1 : names.uma2}
                 region={overrides[id].forcedRushed}
                 defaultRegion={{ start: 200, end: 600 }}
                 onSet={setForcedRushed}
@@ -158,11 +157,11 @@ export function ScenarioOverridesPanel() {
             Forced Dueling
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-2 pt-2">
-            {RUNNERS.map(({ id, label }) => (
+            {RUNNER_IDS.map((id) => (
               <SingleRegionOverride
                 key={id}
                 runnerId={id}
-                label={label}
+                label={id === 'uma1' ? names.uma1 : names.uma2}
                 region={overrides[id].forcedDueling}
                 defaultRegion={{ start: 1000, end: 1400 }}
                 onSet={setForcedDueling}
@@ -178,11 +177,11 @@ export function ScenarioOverridesPanel() {
             Forced Spot Struggle
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-2 pt-2">
-            {RUNNERS.map(({ id, label }) => (
+            {RUNNER_IDS.map((id) => (
               <SingleRegionOverride
                 key={id}
                 runnerId={id}
-                label={label}
+                label={id === 'uma1' ? names.uma1 : names.uma2}
                 region={overrides[id].forcedSpotStruggle}
                 defaultRegion={{ start: 150, end: 800 }}
                 onSet={setForcedSpotStruggle}
@@ -198,7 +197,7 @@ export function ScenarioOverridesPanel() {
             Forced Position Rank
           </CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-2 pt-2">
-            {RUNNERS.map(({ id, label }) => (
+            {RUNNER_IDS.map((id) => (
               <ScenarioOverrideGroup
                 key={id}
                 title={label}

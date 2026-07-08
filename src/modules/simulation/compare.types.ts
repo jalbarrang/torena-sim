@@ -9,6 +9,7 @@ export interface CompareResult {
   rushedStats: Stats;
   fullyChargedStats: Stats;
   leadCompetitionStats: Stats;
+  duelingStats: Stats;
   spurtInfo: null;
   staminaStats: StaminaStats;
   firstUmaStats: FirstUMAStats;
@@ -92,6 +93,8 @@ export interface SimulationRun {
    * Current Gap (in meters) between the uma and the pacer for each time step
    */
   pacerGap: Array<Array<number>>;
+  /** Per-tick race order (1-based rank; 0 = untracked). */
+  order: Array<Array<number>>;
   /**
    * Skill Activations for each uma
    */
@@ -180,6 +183,7 @@ const defaultSimulationRun: SimulationRun = {
   hp: [[], []],
   currentLane: [[], []],
   pacerGap: [[], []],
+  order: [[], []],
   skillActivations: [{}, {}],
   targetedSkillActivations: [{}, {}],
   startDelay: [0, 0],

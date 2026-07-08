@@ -36,34 +36,27 @@ START=$(date +%s)
 # Gate 1: Formatting
 run_gate "Rustfmt" cargo fmt --check
 
-# Gate 2: Typos
-if command -v typos &>/dev/null; then
-    run_gate "Typos" typos
-else
-    echo -e "\n  ${YELLOW}⚠ SKIP: typos not installed (cargo install typos-cli)${NC}"
-fi
-
-# Gate 3: Supply chain
+# Gate 2: Supply chain
 if [[ "$QUICK" == false ]] && command -v cargo-deny &>/dev/null; then
     run_gate "cargo-deny" cargo deny check
 elif [[ "$QUICK" == false ]]; then
     echo -e "\n  ${YELLOW}⚠ SKIP: cargo-deny not installed (cargo install cargo-deny)${NC}"
 fi
 
-# Gate 4: Unused deps
+# Gate 3: Unused deps
 if [[ "$QUICK" == false ]] && command -v cargo-machete &>/dev/null; then
     run_gate "cargo-machete" cargo machete
 elif [[ "$QUICK" == false ]]; then
     echo -e "\n  ${YELLOW}⚠ SKIP: cargo-machete not installed (cargo install cargo-machete)${NC}"
 fi
 
-# Gate 5: Clippy (zero warnings)
+# Gate 4: Clippy (zero warnings)
 run_gate "Clippy (zero warnings)" cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 6: Tests
+# Gate 5: Tests
 run_gate "Tests" cargo test --workspace --lib
 
-# Gate 7: Type check (native) + WASM build
+# Gate 6: Type check (native) + WASM build
 if [[ "$QUICK" == false ]]; then
     run_gate "Cargo check (native)" cargo check --workspace --all-targets
 

@@ -1,30 +1,55 @@
 import { cloneDeep } from 'es-toolkit';
 import { toast } from 'sonner';
-import { useRunnersStore } from '@/store/runners.store';
+import { replaceField, useRunnersStore, type FieldRunner } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
-import { useRaceStore, resetResults } from '@/modules/simulation/stores/compare.store';
+import {
+  clampFieldSize,
+  DEFAULT_FIELD_SIZE,
+  MIN_FIELD_SIZE,
+  resetResults,
+  useRaceStore
+} from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import type { SimulationSnapshot } from './types';
 import { SIMULATION_SNAPSHOT_VERSION } from './types';
 
+function stripFieldId(runner: FieldRunner): IRunnerState {
+  const { fieldId: _fieldId, ...rest } = cloneDeep(runner);
+  return rest;
+}
+
 function buildSnapshot(): SimulationSnapshot {
-  const runners = useRunnersStore.getState();
+  const runnersState = useRunnersStore.getState();
   const settings = useSettingsStore.getState();
   const race = useRaceStore.getState();
   const forced = useForcedPositionsStore.getState();
   const scenarioOverrides = useScenarioOverridesStore.getState();
 
+  const runners = runnersState.runners.map(stripFieldId);
+  const compareA = Math.max(
+    0,
+    runnersState.runners.findIndex((r) => r.fieldId === runnersState.compareA)
+  );
+  const compareB = Math.max(
+    0,
+    runnersState.runners.findIndex((r) => r.fieldId === runnersState.compareB)
+  );
+
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
     timestamp: Date.now(),
-    uma1: cloneDeep(runners.uma1),
-    uma2: cloneDeep(runners.uma2),
+    runners,
+    compareA,
+    compareB,
     courseId: settings.courseId,
     racedef: cloneDeep(settings.racedef),
     seed: race.seed,
     nsamples: settings.nsamples,
+    compareMode: 'contested',
+    fieldSize: race.fieldSize,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
     forcedPositions: {
@@ -43,7 +68,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isRunnerState(value: unknown): value is SimulationSnapshot['uma1'] {
+function isRunnerState(value: unknown): value is IRunnerState {
   if (!isRecord(value)) return false;
   return (
     typeof value.outfitId === 'string' &&
@@ -107,20 +132,14 @@ function isInjectedDebuffsMap(value: unknown): value is SimulationSnapshot['inje
   return ok(u1) && ok(u2);
 }
 
-export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(parsed)) return null;
-  if (parsed.version !== SIMULATION_SNAPSHOT_VERSION) return null;
+/** Validate the parts of a snapshot that are identical across codec versions. */
+function parseCommonFields(
+  parsed: Record<string, unknown>
+): Omit<
+  SimulationSnapshot,
+  'version' | 'runners' | 'compareA' | 'compareB' | 'compareMode' | 'fieldSize'
+> | null {
   if (typeof parsed.timestamp !== 'number') return null;
-  if (!isRunnerState(parsed.uma1)) return null;
-  const uma2 = parsed.uma2;
-  if (uma2 !== undefined && !isRunnerState(uma2)) return null;
   if (typeof parsed.courseId !== 'number') return null;
   if (!isRaceConditions(parsed.racedef)) return null;
   if (parsed.seed !== null && typeof parsed.seed !== 'number') return null;
@@ -134,20 +153,14 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
   if (!fpNums(fp.uma1) || !fpNums(fp.uma2)) return null;
   if (!isInjectedDebuffsMap(parsed.injectedDebuffs)) return null;
 
-  const uma2Resolved = isRunnerState(parsed.uma2) ? parsed.uma2 : createRunnerState();
-
   return {
-    version: SIMULATION_SNAPSHOT_VERSION,
     timestamp: parsed.timestamp,
-    uma1: parsed.uma1,
-    uma2: uma2Resolved,
     courseId: parsed.courseId,
     racedef: parsed.racedef as SimulationSnapshot['racedef'],
-    seed: parsed.seed,
+    seed: parsed.seed as number | null,
     nsamples: parsed.nsamples,
     witVarianceSettings: parsed.witVarianceSettings as SimulationSnapshot['witVarianceSettings'],
-    staminaDrainOverrides:
-      parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
+    staminaDrainOverrides: parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
     forcedPositions: {
       uma1: fp.uma1 as Record<string, number>,
       uma2: fp.uma2 as Record<string, number>
@@ -157,13 +170,101 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
   };
 }
 
-export function importSnapshot(data: SimulationSnapshot): void {
-  const uma2 = data.uma2 ?? createRunnerState();
+/** Decode the v2 (runner array) shape. */
+function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
+  const common = parseCommonFields(parsed);
+  if (!common) return null;
 
-  useRunnersStore.setState({
-    uma1: cloneDeep(data.uma1),
-    uma2: cloneDeep(uma2)
-  });
+  if (!Array.isArray(parsed.runners)) return null;
+  if (!parsed.runners.every(isRunnerState)) return null;
+  const runners = parsed.runners as Array<IRunnerState>;
+  if (runners.length < 2 || runners.length > 12) return null;
+
+  const compareA = parsed.compareA;
+  const compareB = parsed.compareB;
+  if (typeof compareA !== 'number' || typeof compareB !== 'number') return null;
+  if (compareA < 0 || compareA >= runners.length) return null;
+  if (compareB < 0 || compareB >= runners.length) return null;
+  if (compareA === compareB) return null;
+
+  const coercedFromVacuum = parsed.compareMode !== 'contested';
+  // Newer v2 snapshots carry `fieldSize`; older v2 snapshots carried
+  // `fillWithMobs: boolean` (pad-to-9 vs no padding). Removed vacuum shares
+  // decode to the closest surviving analogue: contested head-to-head with no
+  // mob fill.
+  const fieldSize = coercedFromVacuum
+    ? MIN_FIELD_SIZE
+    : typeof parsed.fieldSize === 'number'
+      ? clampFieldSize(parsed.fieldSize)
+      : typeof parsed.fillWithMobs === 'boolean'
+        ? parsed.fillWithMobs
+          ? DEFAULT_FIELD_SIZE
+          : MIN_FIELD_SIZE
+        : DEFAULT_FIELD_SIZE;
+
+  return {
+    version: SIMULATION_SNAPSHOT_VERSION,
+    ...common,
+    runners,
+    compareA,
+    compareB,
+    compareMode: 'contested',
+    coercedFromVacuum: coercedFromVacuum || undefined,
+    fieldSize
+  };
+}
+
+/** Decode the legacy `{ uma1, uma2 }` pair shape (v1 and pre-versioned). */
+function parseLegacyPair(parsed: Record<string, unknown>): SimulationSnapshot | null {
+  const common = parseCommonFields(parsed);
+  if (!common) return null;
+  if (!isRunnerState(parsed.uma1)) return null;
+
+  const uma1 = parsed.uma1 as IRunnerState;
+  const uma2 = isRunnerState(parsed.uma2) ? (parsed.uma2 as IRunnerState) : createRunnerState();
+
+  // Pair-shape snapshots predate the contested-only compare flow. Import them
+  // as contested head-to-head with no mob fill and warn that results differ
+  // from the removed vacuum mode.
+  return {
+    version: SIMULATION_SNAPSHOT_VERSION,
+    ...common,
+    runners: [uma1, uma2],
+    compareA: 0,
+    compareB: 1,
+    compareMode: 'contested',
+    coercedFromVacuum: true,
+    fieldSize: MIN_FIELD_SIZE
+  };
+}
+
+export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed)) return null;
+
+  const version = parsed.version;
+
+  if (version === 2) {
+    return parseV2(parsed);
+  }
+  if (version === 1) {
+    return parseLegacyPair(parsed);
+  }
+  if (version === undefined) {
+    return parseLegacyPair(parsed);
+  }
+  // Unknown / future version — refuse rather than silently mis-decode.
+  return null;
+}
+
+export function importSnapshot(data: SimulationSnapshot): void {
+  replaceField(data.runners, data.compareA, data.compareB);
 
   useSettingsStore.setState({
     courseId: data.courseId,
@@ -188,6 +289,7 @@ export function importSnapshot(data: SimulationSnapshot): void {
 
   useRaceStore.setState({
     seed: data.seed,
+    fieldSize: clampFieldSize(data.fieldSize),
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
 

@@ -6,6 +6,7 @@ import { simToDisplaySeconds } from '@/modules/race-sim/constants';
 import { formatTime } from '@/utils/time';
 import { Table, TableBody, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import {
   Empty,
   EmptyDescription,
@@ -15,7 +16,9 @@ import {
 } from '@/components/ui/empty';
 
 export const RunnerStatsTab = () => {
-  const { chartData, rushedStats, leadCompetitionStats, staminaStats } = useRaceStore();
+  const { chartData, rushedStats, leadCompetitionStats, duelingStats, staminaStats } =
+    useRaceStore();
+  const names = useComparePairNames();
   const { allowRushedUma2 } = useWitVariance();
 
   const uma1Stats = useMemo(() => {
@@ -26,9 +29,10 @@ export const RunnerStatsTab = () => {
       finishTime: simToDisplaySeconds(chartData.time[0][chartData.time[0].length - 1]),
       rushedStats: rushedStats?.uma1,
       leadCompetitionStats: leadCompetitionStats?.uma1,
+      duelingStats: duelingStats?.uma1,
       staminaStats: staminaStats?.uma1
     };
-  }, [chartData, rushedStats, leadCompetitionStats, staminaStats]);
+  }, [chartData, rushedStats, leadCompetitionStats, duelingStats, staminaStats]);
 
   const uma2Stats = useMemo(() => {
     if (!chartData) return null;
@@ -38,9 +42,10 @@ export const RunnerStatsTab = () => {
       finishTime: simToDisplaySeconds(chartData.time[1][chartData.time[1].length - 1]),
       rushedStats: rushedStats?.uma2,
       leadCompetitionStats: leadCompetitionStats?.uma2,
+      duelingStats: duelingStats?.uma2,
       staminaStats: staminaStats?.uma2
     };
-  }, [chartData, rushedStats, leadCompetitionStats, staminaStats]);
+  }, [chartData, rushedStats, leadCompetitionStats, duelingStats, staminaStats]);
 
   if (!chartData || !uma1Stats || !uma2Stats) {
     return (
@@ -65,7 +70,7 @@ export const RunnerStatsTab = () => {
         {/* Uma 1 */}
         <div className="bg-background border-2 rounded-lg overflow-hidden">
           <div className="bg-[#2a77c5] dark:bg-blue-500 text-white text-center py-2 font-bold">
-            Umamusume 1
+            <span className="block truncate px-2">{names.uma1}</span>
           </div>
 
           <Table>
@@ -109,6 +114,17 @@ export const RunnerStatsTab = () => {
                 </TableRow>
               </Activity>
 
+              <Activity mode={duelingStats ? 'visible' : 'hidden'}>
+                <TableRow>
+                  <TableHead className="font-medium">Dueling frequency</TableHead>
+                  <TableCell className="font-mono">
+                    {uma1Stats.duelingStats && uma1Stats.duelingStats.frequency > 0
+                      ? `${uma1Stats.duelingStats.frequency.toFixed(1)}% (${uma1Stats.duelingStats.mean.toFixed(1)}m)`
+                      : '0%'}
+                  </TableCell>
+                </TableRow>
+              </Activity>
+
               <Activity mode={staminaStats ? 'visible' : 'hidden'}>
                 <TableRow>
                   <TableHead className="font-medium">Spurt Rate</TableHead>
@@ -130,7 +146,7 @@ export const RunnerStatsTab = () => {
         {/* Uma 2 */}
         <div className="bg-background border-2 rounded-lg overflow-hidden">
           <div className="bg-[#c52a2a] dark:bg-red-500 text-white text-center py-2 font-bold">
-            Umamusume 2
+            <span className="block truncate px-2">{names.uma2}</span>
           </div>
 
           <Table>
@@ -174,6 +190,17 @@ export const RunnerStatsTab = () => {
                 </TableRow>
               </Activity>
 
+              <Activity mode={duelingStats ? 'visible' : 'hidden'}>
+                <TableRow>
+                  <TableHead className="font-medium">Dueling frequency</TableHead>
+                  <TableCell className="font-mono">
+                    {uma2Stats.duelingStats && uma2Stats.duelingStats.frequency > 0
+                      ? `${uma2Stats.duelingStats.frequency.toFixed(1)}% (${uma2Stats.duelingStats.mean.toFixed(1)}m)`
+                      : '0%'}
+                  </TableCell>
+                </TableRow>
+              </Activity>
+
               <Activity mode={staminaStats ? 'visible' : 'hidden'}>
                 <TableRow>
                   <TableHead className="font-medium">Spurt Rate</TableHead>
@@ -209,15 +236,15 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               <Activity mode={uma1Stats.finishTime < uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 1 faster
+                {names.uma1} faster
               </Activity>
 
               <Activity mode={uma1Stats.finishTime > uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 2 faster
+                {names.uma2} faster
               </Activity>
 
               <Activity mode={uma1Stats.finishTime === uma2Stats.finishTime ? 'visible' : 'hidden'}>
-                Uma 1 and Uma 2 finished at the same time
+                Both finished at the same time
               </Activity>
             </span>
           </div>
@@ -233,8 +260,8 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               {uma1Stats.topSpeed > uma2Stats.topSpeed
-                ? 'Uma 1 higher top speed'
-                : 'Uma 2 higher top speed'}
+                ? `${names.uma1} higher top speed`
+                : `${names.uma2} higher top speed`}
             </span>
           </div>
           <div className="flex flex-col items-center p-3 bg-background border-2 rounded-lg">
@@ -251,8 +278,8 @@ export const RunnerStatsTab = () => {
             </span>
             <span className="text-xs text-foreground">
               {chartData.startDelay[0] < chartData.startDelay[1]
-                ? 'Uma 1 faster start'
-                : 'Uma 2 faster start'}
+                ? `${names.uma1} faster start`
+                : `${names.uma2} faster start`}
             </span>
           </div>
         </div>

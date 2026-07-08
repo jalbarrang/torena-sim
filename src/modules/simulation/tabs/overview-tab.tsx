@@ -25,17 +25,27 @@ const formatLengths = (value: number) => {
 };
 
 export const OverviewTab = () => {
-  const { results, chartData, displaying, rushedStats, fullyChargedStats, staminaStats } =
-    useRaceStore(
-      useShallow((state) => ({
-        results: state.results,
-        chartData: state.chartData,
-        displaying: state.displaying,
-        rushedStats: state.rushedStats,
-        fullyChargedStats: state.fullyChargedStats,
-        staminaStats: state.staminaStats
-      }))
-    );
+  const {
+    results,
+    chartData,
+    displaying,
+    rushedStats,
+    fullyChargedStats,
+    staminaStats,
+    leadCompetitionStats,
+    duelingStats
+  } = useRaceStore(
+    useShallow((state) => ({
+      results: state.results,
+      chartData: state.chartData,
+      displaying: state.displaying,
+      rushedStats: state.rushedStats,
+      fullyChargedStats: state.fullyChargedStats,
+      staminaStats: state.staminaStats,
+      leadCompetitionStats: state.leadCompetitionStats,
+      duelingStats: state.duelingStats
+    }))
+  );
   const { allowRushedUma1, allowRushedUma2, allowConservePowerUma1, allowConservePowerUma2 } =
     useWitVariance();
 
@@ -171,7 +181,8 @@ export const OverviewTab = () => {
           const fullyCharged = isUma1 ? fullyChargedStats?.uma1 : fullyChargedStats?.uma2;
           const showRushed = isUma1 ? allowRushedUma1 : allowRushedUma2;
           const showFullyCharged = isUma1 ? allowConservePowerUma1 : allowConservePowerUma2;
-          // const dueling = isUma1 ? leadCompetitionStats?.uma1 : leadCompetitionStats?.uma2;
+          const spotStruggle = isUma1 ? leadCompetitionStats?.uma1 : leadCompetitionStats?.uma2;
+          const dueling = isUma1 ? duelingStats?.uma1 : duelingStats?.uma2;
           const stamina = isUma1 ? staminaStats?.uma1 : staminaStats?.uma2;
           // const firstUma = isUma1 ? firstUmaStats?.uma1 : firstUmaStats?.uma2;
 
@@ -225,7 +236,10 @@ export const OverviewTab = () => {
 
                 <Activity
                   mode={
-                    (rushedStats && showRushed) || (fullyChargedStats && showFullyCharged)
+                    (rushedStats && showRushed) ||
+                    (fullyChargedStats && showFullyCharged) ||
+                    leadCompetitionStats ||
+                    duelingStats
                       ? 'visible'
                       : 'hidden'
                   }
@@ -263,7 +277,21 @@ export const OverviewTab = () => {
                       </div>
                     </Activity>
 
-                    {/* <Activity mode={leadCompetitionStats ? 'visible' : 'hidden'}>
+                    <Activity mode={leadCompetitionStats ? 'visible' : 'hidden'}>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <span className="text-base leading-none">🔥</span> Spot Struggle
+                        </span>
+
+                        <span className="font-mono font-medium">
+                          {spotStruggle && spotStruggle.frequency > 0
+                            ? `${spotStruggle.frequency.toFixed(1)}% (${spotStruggle.mean.toFixed(0)}m)`
+                            : '0%'}
+                        </span>
+                      </div>
+                    </Activity>
+
+                    <Activity mode={duelingStats ? 'visible' : 'hidden'}>
                       <div className="flex justify-between mt-1">
                         <span className="text-muted-foreground flex items-center gap-1.5">
                           <span className="text-base leading-none">⚔</span> Dueling
@@ -271,11 +299,11 @@ export const OverviewTab = () => {
 
                         <span className="font-mono font-medium">
                           {dueling && dueling.frequency > 0
-                            ? `${dueling.frequency.toFixed(1)}%`
+                            ? `${dueling.frequency.toFixed(1)}% (${dueling.mean.toFixed(0)}m)`
                             : '0%'}
                         </span>
                       </div>
-                    </Activity> */}
+                    </Activity>
                   </div>
                 </Activity>
 

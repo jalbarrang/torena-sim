@@ -8,7 +8,8 @@ import {
   useStaminaDrainOverrides,
   useWitVariance
 } from '@/store/settings.store';
-import { useRunnersStore } from '@/store/runners.store';
+import { useComparePairRunners } from '@/store/runners.store';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import { SkillType } from '@/lib/uma-domain/skills/definitions';
 
 import { Label } from '@/components/ui/label';
@@ -45,7 +46,10 @@ const WitVarianceSettingRow = ({
   settings: WitVarianceSettings;
   onToggle: (key: keyof WitVarianceSettings) => void;
   disabled?: boolean;
-}) => (
+}) => {
+  const names = useComparePairNames();
+
+  return (
   <div className="flex items-center justify-between py-2">
     <span className={`text-sm ${disabled ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
       {label}
@@ -53,10 +57,10 @@ const WitVarianceSettingRow = ({
     <div className="flex items-center gap-4">
       <div className="flex items-center gap-2">
         <span
-          className={`text-xs ${disabled ? 'opacity-50' : ''}`}
+          className={`max-w-24 truncate text-xs ${disabled ? 'opacity-50' : ''}`}
           style={{ color: 'rgb(42, 119, 197)' }}
         >
-          Uma 1
+          {names.uma1}
         </span>
         <Checkbox
           checked={settings[uma1Key]}
@@ -66,10 +70,10 @@ const WitVarianceSettingRow = ({
       </div>
       <div className="flex items-center gap-2">
         <span
-          className={`text-xs ${disabled ? 'opacity-50' : ''}`}
+          className={`max-w-24 truncate text-xs ${disabled ? 'opacity-50' : ''}`}
           style={{ color: 'rgb(197, 42, 42)' }}
         >
-          Uma 2
+          {names.uma2}
         </span>
         <Checkbox
           checked={settings[uma2Key]}
@@ -79,11 +83,12 @@ const WitVarianceSettingRow = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 export const AdvancedSettingsPanel = () => {
   const { nsamples } = useSettingsStore();
-  const { uma1, uma2 } = useRunnersStore();
+  const { uma1, uma2 } = useComparePairRunners();
   const ignoreStaminaConsumption = useSkillPlannerStore((state) => state.ignoreStaminaConsumption);
   const witVarianceSettings = useWitVariance();
   const staminaDrainOverrides = useStaminaDrainOverrides();

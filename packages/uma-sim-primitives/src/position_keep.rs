@@ -15,8 +15,10 @@ use crate::skills::effect::PositionKeepState;
 
 /// The `positionKeepMode` value enabling virtual position keeping.
 const VIRTUAL_MODE: i32 = 2;
-/// Field size assumed by the forced-rank gap calculation (matches the TS
-/// hard-coded `numUmas = 9`).
+/// Minimum field size assumed by the forced-rank gap calculation (matches the
+/// TS hard-coded `numUmas = 9`). Fields larger than 9 use the real size so
+/// ranks 10..=12 don't compress the gap range; smaller fields keep the 9-based
+/// normalization for TS parity (and to avoid degenerate divisors).
 const FORCED_RANK_FIELD_SIZE: f64 = 9.0;
 
 /// Race-derived, read-only inputs the position-keep machine needs about the rest
@@ -25,8 +27,11 @@ const FORCED_RANK_FIELD_SIZE: f64 = 9.0;
 pub struct PositionKeepContext {
     /// The race's `positionKeepMode` setting.
     pub position_keep_mode: i32,
-    /// Number of runners in the race.
+    /// Number of runners still racing (active, unfinished).
     pub num_runners: usize,
+    /// Total field size (finished + active). Stable across the round; used to
+    /// normalize forced-rank gaps.
+    pub field_size: usize,
     /// The pacer's current position, if a pacer is selected.
     pub pacer_position: Option<f64>,
     /// The pacer's post-promotion position-keep strategy, if a pacer is selected.
@@ -138,11 +143,12 @@ fn begin_state(runner: &mut Runner, state: PositionKeepState) {
 
 /// Compute the forced-rank "behind" gap if the runner is within a forced-rank
 /// region; `None` means no forced rank applies here.
-fn forced_rank_behind(runner: &Runner) -> Option<f64> {
+fn forced_rank_behind(runner: &Runner, ctx: &PositionKeepContext) -> Option<f64> {
     for region in &runner.forced_rank {
         if runner.position >= region.start && runner.position < region.end {
             let max_gap = runner.pos_keep_max_threshold + runner.section_length;
-            return Some(((region.rank - 1) as f64 / (FORCED_RANK_FIELD_SIZE - 1.0)) * max_gap);
+            let field_size = (ctx.field_size as f64).max(FORCED_RANK_FIELD_SIZE);
+            return Some(((region.rank - 1) as f64 / (field_size - 1.0)) * max_gap);
         }
     }
     None
@@ -320,7 +326,7 @@ pub fn apply_virtual_position_keep(runner: &mut Runner, ctx: &PositionKeepContex
         return;
     }
 
-    let forced = forced_rank_behind(runner);
+    let forced = forced_rank_behind(runner, ctx);
     let has_forced_rank = forced.is_some();
 
     if !has_forced_rank && (ctx.pacer_position.is_none() || ctx.num_runners < 2) {
@@ -362,6 +368,7 @@ mod tests {
         PositionKeepContext {
             position_keep_mode: VIRTUAL_MODE,
             num_runners: 9,
+            field_size: 9,
             pacer_position,
             pacer_strategy: Some(Strategy::FrontRunner),
             pacer_is_self,

@@ -214,8 +214,9 @@ export const umalatorSteps: Array<TutorialStep> = [
         <div className="flex flex-col gap-2">
           <div className="font-semibold">Compare Runners</div>
           <ul className="text-muted-foreground list-disc list-inside space-y-1">
-            <li>Click "Uma 2" to configure a second runner</li>
-            <li>Both will race together for direct comparison</li>
+            <li>Tap the Compare B slot to configure a second runner</li>
+            <li>Open "Field" to add more runners to the race (up to 12)</li>
+            <li>Both compared umas race together for direct comparison</li>
           </ul>
         </div>
 

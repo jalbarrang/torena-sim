@@ -14,6 +14,19 @@ export function useSkillTooltip() {
     const textEl = g?.querySelector('text');
     if (!g || !bg || !textEl) return;
 
+    // SVG paints in document order (no z-index): raise the hovered marker's
+    // element chain (markers are nested <svg>s) to the end of each parent so
+    // the tooltip is never covered by chips rendered after it. Climbs until
+    // the root `.racetrackView` svg.
+    let node: Element = g;
+    while (node.parentElement && !node.parentElement.classList.contains('racetrackView')) {
+      const parent = node.parentElement;
+      if (parent.lastElementChild !== node) {
+        parent.append(node);
+      }
+      node = parent;
+    }
+
     g.style.display = '';
     g.setAttribute('transform', '');
 

@@ -11,7 +11,7 @@
 
 use crate::runner::physics::{DuelingInput, FieldInputs, UpdateContext};
 use crate::runner::Runner;
-use crate::shared_kernel::language::{strategy_matches, DistanceType, Strategy};
+use crate::shared_kernel::language::{DistanceType, Strategy};
 use crate::skills::effect::PositionKeepState;
 use crate::stamina::policy::RaceStateSlice;
 
@@ -130,6 +130,7 @@ impl Runner {
     pub(crate) fn initialize_spot_struggle(&mut self) {
         self.in_spot_struggle = false;
         self.has_spot_struggle = false;
+        self.spot_struggle_distance_exited = false;
         self.spot_struggle_timer.t = 0.0;
         self.spot_struggle_start_position = None;
         self.spot_struggle_end_position = -1.0;
@@ -342,13 +343,15 @@ impl Runner {
         if self.is_dueling {
             if self.health_policy.health_ratio_remaining() <= 0.05 {
                 self.is_dueling = false;
+                self.has_dueled = true;
                 self.dueling_end_position = self.position;
             }
             return;
         }
-        if strategy_matches(self.position_keep_strategy, Strategy::FrontRunner) {
-            return;
-        }
+        // No strategy exclusion: canon (docs/mechanics/README.md "Dueling")
+        // gates only on final straight, proximity, placement, and HP. Front
+        // runners that fall back into the pack can duel; the per-strategy
+        // `DuelingRates` (front_runner/runaway arms) govern the artificial path.
         if self.health_policy.health_ratio_remaining() < 0.15
             || !self.is_on_final_straight(ctx.course)
         {
@@ -422,6 +425,17 @@ impl Runner {
 
     // ===================== spot struggle =====================
 
+    /// Spot-struggle duration: `(700*guts)^0.5 * 0.012` scaled by the runner's
+    /// strategy proficiency modifier (S 1.1 .. G 0.1 - the same wit-adjustment
+    /// table). Real-data evidence: hakuraku.moe/notes/spot-struggle,
+    /// "Aptitude appears to scale duration".
+    fn spot_struggle_duration(&self) -> f64 {
+        let proficiency = crate::course::coefficients::strategy_module::aptitude_modifier(
+            self.aptitudes.strategy,
+        );
+        (700.0 * self.adjusted_stats.guts).powf(0.5) * 0.012 * proficiency
+    }
+
     /// `updateSpotStruggle` self-side: forced regions, exit, and duration. The
     /// cross-runner trigger (which activates a group of front-runners) is run by
     /// the aggregate coordinator (t-017).
@@ -433,7 +447,7 @@ impl Runner {
             return;
         }
         if self.in_spot_struggle {
-            let duration = (700.0 * self.adjusted_stats.guts).powf(0.5) * 0.012;
+            let duration = self.spot_struggle_duration();
             if self.spot_struggle_timer.t >= duration
                 || self.position >= self.spot_struggle_end_position
             {
@@ -441,7 +455,8 @@ impl Runner {
                 self.spot_struggle_end_position = self.position;
             }
         }
-        // Group trigger detection is handled by the aggregate coordinator.
+        // Group trigger detection and the distance/lateral exit are handled by
+        // the aggregate coordinators.
     }
 
     fn update_forced_spot_struggle(&mut self) -> bool {
@@ -463,7 +478,7 @@ impl Runner {
             self.spot_struggle_timer.t = 0.0;
         }
         if self.is_in_forced_spot_struggle {
-            let duration = (700.0 * self.adjusted_stats.guts).powf(0.5) * 0.012;
+            let duration = self.spot_struggle_duration();
             if self.position >= region.end || self.spot_struggle_timer.t >= duration {
                 self.in_spot_struggle = false;
                 self.is_in_forced_spot_struggle = false;
@@ -484,7 +499,8 @@ impl Runner {
             self.close_fully_charged();
         }
 
-        if !self.conserve_power_enabled || self.conserve_power_stat <= 1200.0 || self.is_last_spurt {
+        if !self.conserve_power_enabled || self.conserve_power_stat <= 1200.0 || self.is_last_spurt
+        {
             return;
         }
 
@@ -626,6 +642,23 @@ mod tests {
     use crate::runner::test_support::test_runner;
     use crate::shared_kernel::language::{DistanceType, Strategy};
     use crate::skills::effect::PositionKeepState;
+
+    #[test]
+    fn spot_struggle_duration_scales_with_strategy_aptitude() {
+        use crate::shared_kernel::language::Aptitude;
+        let mut r = test_runner(0, Strategy::FrontRunner);
+        r.adjusted_stats.guts = 1200.0;
+        r.aptitudes.strategy = Aptitude::A;
+        let base = r.spot_struggle_duration();
+        assert!((base - (700.0f64 * 1200.0).powf(0.5) * 0.012).abs() < 1e-9);
+
+        // S multiplies by 1.1; G collapses the duration to 10%
+        // (hakuraku.moe/notes/spot-struggle).
+        r.aptitudes.strategy = Aptitude::S;
+        assert!((r.spot_struggle_duration() - base * 1.1).abs() < 1e-9);
+        r.aptitudes.strategy = Aptitude::G;
+        assert!((r.spot_struggle_duration() - base * 0.1).abs() < 1e-9);
+    }
 
     #[test]
     fn rushed_strategy_override_buckets_front_runner() {

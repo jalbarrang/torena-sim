@@ -8,6 +8,8 @@ export type CollectedRunnerRoundData = {
   hp: number[];
   currentLane: number[];
   pacerGap: number[];
+  /** Per-tick race order (1-based rank; 0 when the engine does not track it). */
+  order: number[];
   skillActivations: Record<string, SkillEffectLog[]>;
   targetedSkillActivations: Record<string, SkillEffectLog[]>;
   startDelay: number;

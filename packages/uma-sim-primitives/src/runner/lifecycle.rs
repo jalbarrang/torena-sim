@@ -214,6 +214,7 @@ impl Runner {
             is_downhill_mode: false,
             is_dueling: false,
             in_spot_struggle: false,
+            spot_struggle_distance_exited: false,
             is_fully_charged: false,
             conserve_power_enabled: true,
             conserve_power_stat: f64::from(props.stats.power),

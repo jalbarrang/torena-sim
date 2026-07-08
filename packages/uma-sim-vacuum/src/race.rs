@@ -131,6 +131,9 @@ impl RaceObservation for Race {
     fn pacer_position(&self) -> Option<f64> {
         self.order_tracker.pacer_position
     }
+    fn runner_order(&self, id: RunnerId) -> Option<i64> {
+        self.order_tracker.runner_order.get(&id).copied()
+    }
     fn seed(&self) -> u64 {
         self.seed
     }
@@ -321,6 +324,7 @@ impl Race {
             let position_keep = PositionKeepContext {
                 position_keep_mode: self.settings.position_keep_mode,
                 num_runners: snapshot.num_active as usize,
+                field_size: snapshot.num_total as usize,
                 pacer_position: snapshot.pacer_position,
                 pacer_strategy: snapshot.pacer_strategy,
                 pacer_is_self: snapshot.pacer == Some(runner.id),
