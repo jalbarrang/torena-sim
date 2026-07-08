@@ -7,7 +7,7 @@ type ISidebar = {
   hidden: boolean;
 };
 
-export type UIDismissalKey = 'compare-notice' | 'race-sim-notice';
+export type UIDismissalKey = 'race-sim-notice';
 
 type IUIDismissals = Record<UIDismissalKey, boolean>;
 
@@ -36,7 +36,6 @@ export const useUIStore = create<IUIStore>()(
       showChangelogModal: false,
       showSuggestionModal: false,
       dismissals: {
-        'compare-notice': false,
         'race-sim-notice': false
       },
       leftSide: {
