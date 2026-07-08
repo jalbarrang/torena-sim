@@ -125,7 +125,7 @@ describe('FieldManagerContent (manage mode)', () => {
     useRaceStore.setState({ fieldSize: 9 });
     render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
 
-    expect(screen.getByText(/2 umas \+ 7 mob pacers/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 umas \+ 7 filler mobs/i)).toBeInTheDocument();
   });
 });
 
