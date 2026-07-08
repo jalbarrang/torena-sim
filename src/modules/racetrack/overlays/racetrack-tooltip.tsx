@@ -9,6 +9,7 @@ import { RaceTrackDimensions } from '../types';
 export type TooltipData = {
   v1Text: string | null;
   v2Text: string | null;
+  gapText: string | null;
 };
 
 type RaceTrackTooltipProps = {
@@ -59,11 +60,35 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
         ? `${v2.toFixed(2)}m/s t=${t2.toFixed(2)}s (${hp2.toFixed(0)} HP remaining)`
         : null;
 
+      // Head-to-head standing at the observed tick: when the LEADER passes
+      // the hovered distance, how far back is the other runner? (1 length =
+      // 2.5m, same conversion as the bashin delta.)
+      let gapText: string | null = null;
+      if (showVelocityUma1 && showVelocityUma2) {
+        const leader = t1 <= t2 ? 0 : 1;
+        const trailer = 1 - leader;
+        const tLead = Math.min(t1, t2);
+        const trailerIdx = Math.max(
+          0,
+          Math.min(binSearch(chartData.time[trailer], tLead), chartData.position[trailer].length - 1)
+        );
+        const trailerPos = chartData.position[trailer][trailerIdx];
+        if (trailerPos != null) {
+          const gapMeters = Math.max(0, x - trailerPos);
+          const gapLengths = gapMeters / 2.5;
+          const leaderName = leader === 0 ? 'A' : 'B';
+          gapText =
+            gapMeters < 0.05
+              ? 'Even at this point'
+              : `${leaderName} leads by ${gapLengths.toFixed(1)}L (${gapMeters.toFixed(1)}m)`;
+        }
+      }
+
       setTooltipData((prev) => {
-        if (prev?.v1Text === v1Text && prev?.v2Text === v2Text) {
+        if (prev?.v1Text === v1Text && prev?.v2Text === v2Text && prev?.gapText === gapText) {
           return prev;
         }
-        return { v1Text, v2Text };
+        return { v1Text, v2Text, gapText };
       });
     },
     [chartData, course.distance, showVelocityUma1, showVelocityUma2]
@@ -87,12 +112,13 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
     return null;
   }
 
-  const lines = [tooltipData.v1Text, tooltipData.v2Text].filter(Boolean);
+  const lines = [tooltipData.v1Text, tooltipData.v2Text, tooltipData.gapText].filter(Boolean);
   if (lines.length === 0) {
     return null;
   }
 
   const rectHeight = 8 + lines.length * 11;
+  const gapY = 12 + (tooltipData.v1Text ? 11 : 0) + (tooltipData.v2Text ? 11 : 0);
 
   return (
     <svg
@@ -120,6 +146,11 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
       {tooltipData.v2Text && (
         <text x={5} y={tooltipData.v1Text ? 23 : 12} fill="#c52a2a" fontSize="8px">
           {tooltipData.v2Text}
+        </text>
+      )}
+      {tooltipData.gapText && (
+        <text x={5} y={gapY} fill="var(--muted-foreground)" fontSize="8px">
+          {tooltipData.gapText}
         </text>
       )}
     </svg>
