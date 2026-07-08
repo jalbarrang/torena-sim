@@ -257,7 +257,7 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
               </Label>
               <p className="text-xs text-muted-foreground">
                 {mobCount > 0
-                  ? `${runners.length} uma${runners.length === 1 ? '' : 's'} + ${mobCount} mob pacer${mobCount === 1 ? '' : 's'} (600 stats).`
+                  ? `${runners.length} uma${runners.length === 1 ? '' : 's'} + ${mobCount} filler mob${mobCount === 1 ? '' : 's'} (600 stats, mixed strategies).`
                   : 'No mob padding — only your umas race.'}
               </p>
             </div>
