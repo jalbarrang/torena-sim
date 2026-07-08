@@ -1,5 +1,9 @@
 # Umalator Global
 
+## Subagents
+
+- **Never trust subagent completion reports.** A subagent's "all gates pass" is a claim, not a fact. Before marking delegated work done: re-run the gates yourself (`typecheck`, `test`, `intent`), spot-check the riskiest diffs, and sweep for stragglers (`rg` every removed symbol). Only then sign off.
+
 ## Dev Server
 
 - **Never** run `bun run dev`, `vite`, or any development server commands. The user manages the dev server themselves.
@@ -25,3 +29,9 @@
 - Don't use deprecated `forwardRef` for component refs, pass the `ref` as a prop.
 - This project should follow the React 19+ composition patterns.
 - This project doesn't use React Server Components.
+
+## Simulation Engine (packages/)
+
+- **Rust changes are invisible until rebuilt.** The app imports the compiled WASM from `src/lib/uma-sim-wasm/pkg/` (gitignored, rebuilt in CI). After any change under `packages/`, run `bun run wasm:build` and hard-refresh the browser — otherwise the dev app silently runs the old engine.
+- **JS→WASM boundary: present-but-`undefined` keys are unit values, not absent.** serde's `#[serde(default)]` only fires for absent keys. Optional DTO fields in `packages/uma-sim-wasm/src/dto.rs` must be `Option<T>`, never bare types with defaults.
+- **Race-mechanics canon:** `docs/mechanics/README.md` + `quick-reference.md` are the source of truth for mechanics. Check them before implementing; when new evidence supersedes them, amend the doc in the same change, citing the source.
