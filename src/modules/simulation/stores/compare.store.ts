@@ -17,9 +17,6 @@ import { MIN_RUNNERS, useRunnersStore } from '@/store/runners.store';
 
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 
-export type CompareMode = 'contested' | 'vacuum';
-
-export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
 // The user-facing "field size" (total gates). Real umas fill first; remaining
 // gates are padded with generated 600-stat mobs. Default 9: the
 // field-composition experiment (docs/dev-process/spike-contested-compare.md)
@@ -35,16 +32,8 @@ export const clampFieldSize = (value: number): number => {
   return Math.min(MAX_FIELD_SIZE, Math.max(MIN_FIELD_SIZE, Math.round(value)));
 };
 
-const isCompareMode = (value: unknown): value is CompareMode => {
-  return value === 'contested' || value === 'vacuum';
-};
-
-/** Vacuum mode compares two isolated runners; it is only valid for a duo field. */
-export const canUseVacuum = (fieldSize: number): boolean => fieldSize <= MIN_RUNNERS;
-
 type PersistedRaceStore = {
   injectedDebuffs?: InjectedDebuffsMap;
-  compareMode?: CompareMode;
   fieldSize?: number;
 };
 
@@ -57,13 +46,13 @@ type IRaceStore = {
   rushedStats: Stats | null;
   fullyChargedStats: Stats | null;
   leadCompetitionStats: Stats | null;
+  duelingStats: Stats | null;
   spurtInfo: SpurtCandidate | null;
   staminaStats: StaminaStats | null;
   firstUmaStats: FirstUMAStats | null;
   isSimulationRunning: boolean;
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
-  compareMode: CompareMode;
   fieldSize: number;
 };
 
@@ -78,23 +67,24 @@ export const useRaceStore = create<IRaceStore>()(
       rushedStats: null,
       fullyChargedStats: null,
       leadCompetitionStats: null,
+      duelingStats: null,
       spurtInfo: null,
       staminaStats: null,
       firstUmaStats: null,
       isSimulationRunning: false,
       simulationProgress: null,
       injectedDebuffs: { uma1: [], uma2: [] },
-      compareMode: DEFAULT_COMPARE_MODE,
       fieldSize: DEFAULT_FIELD_SIZE
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
-      version: 3,
+      // v4 drops `compareMode`: compare is contested-only (persisted 'vacuum'
+      // silently migrates away).
+      version: 4,
       migrate: (persistedState, version) => migrateComparePersisted(persistedState, version),
       partialize: (state) => ({
         injectedDebuffs: state.injectedDebuffs,
-        compareMode: state.compareMode,
         fieldSize: state.fieldSize
       })
     }
@@ -112,9 +102,9 @@ export const migrateComparePersisted = (
   };
 
   // v1 stored `fieldComposition: 'duo' | 'mobs'`; v2 stored
-  // `fillWithMobs: boolean`; v3 stores the explicit `fieldSize` (total gates).
-  // Legacy "pad with mobs" maps to the classic 9-field; "no padding" maps to
-  // the minimum (2 — never pads).
+  // `fillWithMobs: boolean`; v3+ stores the explicit `fieldSize` (total
+  // gates). v4 drops `compareMode` entirely (contested-only compare); any
+  // persisted 'vacuum' from v3 is silently discarded.
   let fieldSize: number;
   if (version >= 3) {
     fieldSize = clampFieldSize(state.fieldSize ?? DEFAULT_FIELD_SIZE);
@@ -129,26 +119,12 @@ export const migrateComparePersisted = (
 
   return {
     injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
-    compareMode: isCompareMode(state.compareMode) ? state.compareMode : DEFAULT_COMPARE_MODE,
     fieldSize
   } satisfies PersistedRaceStore;
 };
 
 export const setCompareSeed = (seed: number | null) => {
   useRaceStore.setState({ seed });
-};
-
-export const setCompareMode = (compareMode: CompareMode) => {
-  // Vacuum is only valid for a duo field; growing the field forces contested.
-  if (compareMode === 'vacuum' && !canUseVacuum(useRunnersStore.getState().runners.length)) {
-    return;
-  }
-  useRaceStore.setState({ compareMode });
-};
-
-/** Force contested compare — called by the runners store when the field grows past a duo. */
-export const forceContestedForField = () => {
-  useRaceStore.setState({ compareMode: 'contested' });
 };
 
 export const setFieldSize = (fieldSize: number) => {
@@ -175,6 +151,7 @@ export const setResults = (results: CompareResult) => {
     rushedStats: results.rushedStats,
     fullyChargedStats: results.fullyChargedStats,
     leadCompetitionStats: results.leadCompetitionStats,
+    duelingStats: results.duelingStats,
     spurtInfo: results.spurtInfo ?? undefined,
     staminaStats: results.staminaStats,
     firstUmaStats: results.firstUmaStats
@@ -201,6 +178,7 @@ export const resetResults = () => {
     rushedStats: null,
     fullyChargedStats: null,
     leadCompetitionStats: null,
+    duelingStats: null,
     spurtInfo: null,
     staminaStats: null,
     firstUmaStats: null,
@@ -289,7 +267,6 @@ export const useDebuffs = (): InjectedDebuffsMap => {
 export const useCompareSettings = () => {
   return useRaceStore(
     useShallow((state) => ({
-      compareMode: state.compareMode,
       fieldSize: state.fieldSize
     }))
   );

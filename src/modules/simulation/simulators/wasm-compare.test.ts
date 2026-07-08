@@ -6,7 +6,6 @@ import { createRunnerState } from '@/modules/runners/components/runner-card/type
 import type { CompareParams } from '@/modules/simulation/types';
 import type {
   WasmCompareData,
-  WasmCompareParams,
   WasmCompareRoundData,
   WasmContestedCompareParams
 } from '@/lib/uma-sim-wasm/types';
@@ -17,14 +16,12 @@ import {
   splitContestedCompareRounds,
   type ComparePlan
 } from './wasm-compare';
-import { runCompare, runContestedCompare } from '@/lib/uma-sim-wasm/loader';
+import { runContestedCompare } from '@/lib/uma-sim-wasm/loader';
 
 vi.mock('@/lib/uma-sim-wasm/loader', () => ({
-  runCompare: vi.fn(),
   runContestedCompare: vi.fn()
 }));
 
-const mockedRunCompare = vi.mocked(runCompare);
 const mockedRunContestedCompare = vi.mocked(runContestedCompare);
 
 const course: CourseData = {
@@ -146,18 +143,8 @@ function wasmData(rounds: Array<WasmCompareRoundData[]>): WasmCompareData {
 }
 
 describe('buildComparePlan', () => {
-  it('builds the vacuum plan shape by default', () => {
-    const plan = buildComparePlan(compareParams());
-
-    expect(plan.mode).toBe('vacuum');
-    if (plan.mode !== 'vacuum') throw new Error('expected vacuum plan');
-    expect(plan.wasmParamsA.masterSeed).toBe(42);
-    expect(plan.wasmParamsB.masterSeed).toBe(42);
-    expect(plan.nsamples).toBe(8);
-  });
-
   it('builds the contested plan shape with both runners in one envelope', () => {
-    const plan = buildComparePlan(compareParams(), { mode: 'contested', fieldSize: 9 });
+    const plan = buildComparePlan(compareParams(), { fieldSize: 9 });
 
     expect(plan.mode).toBe('contested');
     if (plan.mode !== 'contested') throw new Error('expected contested plan');
@@ -172,7 +159,6 @@ describe('buildComparePlan', () => {
 
   it('includes context runners after the compared pair and skips mob padding when the field is full', () => {
     const plan = buildComparePlan(compareParams(), {
-      mode: 'contested',
       fieldSize: 2,
       contextRunners: [createRunnerState(), createRunnerState(), createRunnerState()]
     });
@@ -236,31 +222,8 @@ describe('runComparisonRoundsFromPlan', () => {
     expect(mockedRunContestedCompare).toHaveBeenCalledWith(
       expect.objectContaining({ masterSeed: 102, nsamples: 1 })
     );
-    expect(mockedRunCompare).not.toHaveBeenCalled();
     expect(rounds.roundsA).toHaveLength(1);
     expect(rounds.roundsB).toHaveLength(1);
-  });
-
-  it('keeps vacuum chunk seed inputs deterministic across split chunks', async () => {
-    mockedRunCompare.mockResolvedValue(wasmData([[wasmRunner(0)], [wasmRunner(0)]]));
-
-    const plan: ComparePlan = {
-      mode: 'vacuum',
-      wasmParamsA: {} as WasmCompareParams,
-      wasmParamsB: {} as WasmCompareParams,
-      nsamples: 4,
-      baseSeed: 10
-    };
-
-    await runComparisonRoundsFromPlan(plan, 2, 0);
-    await runComparisonRoundsFromPlan(plan, 2, 2);
-
-    expect(mockedRunCompare.mock.calls.map(([params]) => [params.masterSeed, params.nsamples])).toEqual([
-      [10, 2],
-      [10, 2],
-      [12, 2],
-      [12, 2]
-    ]);
   });
 });
 
@@ -272,6 +235,7 @@ describe('reduceCompareRoundsPublic', () => {
           collectedRunner(0, {
             firstPositionInLateRace: true,
             spotStruggleRegion: [200, 220],
+            duelingRegion: [400, 450],
             position: [0, 105]
           }),
           collectedRunner(0, {
@@ -302,5 +266,9 @@ describe('reduceCompareRoundsPublic', () => {
     expect(results.leadCompetitionStats.uma2.frequency).toBe(100);
     expect(results.leadCompetitionStats.uma1.mean).toBe(17.5);
     expect(results.leadCompetitionStats.uma2.mean).toBe(19);
+    // Dueling triggered in 1 of 2 A-rounds (50m long), never for B.
+    expect(results.duelingStats.uma1.frequency).toBe(50);
+    expect(results.duelingStats.uma1.mean).toBe(50);
+    expect(results.duelingStats.uma2.frequency).toBe(0);
   });
 });

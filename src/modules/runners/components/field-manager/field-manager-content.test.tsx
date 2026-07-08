@@ -7,7 +7,6 @@ import { FieldManagerContent } from './field-manager-content';
 import { useRunnersStore, MAX_RUNNERS, MIN_RUNNERS } from '@/store/runners.store';
 import {
   useRaceStore,
-  DEFAULT_COMPARE_MODE,
   DEFAULT_FIELD_SIZE,
   MIN_FIELD_SIZE
 } from '@/modules/simulation/stores/compare.store';
@@ -33,7 +32,6 @@ const resetStores = () => {
   localStorage.clear();
   seedField(2);
   useRaceStore.setState({
-    compareMode: DEFAULT_COMPARE_MODE,
     fieldSize: DEFAULT_FIELD_SIZE
   });
 };
@@ -95,14 +93,9 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(state.compareB).toBe('r-1');
   });
 
-  it('hides the vacuum mode control at 3+ runners', () => {
-    seedField(2);
-    const { unmount } = render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
-    expect(screen.getByRole('radiogroup', { name: /compare mode/i })).toBeInTheDocument();
-    unmount();
-
-    seedField(3);
+  it('does not render a compare mode control', () => {
     render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+
     expect(screen.queryByRole('radiogroup', { name: /compare mode/i })).not.toBeInTheDocument();
   });
 

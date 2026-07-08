@@ -1,9 +1,9 @@
 // Contested field (2..=12 compare) — architectural intent.
 //
 // The collapse this prevents: an agent "unifying" the two field regimes
-// (race-sim's exact-9 and contested-compare's 2..=12) into one constant, or
-// letting vacuum mode survive on a grown field, or reordering the compare
-// pair in engine params so the trace split silently swaps A and B.
+// (race-sim's exact-9 and contested-compare's 2..=12) into one constant,
+// reintroducing a compare-mode branch to the user-facing flow, or reordering
+// the compare pair in engine params so the trace split silently swaps A and B.
 //
 // RaceSimField and ContestedField are deliberately DISTINCT sorts: a law
 // about one cannot be stated about the other, so "reuse the 9 check for
@@ -37,12 +37,12 @@ law mob_fill_valid(r) {
   r.fillTarget <= 12
 }
 
-// Compare mode: 0 = contested, 1 = vacuum.
-// Vacuum is only a valid mode for a field of exactly 2.
+// Compare mode: 0 = contested. The user-facing compare flow has no vacuum mode;
+// batch vacuum engine paths remain only for planner/basin sims outside this intent.
 sort CompareRun { fieldSize: Int, mode: Int }
-relation vacuum_gate(run: CompareRun)
-law vacuum_gate(run) {
-  run.mode == 1 => run.fieldSize == 2
+relation compare_flow_contested_only(run: CompareRun)
+law compare_flow_contested_only(run) {
+  run.mode == 0
 }
 
 // Engine param ordering: Compare A is inserted first (index 0), B second
@@ -55,12 +55,11 @@ law pair_insertion_order(o) {
   o.bIndex == 1
 }
 
-// Legacy snapshot decode: a snapshot with no compareMode field predates the
-// contested engine and MUST decode to vacuum (mode 1) with a 2-runner field,
-// so historical shared results stay reproducible.
+// Legacy/vacuum snapshot decode: removed-vacuum shares MUST decode to contested
+// (mode 0) with a 2-runner field, the closest surviving head-to-head analogue.
 sort LegacyDecode { mode: Int, fieldSize: Int }
 relation legacy_snapshot_decode(d: LegacyDecode)
 law legacy_snapshot_decode(d) {
-  d.mode == 1
+  d.mode == 0
   d.fieldSize == 2
 }

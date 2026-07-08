@@ -101,7 +101,7 @@ describe('parseSnapshotJson', () => {
     expect(parseSnapshotJson(JSON.stringify(future))).toBeNull();
   });
 
-  it('imports a v1 legacy snapshot, mapping fieldComposition → field size', () => {
+  it('imports a v1 legacy snapshot as contested head-to-head with a coercion flag', () => {
     const v1Mobs = {
       version: 1,
       ...legacyCommon,
@@ -115,14 +115,17 @@ describe('parseSnapshotJson', () => {
     expect(parsedMobs?.compareA).toBe(0);
     expect(parsedMobs?.compareB).toBe(1);
     expect(parsedMobs?.compareMode).toBe('contested');
-    expect(parsedMobs?.fieldSize).toBe(9);
+    expect(parsedMobs?.fieldSize).toBe(2);
+    expect(parsedMobs?.coercedFromVacuum).toBe(true);
 
     const v1Duo = { ...v1Mobs, fieldComposition: 'duo' };
     const parsedDuo = parseSnapshotJson(JSON.stringify(v1Duo));
+    expect(parsedDuo?.compareMode).toBe('contested');
     expect(parsedDuo?.fieldSize).toBe(2);
+    expect(parsedDuo?.coercedFromVacuum).toBe(true);
   });
 
-  it('imports a pre-versioned legacy snapshot in vacuum mode', () => {
+  it('imports a pre-versioned legacy snapshot as contested head-to-head with a coercion flag', () => {
     const legacy = {
       ...legacyCommon,
       uma1: createRunnerState(),
@@ -133,7 +136,23 @@ describe('parseSnapshotJson', () => {
 
     expect(parsed?.version).toBe(SIMULATION_SNAPSHOT_VERSION);
     expect(parsed?.runners).toHaveLength(2);
-    expect(parsed?.compareMode).toBe('vacuum');
-    expect(parsed?.fieldSize).toBe(9);
+    expect(parsed?.compareMode).toBe('contested');
+    expect(parsed?.fieldSize).toBe(2);
+    expect(parsed?.coercedFromVacuum).toBe(true);
+  });
+
+  it('coerces a v2 vacuum snapshot to contested head-to-head with a coercion flag', () => {
+    const parsed = parseSnapshotJson(
+      JSON.stringify(
+        snapshot({
+          compareMode: 'vacuum',
+          fieldSize: 12
+        })
+      )
+    );
+
+    expect(parsed?.compareMode).toBe('contested');
+    expect(parsed?.fieldSize).toBe(2);
+    expect(parsed?.coercedFromVacuum).toBe(true);
   });
 });

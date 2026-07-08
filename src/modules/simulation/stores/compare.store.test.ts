@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canUseVacuum,
   clampFieldSize,
   migrateComparePersisted,
   DEFAULT_FIELD_SIZE,
@@ -14,7 +13,7 @@ describe('migrateComparePersisted', () => {
       1
     );
     expect(migrated.fieldSize).toBe(DEFAULT_FIELD_SIZE);
-    expect(migrated.compareMode).toBe('contested');
+    expect(migrated).not.toHaveProperty('compareMode');
   });
 
   it('maps v1 fieldComposition "duo" to the minimum field size (no padding)', () => {
@@ -28,7 +27,7 @@ describe('migrateComparePersisted', () => {
   it('defaults to the default field size when fieldComposition is absent (v1)', () => {
     const migrated = migrateComparePersisted({ compareMode: 'vacuum' }, 1);
     expect(migrated.fieldSize).toBe(DEFAULT_FIELD_SIZE);
-    expect(migrated.compareMode).toBe('vacuum');
+    expect(migrated).not.toHaveProperty('compareMode');
   });
 
   it('maps v2 fillWithMobs booleans to field sizes', () => {
@@ -56,13 +55,5 @@ describe('clampFieldSize', () => {
     expect(clampFieldSize(13)).toBe(12);
     expect(clampFieldSize(9.6)).toBe(10);
     expect(clampFieldSize(Number.NaN)).toBe(DEFAULT_FIELD_SIZE);
-  });
-});
-
-describe('canUseVacuum', () => {
-  it('allows vacuum only for a duo field', () => {
-    expect(canUseVacuum(2)).toBe(true);
-    expect(canUseVacuum(3)).toBe(false);
-    expect(canUseVacuum(12)).toBe(false);
   });
 });

@@ -7,8 +7,7 @@ import {
   DEFAULT_FIELD_SIZE,
   MIN_FIELD_SIZE,
   resetResults,
-  useRaceStore,
-  type CompareMode
+  useRaceStore
 } from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
@@ -49,7 +48,7 @@ function buildSnapshot(): SimulationSnapshot {
     racedef: cloneDeep(settings.racedef),
     seed: race.seed,
     nsamples: settings.nsamples,
-    compareMode: race.compareMode,
+    compareMode: 'contested',
     fieldSize: race.fieldSize,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
@@ -97,10 +96,6 @@ function isRaceConditions(value: unknown): boolean {
     typeof value.time === 'number' &&
     typeof value.grade === 'number'
   );
-}
-
-function isCompareMode(value: unknown): value is CompareMode {
-  return value === 'contested' || value === 'vacuum';
 }
 
 function isWitVariance(value: unknown): boolean {
@@ -192,11 +187,14 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
   if (compareB < 0 || compareB >= runners.length) return null;
   if (compareA === compareB) return null;
 
-  const compareMode = isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
+  const coercedFromVacuum = parsed.compareMode !== 'contested';
   // Newer v2 snapshots carry `fieldSize`; older v2 snapshots carried
-  // `fillWithMobs: boolean` (pad-to-9 vs no padding).
-  const fieldSize =
-    typeof parsed.fieldSize === 'number'
+  // `fillWithMobs: boolean` (pad-to-9 vs no padding). Removed vacuum shares
+  // decode to the closest surviving analogue: contested head-to-head with no
+  // mob fill.
+  const fieldSize = coercedFromVacuum
+    ? MIN_FIELD_SIZE
+    : typeof parsed.fieldSize === 'number'
       ? clampFieldSize(parsed.fieldSize)
       : typeof parsed.fillWithMobs === 'boolean'
         ? parsed.fillWithMobs
@@ -210,13 +208,14 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
     runners,
     compareA,
     compareB,
-    compareMode,
+    compareMode: 'contested',
+    coercedFromVacuum: coercedFromVacuum || undefined,
     fieldSize
   };
 }
 
 /** Decode the legacy `{ uma1, uma2 }` pair shape (v1 and pre-versioned). */
-function parseLegacyPair(parsed: Record<string, unknown>, versioned: boolean): SimulationSnapshot | null {
+function parseLegacyPair(parsed: Record<string, unknown>): SimulationSnapshot | null {
   const common = parseCommonFields(parsed);
   if (!common) return null;
   if (!isRunnerState(parsed.uma1)) return null;
@@ -224,20 +223,18 @@ function parseLegacyPair(parsed: Record<string, unknown>, versioned: boolean): S
   const uma1 = parsed.uma1 as IRunnerState;
   const uma2 = isRunnerState(parsed.uma2) ? (parsed.uma2 as IRunnerState) : createRunnerState();
 
-  // Pre-versioned snapshots have no compare settings → vacuum. v1 carries an
-  // explicit compareMode + fieldComposition ('duo'|'mobs').
-  const compareMode = versioned && isCompareMode(parsed.compareMode) ? parsed.compareMode : 'vacuum';
-  const fieldSize =
-    versioned && parsed.fieldComposition === 'duo' ? MIN_FIELD_SIZE : DEFAULT_FIELD_SIZE;
-
+  // Pair-shape snapshots predate the contested-only compare flow. Import them
+  // as contested head-to-head with no mob fill and warn that results differ
+  // from the removed vacuum mode.
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
     ...common,
     runners: [uma1, uma2],
     compareA: 0,
     compareB: 1,
-    compareMode,
-    fieldSize
+    compareMode: 'contested',
+    coercedFromVacuum: true,
+    fieldSize: MIN_FIELD_SIZE
   };
 }
 
@@ -257,10 +254,10 @@ export function parseSnapshotJson(raw: string): SimulationSnapshot | null {
     return parseV2(parsed);
   }
   if (version === 1) {
-    return parseLegacyPair(parsed, true);
+    return parseLegacyPair(parsed);
   }
   if (version === undefined) {
-    return parseLegacyPair(parsed, false);
+    return parseLegacyPair(parsed);
   }
   // Unknown / future version — refuse rather than silently mis-decode.
   return null;
@@ -292,7 +289,6 @@ export function importSnapshot(data: SimulationSnapshot): void {
 
   useRaceStore.setState({
     seed: data.seed,
-    compareMode: data.compareMode,
     fieldSize: clampFieldSize(data.fieldSize),
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });

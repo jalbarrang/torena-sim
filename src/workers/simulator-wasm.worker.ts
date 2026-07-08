@@ -1,6 +1,6 @@
 /**
- * WASM-backed Web Worker for the vacuum compare simulation. Mirrors
- * `simulator.worker.ts` but routes through the Rust/WASM `runCompare` engine.
+ * WASM-backed Web Worker for contested compare simulation. Mirrors
+ * `simulator.worker.ts` but routes through the Rust/WASM contested compare engine.
  */
 
 import '../polyfills';

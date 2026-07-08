@@ -9,6 +9,7 @@ export interface CompareResult {
   rushedStats: Stats;
   fullyChargedStats: Stats;
   leadCompetitionStats: Stats;
+  duelingStats: Stats;
   spurtInfo: null;
   staminaStats: StaminaStats;
   firstUmaStats: FirstUMAStats;

@@ -189,7 +189,7 @@ export const RunnersPanel = () => {
               size="sm"
               onClick={() => openManager(null)}
               aria-haspopup="dialog"
-              className="-mt-4 rounded-full bg-popover text-xs font-semibold shadow-sm"
+              className="rounded-full bg-popover text-xs font-semibold shadow-sm"
             >
               Field{' '}
               <span className="font-medium text-muted-foreground tabular-nums">
@@ -202,8 +202,7 @@ export const RunnersPanel = () => {
               onClick={handleResetAll}
               title="Reset the field back to two default runners"
               size="sm"
-              variant="ghost"
-              className="text-muted-foreground"
+              variant="destructive"
             >
               Reset field
             </Button>
@@ -297,6 +296,7 @@ export const RunnersPanel = () => {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => {
                 resetAllRunners();
                 setResetConfirmOpen(false);

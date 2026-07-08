@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { toast } from 'sonner';
 import { useShallow } from 'zustand/shallow';
 import { copyScreenshot, getSkillsForShareCard } from '@/modules/runners/share/share-actions';
 import { useRaceStore } from '@/modules/simulation/stores/compare.store';
@@ -15,6 +16,58 @@ import { formatTime } from '@/utils/time';
 import type { RaceConditions } from '@/utils/races';
 import type { SimulationData, SimulationRun } from '@/modules/simulation/compare.types';
 import type { CompareShareCardProps, CompareShareStatRow } from './compare-share-card';
+
+/**
+ * Download the current compare results as a JSON file. The payload nests the
+ * reduced `CompareResult` under `data.results` so existing analysis tooling
+ * (e.g. `results/analyze-contested.py`) can read exports and hand-captured
+ * worker payloads with the same code path.
+ */
+export function downloadCompareResults(filename?: string): void {
+  const race = useRaceStore.getState();
+  if (race.results.length === 0) {
+    toast.error('No compare results to export - run a simulation first');
+    return;
+  }
+  try {
+    const payload = {
+      type: 'compare',
+      exportedAt: new Date().toISOString(),
+      meta: {
+        seed: race.seed,
+        compareMode: 'contested',
+        fieldSize: race.fieldSize,
+        courseId: useSettingsStore.getState().courseId,
+        samples: race.results.length
+      },
+      data: {
+        type: 'compare',
+        results: {
+          results: race.results,
+          runData: race.runData,
+          rushedStats: race.rushedStats,
+          fullyChargedStats: race.fullyChargedStats,
+          leadCompetitionStats: race.leadCompetitionStats,
+          duelingStats: race.duelingStats,
+          spurtInfo: race.spurtInfo,
+          staminaStats: race.staminaStats,
+          firstUmaStats: race.firstUmaStats
+        }
+      }
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename ?? `umalator-results-contested-${race.seed ?? 'noseed'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Simulation results downloaded');
+  } catch {
+    toast.error('Failed to export simulation results');
+  }
+}
 
 function resolveCompareChartData(race: {
   chartData: SimulationRun | null;
@@ -61,7 +114,6 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
       leadCompetitionStats: s.leadCompetitionStats,
       staminaStats: s.staminaStats,
       seed: s.seed,
-      compareMode: s.compareMode,
       fieldSize: s.fieldSize
     }))
   );
@@ -108,10 +160,7 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
     const imageUrl = getUmaImageUrl(runner.outfitId, runner.randomMobId);
     const skills = getSkillsForShareCard(runner.skills);
 
-    const compareSummary =
-      race.compareMode === 'contested'
-        ? `Same race · field of ${race.fieldSize}`
-        : 'Vacuum · isolated runners';
+    const compareSummary = `Same race · field of ${race.fieldSize}`;
     const raceSummary = `${getRaceSettingsSummaryLine(courseId, racedef)} · ${compareSummary}`;
 
     const statRows: CompareShareStatRow[] = [
