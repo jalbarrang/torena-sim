@@ -126,16 +126,22 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
     return null;
   }
 
+  // Fixed-width columns: the strip is right-aligned in the legend row, so a
+  // variable width would shift the whole line on every tick (HP digits, P8 vs
+  // P10, gap wording). Constant column widths keep the text still while
+  // sweeping the cursor.
   return (
     <div
       id="racetrack-tooltip"
       className="flex items-center gap-3 whitespace-nowrap px-2 font-mono text-[11px] tabular-nums"
     >
-      {tooltipData.v1Text && <span style={{ color: '#2a77c5' }}>{tooltipData.v1Text}</span>}
-      {tooltipData.v2Text && <span style={{ color: '#c52a2a' }}>{tooltipData.v2Text}</span>}
-      {tooltipData.gapText && (
-        <span className="text-muted-foreground">{tooltipData.gapText}</span>
-      )}
+      <span className="min-w-[220px]" style={{ color: '#2a77c5' }}>
+        {tooltipData.v1Text}
+      </span>
+      <span className="min-w-[220px]" style={{ color: '#c52a2a' }}>
+        {tooltipData.v2Text}
+      </span>
+      <span className="min-w-[110px] text-muted-foreground">{tooltipData.gapText}</span>
     </div>
   );
 }
