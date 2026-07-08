@@ -345,21 +345,31 @@ impl RaceObserver for CompareObserver {
         );
         let d = &mut state.data;
         d.start_delay = runner.start_delay();
-        d.rushed = runner.rushed_activations();
+        // Region ends recorded on the finish-crossing frame can overshoot the
+        // course distance (positions advance ~1.4m per frame); clamp every
+        // region channel to the track so read-models never extend past it.
+        d.rushed = runner
+            .rushed_activations()
+            .into_iter()
+            .map(|(s, e)| (s.min(distance), e.min(distance)))
+            .collect();
         let duel_start = runner.dueling_start_position();
         d.dueling_region = if duel_start >= 0.0 {
             let end = runner.dueling_end_position();
-            Some((duel_start, if end >= 0.0 { end } else { distance }))
+            let end = if end >= 0.0 { end } else { distance };
+            Some((duel_start.min(distance), end.min(distance)))
         } else {
             None
         };
         d.spot_struggle_region = runner.spot_struggle_start_position().map(|start| {
             let end = runner.spot_struggle_end_position();
-            (start, if end >= 0.0 { end } else { distance })
+            let end = if end >= 0.0 { end } else { distance };
+            (start.min(distance), end.min(distance))
         });
-        d.fully_charged_region = runner
-            .fully_charged_region()
-            .map(|(start, end)| (start, if end >= 0.0 { end } else { distance }));
+        d.fully_charged_region = runner.fully_charged_region().map(|(start, end)| {
+            let end = if end >= 0.0 { end } else { distance };
+            (start.min(distance), end.min(distance))
+        });
         d.fully_charged_accel = runner.fully_charged_accel();
         d.has_achieved_full_spurt = runner.has_achieved_full_spurt();
         d.out_of_hp = runner.out_of_hp();
