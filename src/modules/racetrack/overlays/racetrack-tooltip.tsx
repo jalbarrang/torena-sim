@@ -137,7 +137,7 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
       <rect
         x={0}
         y={0}
-        width={160}
+        width={205}
         height={rectHeight}
         fill="var(--background)"
         stroke="var(--border)"
