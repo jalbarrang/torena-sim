@@ -15,11 +15,12 @@ export function useSkillTooltip() {
     if (!g || !bg || !textEl) return;
 
     // SVG paints in document order (no z-index): raise the hovered marker's
-    // group chain to the end of each parent so the tooltip is not covered by
-    // sibling chips rendered after it. Stops at the skill-section <svg>.
+    // element chain (markers are nested <svg>s) to the end of each parent so
+    // the tooltip is never covered by chips rendered after it. Climbs until
+    // the root `.racetrackView` svg.
     let node: Element = g;
-    while (node.parentElement && !(node.parentNode instanceof SVGSVGElement)) {
-      const parent = node.parentNode as Element;
+    while (node.parentElement && !node.parentElement.classList.contains('racetrackView')) {
+      const parent = node.parentElement;
       if (parent.lastElementChild !== node) {
         parent.appendChild(node);
       }
