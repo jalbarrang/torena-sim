@@ -254,7 +254,10 @@ export const OverviewTab = () => {
                     <Activity mode={rushedStats && showRushed ? 'visible' : 'hidden'}>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5">
-                          <span className="text-base leading-none">💦</span> Rushed
+                          <span className="text-base leading-none" title="ε=ε=┌(;￣▽￣)┘">
+                            💦
+                          </span>{' '}
+                          Rushed
                         </span>
 
                         <span className="font-mono font-medium">
