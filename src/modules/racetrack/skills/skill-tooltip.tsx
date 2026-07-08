@@ -22,7 +22,7 @@ export function useSkillTooltip() {
     while (node.parentElement && !node.parentElement.classList.contains('racetrackView')) {
       const parent = node.parentElement;
       if (parent.lastElementChild !== node) {
-        parent.appendChild(node);
+        parent.append(node);
       }
       node = parent;
     }
