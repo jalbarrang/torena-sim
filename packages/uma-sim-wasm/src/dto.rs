@@ -872,9 +872,11 @@ pub struct WasmContestedCompareParams {
     pub fill_to: Option<usize>,
     /// Deprecated back-compat shim: legacy `fillMobs: true` maps to
     /// `fill_to: Some(9)` when `fillTo` is absent. Retire once the store
-    /// plan migrates callers to `fillTo`.
+    /// plan migrates callers to `fillTo`. `Option` so a present-but-`undefined`
+    /// value from the JS boundary deserializes to `None` (serde only applies
+    /// `default` to absent keys, not explicit unit values).
     #[serde(default)]
-    pub fill_mobs: bool,
+    pub fill_mobs: Option<bool>,
     /// Flat stat line for fill mobs. Omit for the default (600).
     #[serde(default)]
     pub mob_stats: Option<i32>,
@@ -900,8 +902,8 @@ impl WasmContestedCompareParams {
         // explicit `fillTo` is given (back-compat shim, see field docs).
         let fill_to = match (self.fill_to, self.fill_mobs) {
             (Some(n), _) => Some(n),
-            (None, true) => Some(9),
-            (None, false) => None,
+            (None, Some(true)) => Some(9),
+            (None, Some(false) | None) => None,
         };
         Ok(ContestedCompareParams {
             course,
@@ -1579,7 +1581,7 @@ mod tests {
         )
         .expect("contested compare params deserialize with default fillMobs");
 
-        assert!(!dto.fill_mobs);
+        assert_eq!(dto.fill_mobs, None);
         assert_eq!(dto.fill_to, None);
         let domain = dto.into_domain().expect("params convert to domain");
         assert_eq!(domain.fill_to, None);
