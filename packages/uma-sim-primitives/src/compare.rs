@@ -38,6 +38,8 @@ pub struct CompareRoundData {
     pub current_lane: Vec<f64>,
     /// Per-tick gap to the pacer.
     pub pacer_gap: Vec<f64>,
+    /// Per-tick race order (1-based rank; 0 when the engine does not track it).
+    pub order: Vec<i64>,
     /// Self-cast skill-effect activation logs, keyed by skill id.
     pub skill_activations: HashMap<String, Vec<SkillEffectLog>>,
     /// Externally-targeted skill-effect activation logs, keyed by skill id.
@@ -233,6 +235,10 @@ impl RaceObserver for CompareObserver {
         state.data.hp.push(runner.current_health());
         state.data.current_lane.push(runner.current_lane());
         state.data.pacer_gap.push(pacer_gap);
+        state
+            .data
+            .order
+            .push(race.runner_order(runner.id()).unwrap_or(0));
 
         // --- duration-effect reconcile (self + targeted) ---
         let self_counts = count_effects(&active);

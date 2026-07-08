@@ -53,11 +53,16 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
       const hp1 = chartData.hp[0][safeI0];
       const v2 = chartData.velocity[1][safeI1];
       const hp2 = chartData.hp[1][safeI1];
+      // Per-tick race rank (1-based; 0 = untracked, e.g. legacy results).
+      const rank1 = chartData.order?.[0]?.[safeI0] ?? 0;
+      const rank2 = chartData.order?.[1]?.[safeI1] ?? 0;
+      const rank1Text = rank1 > 0 ? ` P${rank1}` : '';
+      const rank2Text = rank2 > 0 ? ` P${rank2}` : '';
       const v1Text = showVelocityUma1
-        ? `${v1.toFixed(2)}m/s t=${t1.toFixed(2)}s (${hp1.toFixed(0)} HP remaining)`
+        ? `${v1.toFixed(2)}m/s t=${t1.toFixed(2)}s${rank1Text} (${hp1.toFixed(0)} HP remaining)`
         : null;
       const v2Text = showVelocityUma2
-        ? `${v2.toFixed(2)}m/s t=${t2.toFixed(2)}s (${hp2.toFixed(0)} HP remaining)`
+        ? `${v2.toFixed(2)}m/s t=${t2.toFixed(2)}s${rank2Text} (${hp2.toFixed(0)} HP remaining)`
         : null;
 
       // Head-to-head standing at the observed tick: when the LEADER passes

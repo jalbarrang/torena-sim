@@ -1255,6 +1255,8 @@ pub struct WasmCompareRoundData {
     pub current_lane: Vec<f64>,
     /// Per-tick gap to the pacer.
     pub pacer_gap: Vec<f64>,
+    /// Per-tick race order (1-based rank; 0 when untracked).
+    pub order: Vec<i64>,
     /// Self-cast skill-effect activation logs, keyed by skill id.
     pub skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
     /// Externally-targeted skill-effect activation logs, keyed by skill id.
@@ -1308,6 +1310,7 @@ impl From<&CompareRoundData> for WasmCompareRoundData {
             hp: d.hp.clone(),
             current_lane: d.current_lane.clone(),
             pacer_gap: d.pacer_gap.clone(),
+            order: d.order.clone(),
             skill_activations: skill_activation_map_to_wasm(&d.skill_activations),
             targeted_skill_activations: skill_activation_map_to_wasm(&d.targeted_skill_activations),
             start_delay: d.start_delay,

@@ -131,6 +131,9 @@ impl RaceObservation for Race {
     fn pacer_position(&self) -> Option<f64> {
         self.order_tracker.pacer_position
     }
+    fn runner_order(&self, id: RunnerId) -> Option<i64> {
+        self.order_tracker.runner_order.get(&id).copied()
+    }
     fn seed(&self) -> u64 {
         self.seed
     }

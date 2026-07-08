@@ -57,6 +57,10 @@ pub trait RaceObservation {
     fn pacer_position(&self) -> Option<f64> {
         None
     }
+    /// The current race order (1-based rank) of the given runner, if tracked.
+    fn runner_order(&self, _id: RunnerId) -> Option<i64> {
+        None
+    }
     /// The seed driving the current round.
     fn seed(&self) -> u64 {
         0

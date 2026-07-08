@@ -556,6 +556,13 @@ mod tests {
             .runners
             .iter()
             .any(|runner| runner.spot_struggle_region.is_some()));
+
+        // Per-tick race order is recorded for focus runners (1-based rank,
+        // aligned with the time/position channels).
+        for runner in &data.rounds[0].runners {
+            assert_eq!(runner.order.len(), runner.time.len());
+            assert!(runner.order.iter().any(|&o| o >= 1));
+        }
     }
 
     #[test]

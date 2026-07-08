@@ -14,6 +14,7 @@ function roundWithPositions(
     hp: [],
     currentLane: [],
     pacerGap: [],
+    order: [],
     skillActivations: {},
     targetedSkillActivations: {},
     startDelay: 0,

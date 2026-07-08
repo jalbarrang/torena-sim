@@ -107,6 +107,7 @@ function reduceCompareRounds(
       hp: [roundA.hp, roundB.hp],
       currentLane: [roundA.currentLane, roundB.currentLane],
       pacerGap: [roundA.pacerGap, roundB.pacerGap],
+      order: [roundA.order, roundB.order],
       skillActivations: [roundA.skillActivations, roundB.skillActivations],
       targetedSkillActivations: [roundA.targetedSkillActivations, roundB.targetedSkillActivations],
       startDelay: [roundA.startDelay, roundB.startDelay],

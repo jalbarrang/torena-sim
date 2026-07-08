@@ -11,6 +11,7 @@ function baseRound(overrides: Partial<WasmCompareRoundData> = {}): WasmCompareRo
     hp: [900, 880],
     currentLane: [0, 0],
     pacerGap: [0, 0],
+    order: [0, 0],
     skillActivations: {},
     targetedSkillActivations: {},
     startDelay: 0.1,

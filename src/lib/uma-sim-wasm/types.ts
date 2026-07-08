@@ -215,6 +215,7 @@ export type WasmCompareRoundData = {
   hp: number[];
   currentLane: number[];
   pacerGap: number[];
+  order: number[];
   skillActivations: Record<string, WasmSkillEffectLog[]>;
   targetedSkillActivations: Record<string, WasmSkillEffectLog[]>;
   startDelay: number;
