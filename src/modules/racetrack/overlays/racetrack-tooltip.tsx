@@ -2,13 +2,21 @@ import { useCallback, useImperativeHandle, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import type { SimulationRun } from '@/modules/simulation/compare.types';
+import { useComparePairNames } from '@/modules/runners/hooks/use-compare-names';
 import { useRaceTrackDisplay } from '@/store/settings.store';
 import { binSearch } from '@/utils/algorithims';
 
+type UmaTick = {
+  velocity: string;
+  time: string;
+  rank: string;
+  hp: string;
+};
+
 export type TooltipData = {
-  v1Text: string | null;
-  v2Text: string | null;
-  gapText: string | null;
+  uma1: UmaTick | null;
+  uma2: UmaTick | null;
+  gap: string | null;
 };
 
 type RaceTrackTooltipProps = {
@@ -22,14 +30,32 @@ export type RaceTrackTooltipHandle = {
   hide: () => void;
 };
 
+const UMA_COLORS = ['#2a77c5', '#c52a2a'] as const;
+
+function umaTickAt(
+  chartData: SimulationRun,
+  umaIndex: 0 | 1,
+  safeIdx: number,
+  t: number
+): UmaTick {
+  const rank = chartData.order?.[umaIndex]?.[safeIdx] ?? 0;
+  return {
+    velocity: `${chartData.velocity[umaIndex][safeIdx].toFixed(2)}m/s`,
+    time: `${t.toFixed(2)}s`,
+    rank: rank > 0 ? `P${rank}` : '—',
+    hp: `${chartData.hp[umaIndex][safeIdx].toFixed(0)}`
+  };
+}
+
 /**
- * Hover readout for the racetrack. Renders as an HTML strip (placed in the
- * legend row by the parent) instead of an SVG overlay, so it never covers the
- * chart itself.
+ * Permanent hover-readout row for the racetrack. Always rendered with labeled
+ * columns (placeholder dashes when the cursor is off the track) so the layout
+ * never shifts, and never covers the chart.
  */
 export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
   const { chartData, course, ref } = props;
   const { showVelocityUma1, showVelocityUma2 } = useRaceTrackDisplay();
+  const names = useComparePairNames();
   const [tooltipData, setTooltipData] = useState<TooltipData | null>(null);
   const lastIndicesRef = useRef<{ i0: number; i1: number } | null>(null);
 
@@ -53,26 +79,13 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
       }
       lastIndicesRef.current = { i0: safeI0, i1: safeI1 };
 
-      const v1 = chartData.velocity[0][safeI0];
-      const hp1 = chartData.hp[0][safeI0];
-      const v2 = chartData.velocity[1][safeI1];
-      const hp2 = chartData.hp[1][safeI1];
-      // Per-tick race rank (1-based; 0 = untracked, e.g. legacy results).
-      const rank1 = chartData.order?.[0]?.[safeI0] ?? 0;
-      const rank2 = chartData.order?.[1]?.[safeI1] ?? 0;
-      const rank1Text = rank1 > 0 ? ` P${rank1}` : '';
-      const rank2Text = rank2 > 0 ? ` P${rank2}` : '';
-      const v1Text = showVelocityUma1
-        ? `${v1.toFixed(2)}m/s t=${t1.toFixed(2)}s${rank1Text} (${hp1.toFixed(0)} HP)`
-        : null;
-      const v2Text = showVelocityUma2
-        ? `${v2.toFixed(2)}m/s t=${t2.toFixed(2)}s${rank2Text} (${hp2.toFixed(0)} HP)`
-        : null;
+      const uma1 = showVelocityUma1 ? umaTickAt(chartData, 0, safeI0, t1) : null;
+      const uma2 = showVelocityUma2 ? umaTickAt(chartData, 1, safeI1, t2) : null;
 
       // Head-to-head standing at the observed tick: when the LEADER passes
       // the hovered distance, how far back is the other runner? (1 length =
       // 2.5m, same conversion as the bashin delta.)
-      let gapText: string | null = null;
+      let gap: string | null = null;
       if (showVelocityUma1 && showVelocityUma2) {
         const leader = t1 <= t2 ? 0 : 1;
         const trailer = 1 - leader;
@@ -86,19 +99,14 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
           const gapMeters = Math.max(0, x - trailerPos);
           const gapLengths = gapMeters / 2.5;
           const leaderName = leader === 0 ? 'A' : 'B';
-          gapText =
+          gap =
             gapMeters < 0.05
-              ? 'Even here'
+              ? 'even'
               : `${leaderName} +${gapLengths.toFixed(1)}L (${gapMeters.toFixed(1)}m)`;
         }
       }
 
-      setTooltipData((prev) => {
-        if (prev?.v1Text === v1Text && prev?.v2Text === v2Text && prev?.gapText === gapText) {
-          return prev;
-        }
-        return { v1Text, v2Text, gapText };
-      });
+      setTooltipData({ uma1, uma2, gap });
     },
     [chartData, course.distance, showVelocityUma1, showVelocityUma2]
   );
@@ -117,31 +125,57 @@ export function RaceTrackTooltip(props: RaceTrackTooltipProps) {
     [updateFromPositionRatio, hide]
   );
 
-  if (!tooltipData) {
-    return null;
-  }
+  const segments: Array<{ name: string; color: string; tick: UmaTick | null; shown: boolean }> = [
+    { name: names.uma1, color: UMA_COLORS[0], tick: tooltipData?.uma1 ?? null, shown: showVelocityUma1 },
+    { name: names.uma2, color: UMA_COLORS[1], tick: tooltipData?.uma2 ?? null, shown: showVelocityUma2 }
+  ];
 
-  const hasLine = tooltipData.v1Text || tooltipData.v2Text;
-  if (!hasLine) {
-    return null;
-  }
-
-  // Fixed-width columns: the strip is right-aligned in the legend row, so a
-  // variable width would shift the whole line on every tick (HP digits, P8 vs
-  // P10, gap wording). Constant column widths keep the text still while
-  // sweeping the cursor.
   return (
     <div
       id="racetrack-tooltip"
-      className="flex items-center gap-3 whitespace-nowrap px-2 font-mono text-[11px] tabular-nums"
+      className="flex min-h-6 flex-wrap items-center gap-x-6 gap-y-1 border-t px-2 pt-1.5 text-[11px]"
     >
-      <span className="min-w-[220px]" style={{ color: '#2a77c5' }}>
-        {tooltipData.v1Text}
-      </span>
-      <span className="min-w-[220px]" style={{ color: '#c52a2a' }}>
-        {tooltipData.v2Text}
-      </span>
-      <span className="min-w-[110px] text-muted-foreground">{tooltipData.gapText}</span>
+      {segments.map((segment) => (
+        <div key={segment.color} className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block size-2 rounded-full"
+              style={{ backgroundColor: segment.color, opacity: segment.shown ? 1 : 0.3 }}
+            />
+            <span className="max-w-32 truncate font-medium">{segment.name}</span>
+          </span>
+          <span className="font-mono tabular-nums text-muted-foreground">
+            <ReadoutField label="spd" value={segment.tick?.velocity} width="min-w-16" />
+            <ReadoutField label="t" value={segment.tick?.time} width="min-w-14" />
+            <ReadoutField label="pos" value={segment.tick?.rank} width="min-w-8" />
+            <ReadoutField label="hp" value={segment.tick?.hp} width="min-w-10" />
+          </span>
+        </div>
+      ))}
+
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Gap</span>
+        <span className="inline-block min-w-28 font-mono tabular-nums text-muted-foreground">
+          {tooltipData?.gap ?? '—'}
+        </span>
+      </div>
     </div>
+  );
+}
+
+type ReadoutFieldProps = {
+  label: string;
+  value: string | undefined;
+  width: string;
+};
+
+function ReadoutField(props: ReadoutFieldProps) {
+  const { label, value, width } = props;
+  return (
+    <span className="mr-3 inline-flex items-baseline gap-1">
+      <span className="text-[10px] uppercase tracking-wide opacity-60">{label}</span>
+      <span className={`inline-block ${width}`}>{value ?? '—'}</span>
+    </span>
   );
 }
