@@ -4,6 +4,7 @@ import { getActiveDragPreview, useDragSkill } from './hooks/useDragSkill';
 import { coursesService } from '@/modules/data/services/CourseService';
 import { useVisualizationData } from './hooks/useVisualizationData';
 import { updateDebuffPosition } from '../simulation/stores/compare.store';
+import { useRaceTrackDisplay } from '@/store/settings.store';
 import { setForcedPosition } from '../simulation/stores/forced-positions.store';
 import {
   setForcedRushed,
@@ -15,7 +16,6 @@ import {
 
 import { VelocityPaths } from './overlays/velocity-paths';
 import { ThresholdMarkers } from './overlays/threshold-markers';
-import { PosKeepLabels } from './overlays/poskeep-labels';
 import { RaceTrackTooltip } from './overlays/racetrack-tooltip';
 import type { RaceTrackTooltipHandle } from './overlays/racetrack-tooltip';
 import { MouseLine } from './overlays/mouse-line';
@@ -52,10 +52,23 @@ export const RaceTrack = (props: RaceTrackProps) => {
   const mouseTextRef = useRef<SVGTextElement>(null);
   const tooltipRef = useRef<RaceTrackTooltipHandle>(null);
 
-  const { skillActivations, rushedIndicators, fullyChargedIndicators, debuffIndicators, posKeepLabels } =
-    useVisualizationData({
-      chartData
-    });
+  const {
+    skillActivations,
+    rushedIndicators,
+    fullyChargedIndicators,
+    debuffIndicators,
+    contentionIndicators
+  } = useVisualizationData({
+    chartData
+  });
+
+  const { showPosKeepLabels } = useRaceTrackDisplay();
+  // Duel / Spot Struggle chips share the rushed row treatment; the display
+  // toggle that previously gated the line overlay now gates these chips.
+  const mechanicIndicators = useMemo(
+    () => (showPosKeepLabels ? [...rushedIndicators, ...contentionIndicators] : rushedIndicators),
+    [rushedIndicators, contentionIndicators, showPosKeepLabels]
+  );
 
   const handleSkillDrag = useCallback(
     (
@@ -229,7 +242,6 @@ export const RaceTrack = (props: RaceTrackProps) => {
 
             <VelocityPaths chartData={chartData} course={course} />
             <ThresholdMarkers courseDistance={course.distance} />
-            <PosKeepLabels posKeepLabels={posKeepLabels} />
             <MouseLine mouseLineRef={mouseLineRef} mouseTextRef={mouseTextRef} />
             <RaceTrackTooltip ref={tooltipRef} chartData={chartData} course={course} />
 
@@ -243,7 +255,7 @@ export const RaceTrack = (props: RaceTrackProps) => {
               <UmaSkillSection
                 course={course}
                 skillActivations={skillActivations}
-                rushedIndicators={rushedIndicators}
+                rushedIndicators={mechanicIndicators}
                 fullyChargedIndicators={fullyChargedIndicators}
                 debuffIndicators={debuffIndicators}
                 onDragStart={handleDragStart}

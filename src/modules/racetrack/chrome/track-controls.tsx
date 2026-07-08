@@ -51,7 +51,7 @@ const MARKER_OPTIONS: DisplayOption[] = [
   { settingKey: 'showRushedMarkers', label: 'Rushed markers' },
   { settingKey: 'showFullyChargedMarkers', label: 'Fully Charged markers' },
   { settingKey: 'showScenarioMarkers', label: 'Scenario markers' },
-  { settingKey: 'showPosKeepLabels', label: 'Pos-keep labels' }
+  { settingKey: 'showPosKeepLabels', label: 'Duel / struggle markers' }
 ];
 
 type DisplayDropdownProps = {

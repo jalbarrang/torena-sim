@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/shallow';
 import type { SimulationRun, SkillEffectLog } from '@/modules/simulation/compare.types';
-import type { PosKeepLabel } from '@/utils/races';
 import { IRegionDisplayType, RegionDisplayType } from '@/modules/racetrack/types';
 import { getSkillNameById } from '@/modules/skills/utils';
 import { useSettingsStore } from '@/store/settings.store';
@@ -392,107 +391,48 @@ export const useVisualizationData = (props: UseVisualizationDataProps) => {
     return results;
   }, [debuffs, hasSimulationData, course]);
 
-  const posKeepData: Array<PosKeepLabel> = useMemo(() => {
-    return [];
-  }, []);
-
-  const competeFightData = useMemo(() => {
-    const results: Array<PosKeepLabel> = [];
+  // Contention mechanics (dueling / spot struggle) render as distance-marker
+  // chips in the per-uma skill rows, same treatment as Rushed — not as line
+  // overlays on the chart geometry.
+  const contentionIndicators: Array<RegionData> = useMemo(() => {
+    const results: Array<RegionData> = [];
 
     if (chartData?.duelingRegions) {
-      for (const [umaIndex, competeFightArray] of chartData.duelingRegions.entries()) {
-        if (competeFightArray.length === 0) continue;
-        const start = competeFightArray[0];
-        const end = competeFightArray[1];
+      for (const [umaIndex, region] of chartData.duelingRegions.entries()) {
+        const [start, end] = region;
+        if (start == null || end == null) continue;
         results.push({
-          umaIndex,
-          text: 'Duel',
+          type: RegionDisplayType.Textbox,
           color: posKeepColors[umaIndex],
-          start,
-          end,
-          duration: end - start
+          text: 'Duel',
+          umaIndex,
+          regions: [{ start, end }]
         });
       }
     }
-
-    return results;
-  }, [chartData]);
-
-  const leadCompetitionData = useMemo(() => {
-    const results: Array<PosKeepLabel> = [];
 
     if (chartData?.spotStruggleRegions) {
-      for (const [umaIndex, leadCompetitionArray] of chartData.spotStruggleRegions.entries()) {
-        if (!leadCompetitionArray || leadCompetitionArray.length === 0) continue;
-        const start = leadCompetitionArray[0];
-        const end = leadCompetitionArray[1];
-
+      for (const [umaIndex, region] of chartData.spotStruggleRegions.entries()) {
+        const [start, end] = region;
+        if (start == null || end == null) continue;
         results.push({
-          umaIndex,
-          text: 'SS',
+          type: RegionDisplayType.Textbox,
           color: posKeepColors[umaIndex],
-          start,
-          end,
-          duration: end - start
+          text: 'Spot Struggle',
+          umaIndex,
+          regions: [{ start, end }]
         });
       }
     }
 
     return results;
   }, [chartData]);
-
-  const labels = useMemo(() => {
-    return [...posKeepData, ...competeFightData, ...leadCompetitionData];
-  }, [posKeepData, competeFightData, leadCompetitionData]);
-
-  const tempLabels = useMemo(
-    () =>
-      labels
-        .map((posKeep) => ({
-          ...posKeep,
-          x: (posKeep.start / course.distance) * 960,
-          width: (posKeep.duration / course.distance) * 960,
-          yOffset: 0
-        }))
-        .toSorted((a, b) => a.x - b.x),
-    [labels, course]
-  );
-
-  const posKeepLabels: Array<PosKeepLabel> = useMemo(() => {
-    const results = [];
-
-    for (let i = 0; i < tempLabels.length; i++) {
-      const currentLabel = tempLabels[i];
-      let maxYOffset = 40;
-
-      for (let j = 0; j < i; j++) {
-        const prevLabel = tempLabels[j];
-
-        // Check if labels overlap horizontally
-        const padding = 0; // Add padding to prevent labels from being too close
-        const overlap = !(
-          currentLabel.x + currentLabel.width + padding < prevLabel.x ||
-          currentLabel.x > prevLabel.x + prevLabel.width + padding
-        );
-
-        if (overlap) {
-          // Labels overlap, need to offset vertically
-          maxYOffset = Math.max(maxYOffset, prevLabel.yOffset + 15);
-        }
-      }
-
-      const updatedLabel = { ...currentLabel, yOffset: maxYOffset };
-      results.push(updatedLabel);
-    }
-
-    return results;
-  }, [tempLabels]);
 
   return {
     skillActivations,
     rushedIndicators,
     fullyChargedIndicators,
     debuffIndicators,
-    posKeepLabels
+    contentionIndicators
   };
 };
