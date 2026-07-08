@@ -147,7 +147,7 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
           {picking ? `Choose Compare ${pickRole === 'uma1' ? 'A' : 'B'}` : 'Race field'}
         </h3>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {runners.length} / {MAX_RUNNERS}
+          {runners.length} / {Math.max(fieldSize, runners.length)}
         </span>
       </div>
 

@@ -18,12 +18,12 @@ import {
   useCompareRoles,
   useRunner,
   useRunners,
-  MAX_RUNNERS,
   MIN_RUNNERS,
   type CompareRole,
   type FieldRunner
 } from '@/store/runners.store';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
+import { useCompareSettings } from '@/modules/simulation/stores/compare.store';
 import { useSettingsStore } from '@/store/settings.store';
 
 import {
@@ -94,6 +94,7 @@ export const RunnersPanel = () => {
   const { runnerId, runner, updateRunner, resetRunner } = useRunner();
   const { compareA, compareB } = useCompareRoles();
   const runners = useRunners();
+  const { fieldSize } = useCompareSettings();
   const isEditingA = runnerId === compareA;
   const { courseId } = useSettingsStore();
   const {
@@ -193,7 +194,7 @@ export const RunnersPanel = () => {
             >
               Field{' '}
               <span className="font-medium text-muted-foreground tabular-nums">
-                {runners.length} / {MAX_RUNNERS}
+                {runners.length} / {Math.max(fieldSize, runners.length)}
               </span>
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
