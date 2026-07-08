@@ -203,7 +203,10 @@ export const RaceTrack = (props: RaceTrackProps) => {
 
   return (
     <div className="flex flex-col gap-2 bg-card rounded-md border px-1 py-2 max-w-[1600px] mx-auto w-full">
-      <TrackLegend />
+      <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
+        <TrackLegend />
+        <RaceTrackTooltip ref={tooltipRef} chartData={chartData} course={course} />
+      </div>
       <div className="overflow-x-auto md:overflow-x-hidden border-t border-b">
         <div className="min-w-[1200px] md:min-w-0">
           <svg
@@ -243,7 +246,6 @@ export const RaceTrack = (props: RaceTrackProps) => {
             <VelocityPaths chartData={chartData} course={course} />
             <ThresholdMarkers courseDistance={course.distance} />
             <MouseLine mouseLineRef={mouseLineRef} mouseTextRef={mouseTextRef} />
-            <RaceTrackTooltip ref={tooltipRef} chartData={chartData} course={course} />
 
             <svg
               x={RaceTrackDimensions.xOffset}
