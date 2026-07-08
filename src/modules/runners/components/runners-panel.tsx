@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { ChevronDown, Link2, Link2Off, Save } from 'lucide-react';
+import { ChevronDown, Link2, Link2Off, Repeat2, Save } from 'lucide-react';
 import { RunnerCard } from './runner-card/runner-card';
 import { SaveRunnerModal } from './save-runner-modal';
 import { FieldManager } from './field-manager/field-manager';
@@ -10,6 +10,7 @@ import {
 } from './field-manager/field-manager-content';
 import {
   copyToRunner,
+  showRunner,
   linkRunner,
   resetAllRunners,
   swapWithRunner,
@@ -54,39 +55,56 @@ type VersusSlotProps = {
   compareRole: CompareRole;
   runner: FieldRunner | undefined;
   isEditing: boolean;
+  /** Show this runner in the runner card below. */
   onClick: () => void;
+  /** Open the field manager to pick a different runner for this slot. */
+  onChangeRunner: () => void;
 };
 
 const VersusSlot = (props: VersusSlotProps) => {
-  const { compareRole, runner, isEditing, onClick } = props;
+  const { compareRole, runner, isEditing, onClick, onChangeRunner } = props;
   const isA = compareRole === 'uma1';
   const color = isA ? COMPARE_A_COLOR : COMPARE_B_COLOR;
   const letter = isA ? 'A' : 'B';
   const name = runnerDisplayName(runner);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`Compare ${letter}: ${name}. Tap to change`}
+    <div
       className={cn(
-        'relative flex min-h-16 min-w-0 cursor-pointer items-center gap-2.5 bg-card px-3 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+        'relative flex min-h-16 min-w-0 items-stretch bg-card transition-colors',
         isEditing && 'bg-muted/40'
       )}
     >
-      <span
-        aria-hidden
-        className={cn('absolute top-1.5 text-[10px] font-extrabold', isA ? 'left-2' : 'right-2')}
-        style={{ color }}
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Compare ${letter}: ${name}. Tap to edit`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 py-2 pl-3 pr-9 text-left hover:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
       >
-        {letter}
-      </span>
-      {runner && <RunnerAvatar runner={runner} compareRole={compareRole} />}
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold">{name}</span>
-        <span className="block truncate text-xs text-muted-foreground">{runner?.strategy}</span>
-      </span>
-    </button>
+        <span
+          aria-hidden
+          className={cn('absolute top-1.5 text-[10px] font-extrabold', isA ? 'left-2' : 'right-2')}
+          style={{ color }}
+        >
+          {letter}
+        </span>
+        {runner && <RunnerAvatar runner={runner} compareRole={compareRole} />}
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold">{name}</span>
+          <span className="block truncate text-xs text-muted-foreground">{runner?.strategy}</span>
+        </span>
+      </button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onChangeRunner}
+        aria-label={`Change Compare ${letter} runner`}
+        title={`Change Compare ${letter} runner`}
+        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+      >
+        <Repeat2 />
+      </Button>
+    </div>
   );
 };
 
@@ -173,13 +191,15 @@ export const RunnersPanel = () => {
               compareRole="uma1"
               runner={runnerA}
               isEditing={isEditingA}
-              onClick={() => openManager('uma1')}
+              onClick={() => showRunner(compareA)}
+              onChangeRunner={() => openManager('uma1')}
             />
             <VersusSlot
               compareRole="uma2"
               runner={runnerB}
               isEditing={!isEditingA && runnerId === compareB}
-              onClick={() => openManager('uma2')}
+              onClick={() => showRunner(compareB)}
+              onChangeRunner={() => openManager('uma2')}
             />
           </div>
 
