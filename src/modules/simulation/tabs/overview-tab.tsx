@@ -33,7 +33,8 @@ export const OverviewTab = () => {
     fullyChargedStats,
     staminaStats,
     leadCompetitionStats,
-    duelingStats
+    duelingStats,
+    firstUmaStats
   } = useRaceStore(
     useShallow((state) => ({
       results: state.results,
@@ -43,7 +44,8 @@ export const OverviewTab = () => {
       fullyChargedStats: state.fullyChargedStats,
       staminaStats: state.staminaStats,
       leadCompetitionStats: state.leadCompetitionStats,
-      duelingStats: state.duelingStats
+      duelingStats: state.duelingStats,
+      firstUmaStats: state.firstUmaStats
     }))
   );
   const { allowRushedUma1, allowRushedUma2, allowConservePowerUma1, allowConservePowerUma2 } =
@@ -184,7 +186,7 @@ export const OverviewTab = () => {
           const spotStruggle = isUma1 ? leadCompetitionStats?.uma1 : leadCompetitionStats?.uma2;
           const dueling = isUma1 ? duelingStats?.uma1 : duelingStats?.uma2;
           const stamina = isUma1 ? staminaStats?.uma1 : staminaStats?.uma2;
-          // const firstUma = isUma1 ? firstUmaStats?.uma1 : firstUmaStats?.uma2;
+          const firstUma = isUma1 ? firstUmaStats?.uma1 : firstUmaStats?.uma2;
 
           return (
             <div
@@ -252,7 +254,7 @@ export const OverviewTab = () => {
                     <Activity mode={rushedStats && showRushed ? 'visible' : 'hidden'}>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground flex items-center gap-1.5">
-                          <span className="text-base leading-none">〜</span> Rushed
+                          <span className="text-base leading-none">💦</span> Rushed
                         </span>
 
                         <span className="font-mono font-medium">
@@ -307,7 +309,7 @@ export const OverviewTab = () => {
                   </div>
                 </Activity>
 
-                {/* <Activity mode={firstUmaStats ? 'visible' : 'hidden'}>
+                <Activity mode={firstUmaStats ? 'visible' : 'hidden'}>
                   <div className="space-y-1">
                     <h4 className="text-xs font-bold text-muted-foreground tracking-wider uppercase">
                       Miscellaneous
@@ -321,7 +323,7 @@ export const OverviewTab = () => {
                       </span>
                     </div>
                   </div>
-                </Activity> */}
+                </Activity>
               </div>
             </div>
           );
