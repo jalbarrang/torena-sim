@@ -3,10 +3,13 @@ import * as d3 from 'd3'; // Keep for binning logic
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, XAxis, YAxis } from 'recharts';
 import type { ChartConfig } from '@/components/ui/chart';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { cn } from '@/lib/utils';
 
 type HistogramProps = {
   data: Array<number>;
   className?: string;
+  /** Optional vertical marker for a summary stat (e.g. the median), rendered at its bin. */
+  marker?: { value: number; label: string };
 };
 
 const chartConfig = {
@@ -28,7 +31,7 @@ const colorForBin = (x0?: number, x1?: number): string => {
   return ZERO_COLOR;
 };
 
-export const Histogram = ({ data }: HistogramProps) => {
+export const Histogram = ({ data, marker, className }: HistogramProps) => {
   // Calculate domain
   const domain: [number, number] =
     data[0] === 0 && data[data.length - 1] === 0
@@ -48,6 +51,16 @@ export const Histogram = ({ data }: HistogramProps) => {
   const zeroBucket = buckets.find((bucket: d3.Bin<number, number>) => (bucket.x0 ?? 0) >= 0);
   const zeroRange = zeroBucket?.x0?.toFixed(1) ?? '';
 
+  // Bin containing the marker value, used to anchor the stat marker on the categorical axis
+  const markerBucket =
+    marker == null
+      ? undefined
+      : buckets.find(
+          (bucket: d3.Bin<number, number>) =>
+            marker.value >= (bucket.x0 ?? -Infinity) && marker.value < (bucket.x1 ?? Infinity)
+        );
+  const markerRange = markerBucket?.x0?.toFixed(1) ?? '';
+
   // Transform buckets into recharts-compatible format
   const chartData = buckets.map((bucket: d3.Bin<number, number>) => ({
     range: bucket.x0?.toFixed(1) ?? '',
@@ -57,7 +70,7 @@ export const Histogram = ({ data }: HistogramProps) => {
   }));
 
   return (
-    <ChartContainer config={chartConfig} className={'min-h-[100px] max-w-[600px]'}>
+    <ChartContainer config={chartConfig} className={cn('min-h-[100px] max-w-[600px]', className)}>
       <BarChart accessibilityLayer data={chartData}>
         <CartesianGrid vertical={false} />
         {zeroRange && (
@@ -66,6 +79,19 @@ export const Histogram = ({ data }: HistogramProps) => {
             stroke={ZERO_COLOR}
             strokeDasharray="3 3"
             strokeOpacity={0.5}
+          />
+        )}
+        {marker && markerRange && (
+          <ReferenceLine
+            x={markerRange}
+            stroke="var(--foreground)"
+            strokeDasharray="4 2"
+            label={{
+              value: `${marker.label}: ${marker.value.toFixed(2)} L`,
+              position: 'top',
+              fontSize: 10,
+              fill: 'var(--muted-foreground)'
+            }}
           />
         )}
         <XAxis

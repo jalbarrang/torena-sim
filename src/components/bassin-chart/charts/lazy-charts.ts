@@ -13,6 +13,12 @@ export const LazyLengthDifferenceChart = lazy(() =>
   }))
 );
 
+export const LazyVelocityComparisonChart = lazy(() =>
+  import('./velocity-comparison-chart').then((module) => ({
+    default: module.VelocityComparisonChart
+  }))
+);
+
 /** Reserved for upcoming activation frequency UI — use this export when wiring the feature. */
 const LazyActivationFrequencyChart = lazy(() =>
   import('./activation-frequency-chart').then((module) => ({

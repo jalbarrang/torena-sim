@@ -136,10 +136,25 @@ function summarizeSample(
       : buildFallbackLogs(collectedB, trackedUsed, trackedSkillId, roundB.seed, fallback);
   const positions = extractUniquePositions(logs);
 
+  // Retained only for the 4 representative runs; references (not copies) of the
+  // arrays already held by the WASM round payloads.
+  const telemetry = {
+    baseline: {
+      time: baselinePrimary.time,
+      position: baselinePrimary.position,
+      velocity: baselinePrimary.velocity
+    },
+    tracked: {
+      time: trackedPrimary.time,
+      position: trackedPrimary.position,
+      velocity: trackedPrimary.velocity
+    }
+  };
+
   const data: SkillSimulationRun =
     logs.length === 0
-      ? initializeSkillSimulationRun()
-      : { sk: [{}, { [trackedSkillId]: logs.map((log) => ({ ...log })) }] };
+      ? initializeSkillSimulationRun({ telemetry })
+      : { sk: [{}, { [trackedSkillId]: logs.map((log) => ({ ...log })) }], telemetry };
 
   const trackedMeta =
     trackedUsed || positions.length > 0 ? { horseLength: basinn, positions } : null;

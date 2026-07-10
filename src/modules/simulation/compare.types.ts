@@ -129,8 +129,23 @@ export interface SimulationRun {
   fullyChargedAccel: Array<number | null>;
 }
 
+/** Per-tick series for one runner of a paired (baseline vs tracked) sample. */
+export type SkillRunSeries = {
+  time: Array<number>;
+  position: Array<number>;
+  velocity: Array<number>;
+};
+
+/** Baseline vs tracked-skill telemetry for one representative run. */
+export type SkillVelocityTelemetry = {
+  baseline: SkillRunSeries;
+  tracked: SkillRunSeries;
+};
+
 export interface SkillSimulationRun {
   sk: [SkillActivationMap, SkillActivationMap];
+  /** Present for WASM-backed runs; absent on legacy TS-simulator results. */
+  telemetry?: SkillVelocityTelemetry;
 }
 
 // [RegionStart, RegionEnd]

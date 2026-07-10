@@ -51,6 +51,7 @@ export const SkillActivationDetailsDialog = React.memo(function SkillActivationD
                 skillId={skillId}
                 runData={runData}
                 skillActivations={skillRow.skillActivations}
+                results={skillRow.results}
                 courseDistance={courseDistance}
                 currentSeed={currentSeed}
                 isGlobalSimulationRunning={isGlobalSimulationRunning}

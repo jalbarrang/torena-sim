@@ -1,10 +1,14 @@
-import { Suspense, useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { ChartLoadingFallback } from '@/components/charts/chart-loading-fallback';
-import { LazyActivationEffectChart, LazyLengthDifferenceChart } from '../charts/lazy-charts';
+import {
+  LazyActivationEffectChart,
+  LazyLengthDifferenceChart,
+  LazyVelocityComparisonChart
+} from '../charts/lazy-charts';
 import type {
   SkillSimulationData,
   SkillTrackedMetaCollection
@@ -12,10 +16,15 @@ import type {
 import { CourseService } from '@/modules/data/services/CourseService';
 import React from 'react';
 
+const LazyHistogram = lazy(() =>
+  import('@/components/Histogram').then((module) => ({ default: module.Histogram }))
+);
+
 type ActivationDetailsProps = {
   skillId: string;
   runData: SkillSimulationData;
   skillActivations: Record<string, SkillTrackedMetaCollection>;
+  results: Array<number>;
   courseDistance: number;
   currentSeed: number | null;
   isGlobalSimulationRunning: boolean;
@@ -28,6 +37,8 @@ export const ActivationDetails = React.memo((props: ActivationDetailsProps) => {
   const {
     skillId,
     skillActivations,
+    results,
+    runData,
     courseDistance,
     currentSeed,
     isGlobalSimulationRunning,
@@ -47,6 +58,13 @@ export const ActivationDetails = React.memo((props: ActivationDetailsProps) => {
 
   const totalActivations = activationPositions.length;
   const hasActivations = totalActivations > 0;
+
+  // `results` arrives sorted from the simulators.
+  const median = useMemo(() => {
+    if (results.length === 0) return 0;
+    const mid = Math.floor(results.length / 2);
+    return results.length % 2 === 0 ? (results[mid - 1] + results[mid]) / 2 : results[mid];
+  }, [results]);
 
   const stats = useMemo(() => {
     let earliestPosition = 0;
@@ -146,79 +164,115 @@ export const ActivationDetails = React.memo((props: ActivationDetailsProps) => {
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-2">
-        {onRunAdditionalSamples && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRunAdditionalSamples}
-              disabled={!canRunAdditionalSamples}
-              className="gap-1"
-            >
-              {isSkillLoading ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  Running…
-                </>
-              ) : (
-                <>Run +1000 Samples</>
-              )}
-            </Button>
+      <CardContent className="flex flex-col divide-y divide-border [&>section]:py-4 [&>section:first-child]:pt-0 [&>section:last-child]:pb-0">
+        {/* 1. Headline answer: how much does this skill gain across all runs */}
+        {results.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold">Bashin Gain Distribution</h3>
+                <p className="text-xs text-muted-foreground">
+                  Lengths gained versus the baseline in each of the {results.length} runs.
+                </p>
+              </div>
 
-            {!currentSeed && (
-              <span className="text-xs text-muted-foreground">
-                Run a simulation first to enable additional samples
-              </span>
-            )}
-          </div>
+              {onRunAdditionalSamples && (
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunAdditionalSamples}
+                    disabled={!canRunAdditionalSamples}
+                    className="gap-1"
+                  >
+                    {isSkillLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" />
+                        Running…
+                      </>
+                    ) : (
+                      <>Run +1000 Samples</>
+                    )}
+                  </Button>
+
+                  {!currentSeed && (
+                    <span className="text-xs text-muted-foreground">
+                      Run a simulation first
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Suspense fallback={<ChartLoadingFallback height={240} />}>
+              <LazyHistogram
+                data={results}
+                className="w-full max-w-none aspect-auto h-[240px]"
+                marker={{ value: median, label: 'Median' }}
+              />
+            </Suspense>
+          </section>
         )}
 
-        <Suspense
-          fallback={
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <ChartLoadingFallback height={240} />
-              <ChartLoadingFallback height={240} />
-            </div>
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <LazyActivationEffectChart
-              skillId={skillId}
-              skillActivations={activationPositions}
-              courseDistance={courseDistance}
-            />
-            <LazyLengthDifferenceChart
-              skillId={skillId}
-              skillActivations={skillActivations}
-              courseDistance={courseDistance}
-            />
-          </div>
-        </Suspense>
+        {/* 2. Mechanism: what the skill does to one representative run */}
+        <section className="flex flex-col gap-2">
+          <Suspense fallback={<ChartLoadingFallback height={240} />}>
+            <LazyVelocityComparisonChart skillId={skillId} runData={runData} />
+          </Suspense>
+        </section>
 
-        <div className="border-t flex flex-col gap-2 pt-2">
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="size-3 rounded" style={{ backgroundColor: 'rgb(0,154,111)' }} />
-              <span className="text-muted-foreground">Early Race</span>
-            </div>
+        {/* 3. Course analysis: where along the track it procs and pays off */}
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="text-sm font-semibold">Course Analysis</h3>
 
-            <div className="flex items-center gap-1">
-              <div className="size-3 rounded" style={{ backgroundColor: 'rgb(242,233,103)' }} />
-              <span className="text-muted-foreground">Mid Race</span>
-            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="size-3 rounded" style={{ backgroundColor: 'rgb(0,154,111)' }} />
+                <span className="text-muted-foreground">Early Race</span>
+              </div>
 
-            <div className="flex items-center gap-1">
-              <div className="size-3 rounded" style={{ backgroundColor: 'rgb(209,134,175)' }} />
-              <span className="text-muted-foreground">Late Race</span>
-            </div>
+              <div className="flex items-center gap-1">
+                <div className="size-3 rounded" style={{ backgroundColor: 'rgb(242,233,103)' }} />
+                <span className="text-muted-foreground">Mid Race</span>
+              </div>
 
-            <div className="flex items-center gap-1">
-              <div className="size-3 rounded" style={{ backgroundColor: 'rgb(255,130,130)' }} />
-              <span className="text-muted-foreground">Last Spurt</span>
+              <div className="flex items-center gap-1">
+                <div className="size-3 rounded" style={{ backgroundColor: 'rgb(209,134,175)' }} />
+                <span className="text-muted-foreground">Late Race</span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <div className="size-3 rounded" style={{ backgroundColor: 'rgb(255,130,130)' }} />
+                <span className="text-muted-foreground">Last Spurt</span>
+              </div>
             </div>
           </div>
-        </div>
+
+          <Suspense
+            fallback={
+              <div className="flex flex-col gap-4">
+                <ChartLoadingFallback height={240} />
+                <ChartLoadingFallback height={240} />
+              </div>
+            }
+          >
+            {/* Stacked full-width: both charts share the course x-axis, so
+                vertical alignment lets procs and payoff be read straight down. */}
+            <div className="flex flex-col gap-4">
+              <LazyActivationEffectChart
+                skillId={skillId}
+                skillActivations={activationPositions}
+                courseDistance={courseDistance}
+              />
+              <LazyLengthDifferenceChart
+                skillId={skillId}
+                skillActivations={skillActivations}
+                courseDistance={courseDistance}
+              />
+            </div>
+          </Suspense>
+        </section>
       </CardContent>
     </Card>
   );

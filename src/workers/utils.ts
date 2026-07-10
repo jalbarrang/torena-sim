@@ -1,4 +1,4 @@
-import { cloneDeep, merge } from 'es-toolkit';
+import { cloneDeep } from 'es-toolkit';
 import type {
   SkillSimulationData,
   SkillTrackedMetaCollection
@@ -28,10 +28,13 @@ export const mergeSkillResults = (
   const minrun = resultA.min < resultB.min ? resultA.runData.minrun : resultB.runData.minrun;
   const maxrun = resultA.max > resultB.max ? resultA.runData.maxrun : resultB.runData.maxrun;
 
-  const mergedRunData: SkillSimulationData = merge(selectedRunData, {
+  // Replace runs wholesale. A deep merge would splice the two runs' arrays
+  // together element-wise (skill logs, telemetry series), corrupting them.
+  const mergedRunData: SkillSimulationData = {
+    ...selectedRunData,
     minrun,
     maxrun
-  });
+  };
 
   // Properly merge skillActivations by concatenating arrays instead of replacing by index
   const activations: Record<string, SkillTrackedMetaCollection> = cloneDeep(
