@@ -1,3 +1,10 @@
+## [0.27.0](https://github.com/jalbarrang/torena-sim/compare/v0.26.1...v0.27.0) (2026-07-10)
+
+### Features
+
+* skill visualizer ([b46355c](https://github.com/jalbarrang/torena-sim/commit/b46355c0c3052ed0df6ffe9fed342a5178887002))
+* **skills:** skill visualizer page for condition activation regions ([4e5072f](https://github.com/jalbarrang/torena-sim/commit/4e5072f1b388aedf9e37d79e7f427d5246382413)), closes [#65](https://github.com/jalbarrang/torena-sim/issues/65)
+
 ## [0.26.1](https://github.com/jalbarrang/torena-sim/compare/v0.26.0...v0.26.1) (2026-07-10)
 
 ### Bug Fixes
