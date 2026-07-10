@@ -91,7 +91,7 @@ function SkillEffectSummary(props: SkillEffectSummaryProps) {
         </div>
       )}
 
-      {alternative.effects.map((effect) => {
+      {alternative.effects.map((effect, effectIndex) => {
         const modifier = effect.modifier / 10000;
         const effectType = formatEffect[effect.type as keyof typeof formatEffect];
         const effectValue =
@@ -101,7 +101,7 @@ function SkillEffectSummary(props: SkillEffectSummaryProps) {
           effect.type === 9 && modifier < 0
             ? 'HP Drain'
             : i18n.t(`skilleffecttypes.${effect.type}`);
-        const effectKey = `${effect.type}-${effect.target}-${effect.modifier}-${effect.valueUsage ?? ''}-${effect.valueLevelUsage ?? ''}`;
+        const effectKey = `${effectIndex}-${effect.type}-${effect.target}-${effect.modifier}`;
 
         return (
           <div key={effectKey} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 text-xs">

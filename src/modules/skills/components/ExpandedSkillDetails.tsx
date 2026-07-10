@@ -42,29 +42,31 @@ function AlternativeDetails(props: Readonly<IAlternativeDetailsProps>) {
         </div>
       )}
 
-      <div>
-        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-          {i18n.t('skilldetails.conditions')}
+      {alternative.condition.length > 0 && (
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
+            {i18n.t('skilldetails.conditions')}
+          </div>
+          <div className="pl-1">{HumanReadableParser.parse(alternative.condition).format()}</div>
+          <Collapsible>
+            <CollapsibleTrigger className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer mt-1">
+              <Code className="size-3" />
+              Raw
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <pre className="mt-1 p-2 rounded bg-foreground/5 border border-foreground/10 text-xs font-mono overflow-x-auto">
+                {FormatParser.parse(alternative.condition).format()}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
-        <div className="pl-1">{HumanReadableParser.parse(alternative.condition).format()}</div>
-        <Collapsible>
-          <CollapsibleTrigger className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer mt-1">
-            <Code className="size-3" />
-            Raw
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <pre className="mt-1 p-2 rounded bg-foreground/5 border border-foreground/10 text-xs font-mono overflow-x-auto">
-              {FormatParser.parse(alternative.condition).format()}
-            </pre>
-          </CollapsibleContent>
-        </Collapsible>
-      </div>
+      )}
 
       <div>
         {i18n.t('skilldetails.effects')}
 
         <div>
-          {alternative.effects.map((ef) => {
+          {alternative.effects.map((ef, effectIndex) => {
             const type = ef.type;
             const modifier = ef.modifier / 10000;
             const effectType = formatEffect[type as keyof typeof formatEffect];
@@ -73,7 +75,7 @@ function AlternativeDetails(props: Readonly<IAlternativeDetailsProps>) {
               (effectType ? effectType(modifier) : modifier);
             const effectLabel =
               type === 9 && modifier < 0 ? 'HP Drain' : i18n.t(`skilleffecttypes.${type}`);
-            const effectKey = `${ef.type}-${ef.target}-${ef.modifier}-${ef.valueUsage ?? ''}-${ef.valueLevelUsage ?? ''}`;
+            const effectKey = `${effectIndex}-${ef.type}-${ef.target}-${ef.modifier}`;
 
             return (
               <div key={effectKey} className="flex items-center gap-1 py-px">

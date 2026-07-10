@@ -63,7 +63,7 @@ function SkillEffects(props: { alternative: SkillAlternative }) {
 
   return (
     <div className="flex flex-col gap-1">
-      {alternative.effects.map((effect) => {
+      {alternative.effects.map((effect, effectIndex) => {
         const modifier = effect.modifier / 10000;
         const effectType = formatEffect[effect.type as keyof typeof formatEffect];
         const effectValue =
@@ -73,7 +73,7 @@ function SkillEffects(props: { alternative: SkillAlternative }) {
           effect.type === 9 && modifier < 0
             ? 'HP Drain'
             : i18n.t(`skilleffecttypes.${effect.type}`);
-        const effectKey = `${effect.type}-${effect.target}-${effect.modifier}-${effect.valueUsage ?? ''}-${effect.valueLevelUsage ?? ''}`;
+        const effectKey = `${effectIndex}-${effect.type}-${effect.target}-${effect.modifier}`;
 
         return (
           <div key={effectKey} className="flex items-center gap-1 text-xs">
@@ -151,12 +151,14 @@ function SkillAlternativeDetails(props: SkillAlternativeDetailsProps) {
             </SkillDetailSection>
           )}
 
-          <SkillDetailSection title={i18n.t('skilldetails.conditions')}>
-            <div className="min-w-0 pl-1">
-              {HumanReadableParser.parse(alternative.condition).format()}
-            </div>
-            <SkillRawCondition label="Raw" value={alternative.condition} />
-          </SkillDetailSection>
+          {alternative.condition.length > 0 && (
+            <SkillDetailSection title={i18n.t('skilldetails.conditions')}>
+              <div className="min-w-0 pl-1">
+                {HumanReadableParser.parse(alternative.condition).format()}
+              </div>
+              <SkillRawCondition label="Raw" value={alternative.condition} />
+            </SkillDetailSection>
+          )}
         </div>
 
         {compact ? (
