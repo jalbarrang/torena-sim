@@ -1,3 +1,9 @@
+## [0.26.1](https://github.com/jalbarrang/torena-sim/compare/v0.26.0...v0.26.1) (2026-07-10)
+
+### Bug Fixes
+
+* skills end of list crash ([ec709ff](https://github.com/jalbarrang/torena-sim/commit/ec709ff1e2bff90c88ac12b367e655520cd62d2e))
+
 ## [0.26.0](https://github.com/jalbarrang/torena-sim/compare/v0.25.0...v0.26.0) (2026-07-08)
 
 ### Features
