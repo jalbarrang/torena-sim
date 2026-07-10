@@ -2,7 +2,7 @@
  * Build the `uma-sim-wasm` crate and emit the wasm-pack `--target web` bundle
  * into the app at `src/lib/uma-sim-wasm/pkg`.
  *
- * Cross-platform (PowerShell, cmd, bash, macOS/Linux) — run via `bun run wasm:build`.
+ * Cross-platform (PowerShell, cmd, bash, macOS/Linux) — run via `pnpm run wasm:build`.
  *
  * IMPORTANT: the default `cargo` on some machines is a standalone (non-rustup)
  * install that lacks the wasm32 std. We force the rustup `stable` toolchain
@@ -37,7 +37,7 @@ const env: NodeJS.ProcessEnv = { ...process.env };
 // Prefer the rustup `stable` toolchain (has wasm32 std) by prepending its bin
 // dir to PATH. `rustc --print sysroot` returns a native path on every platform,
 // so no Windows/git-bash `cygpath` dance is needed (this runs as a native
-// Node/Bun process, not inside a POSIX shell).
+// Node process, not inside a POSIX shell).
 if (which('rustup', env)) {
   const res = spawnSync('rustup', ['run', 'stable', 'rustc', '--print', 'sysroot'], {
     encoding: 'utf8',

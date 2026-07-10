@@ -14,7 +14,7 @@ const MULTIPLY_RANDOM_RECOVERY_FACTORS = {
   high: 0.04
 } as const;
 
-export function isSupportedMultiplyRandomRecovery(effect: RecoveryEffectLike): boolean {
+function isSupportedMultiplyRandomRecovery(effect: RecoveryEffectLike): boolean {
   return effect.type === SkillType.Recovery && (effect.valueUsage === 8 || effect.valueUsage === 9);
 }
 

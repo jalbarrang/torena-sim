@@ -10,9 +10,9 @@
  *   (c) qualitative note on order-dependent skill realism (field size).
  *
  * Usage:
- *   bun run wasm:build            # once, so the CLI wasm has runContestedCompare
- *   bun scripts/run-contested-field-experiment.ts
- *   bun scripts/run-contested-field-experiment.ts --samples 500 --seed 7
+ *   pnpm run wasm:build            # once, so the CLI wasm has runContestedCompare
+ *   pnpm exec tsx scripts/run-contested-field-experiment.ts
+ *   pnpm exec tsx scripts/run-contested-field-experiment.ts --samples 500 --seed 7
  */
 
 import { Command } from 'commander';

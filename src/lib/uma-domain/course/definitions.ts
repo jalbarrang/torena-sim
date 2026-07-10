@@ -1,5 +1,5 @@
 // Phase
-export const Phase = {
+const Phase = {
   EarlyRace: 0,
   MidRace: 1,
   LateRace: 2,
@@ -7,12 +7,6 @@ export const Phase = {
 } as const;
 export type IPhase = (typeof Phase)[keyof typeof Phase];
 export const phases = Object.values(Phase);
-export const PhaseName = {
-  [Phase.EarlyRace]: 'Early Race',
-  [Phase.MidRace]: 'Mid Race',
-  [Phase.LateRace]: 'Late Race',
-  [Phase.LastSpurt]: 'Last Spurt'
-} as const;
 
 // Surface
 export const Surface = {
@@ -21,13 +15,9 @@ export const Surface = {
 } as const;
 export type ISurface = (typeof Surface)[keyof typeof Surface];
 export const surfaces = Object.values(Surface);
-export const SurfaceName = {
-  [Surface.Turf]: 'Turf',
-  [Surface.Dirt]: 'Dirt'
-} as const;
 
 // Distance Type
-export const DistanceType = {
+const DistanceType = {
   Short: 1,
   Mile: 2,
   Mid: 3,
@@ -35,12 +25,6 @@ export const DistanceType = {
 } as const;
 export type IDistanceType = (typeof DistanceType)[keyof typeof DistanceType];
 export const distances = Object.values(DistanceType);
-export const DistanceTypeName = {
-  [DistanceType.Short]: 'Short',
-  [DistanceType.Mile]: 'Mile',
-  [DistanceType.Mid]: 'Mid',
-  [DistanceType.Long]: 'Long'
-} as const;
 
 // Orientation
 export const Orientation = {
@@ -139,34 +123,9 @@ export const Grade = {
 } as const;
 export type IGrade = (typeof Grade)[keyof typeof Grade];
 export const grades = Object.values(Grade);
-export const GradeName = {
-  [Grade.G1]: 'G1',
-  [Grade.G2]: 'G2',
-  [Grade.G3]: 'G3',
-  [Grade.OP]: 'OP',
-  [Grade.PreOP]: 'PreOP',
-  [Grade.Maiden]: 'Maiden',
-  [Grade.Debut]: 'Debut',
-  [Grade.Daily]: 'Daily'
-} as const;
 
-// Threshold Stat
-export const ThresholdStat = {
-  Speed: 1,
-  Stamina: 2,
-  Power: 3,
-  Guts: 4,
-  Int: 5
-} as const;
-export type IThresholdStat = (typeof ThresholdStat)[keyof typeof ThresholdStat];
-export const thresholdStats = Object.values(ThresholdStat);
-export const ThresholdStatName = {
-  [ThresholdStat.Speed]: 'Speed',
-  [ThresholdStat.Stamina]: 'Stamina',
-  [ThresholdStat.Power]: 'Power',
-  [ThresholdStat.Guts]: 'Guts',
-  [ThresholdStat.Int]: 'Wit'
-} as const;
+// Threshold Stat: Speed=1, Stamina=2, Power=3, Guts=4, Int(Wit)=5
+type IThresholdStat = 1 | 2 | 3 | 4 | 5;
 
 // Corner
 export type ICorner = {
@@ -175,14 +134,14 @@ export type ICorner = {
 };
 
 // Straight
-export type IStraight = {
+type IStraight = {
   start: number;
   end: number;
   frontType?: number;
 };
 
 // Slope
-export type ISlope = {
+type ISlope = {
   start: number;
   length: number;
   slope: number;
@@ -194,29 +153,6 @@ export const EventType = {
   LOH: 1
 } as const;
 export type IEventType = (typeof EventType)[keyof typeof EventType];
-export const EventTypeNames = {
-  CM: 'Champions Meeting (CM)',
-  LOH: 'Legend of Heroes (LOH)'
-} as const;
-
-// Course
-export type ICourse = {
-  raceTrackId: number;
-  distance: number;
-  distanceType: IDistanceType;
-  surface: ISurface;
-  turn: IOrientation;
-  course: number;
-  laneMax: number;
-  finishTimeMin: number;
-  finishTimeMax: number;
-  courseSetStatus: Array<IThresholdStat>;
-  corners: Array<ICorner>;
-  straights: Array<IStraight>;
-  slopes: Array<ISlope>;
-};
-
-export type Courses = Record<number, ICourse>;
 
 export type CourseData = {
   readonly courseId: number;

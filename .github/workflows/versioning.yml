@@ -24,14 +24,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.DATA_UPDATE_PAT }}
           GITHUB_TOKEN: ${{ secrets.DATA_UPDATE_PAT }}
-        run: bunx semantic-release
+        run: pnpm exec semantic-release

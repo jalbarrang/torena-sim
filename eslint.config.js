@@ -106,7 +106,7 @@ export default tseslint.config(
   },
 
   {
-    // Scripts and config run in Node/Bun — relax browser-leaning rules.
+    // Scripts and config run in Node — relax browser-leaning rules.
     files: ['scripts/**', '*.config.{ts,js,mjs}', 'eslint-rules/**'],
     languageOptions: {
       globals: { ...globals.node }

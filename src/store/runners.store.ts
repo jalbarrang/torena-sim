@@ -88,12 +88,15 @@ const validateState = (value: unknown): IRunnersStore | null => {
   const ids = new Set(runners.map((r) => r.fieldId));
   if (ids.size !== runners.length) return null;
 
-  const compareA = typeof s.compareA === 'string' && ids.has(s.compareA) ? s.compareA : runners[0].fieldId;
-  let compareB = typeof s.compareB === 'string' && ids.has(s.compareB) ? s.compareB : runners[1].fieldId;
+  const compareA =
+    typeof s.compareA === 'string' && ids.has(s.compareA) ? s.compareA : runners[0].fieldId;
+  let compareB =
+    typeof s.compareB === 'string' && ids.has(s.compareB) ? s.compareB : runners[1].fieldId;
   if (compareB === compareA) {
     compareB = runners.find((r) => r.fieldId !== compareA)!.fieldId;
   }
-  const editingId = typeof s.editingId === 'string' && ids.has(s.editingId) ? s.editingId : compareA;
+  const editingId =
+    typeof s.editingId === 'string' && ids.has(s.editingId) ? s.editingId : compareA;
 
   return { runners, compareA, compareB, editingId };
 };
@@ -162,7 +165,9 @@ const useRunnerByFieldId = (fieldId: string): FieldRunner => {
 };
 
 export const useCompareRoles = () => {
-  return useRunnersStore(useShallow((state) => ({ compareA: state.compareA, compareB: state.compareB })));
+  return useRunnersStore(
+    useShallow((state) => ({ compareA: state.compareA, compareB: state.compareB }))
+  );
 };
 
 /**
@@ -177,15 +182,6 @@ export const useComparePairRunners = () => {
       uma2: state.runners.find((r) => r.fieldId === state.compareB) ?? state.runners[1]
     }))
   );
-};
-
-/** Non-hook read of the compare-pair + context runners. */
-export const getFieldRunners = () => {
-  const s = getState();
-  const uma1 = s.runners.find((r) => r.fieldId === s.compareA) ?? s.runners[0];
-  const uma2 = s.runners.find((r) => r.fieldId === s.compareB) ?? s.runners[1];
-  const context = s.runners.filter((r) => r.fieldId !== s.compareA && r.fieldId !== s.compareB);
-  return { uma1, uma2, context };
 };
 
 export const useRunners = () => {

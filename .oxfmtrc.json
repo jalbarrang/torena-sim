@@ -14,7 +14,7 @@
     "*.jpg",
     "*.mdb",
     "package-lock.json",
-    "bun.lock",
+    "pnpm-lock.yaml",
     "yarn.lock",
     "CHANGELOG.md",
     "src/modules/data/json/**/*.json", // Generated game-extract data (recursive: covers gametora/ etc.)

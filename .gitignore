@@ -50,10 +50,10 @@ public/data/*.*.json
 .pi/discord.json
 src/lib/uma-sim-wasm/pkg/
 
-# Use bun.lock; npm/yarn/pnpm lockfiles are not used
+# Use pnpm-lock.yaml; npm/yarn/bun lockfiles are not used
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+bun.lock
 
 /.references/
 /.api-tests/

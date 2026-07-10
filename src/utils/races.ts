@@ -17,18 +17,6 @@ import {
   Weather
 } from '@/lib/uma-domain/course/definitions';
 
-export type PosKeepLabel = {
-  umaIndex: number;
-  text: string;
-  color: { stroke: string; fill: string };
-  start: number;
-  end: number;
-  duration: number;
-  x?: number;
-  width?: number;
-  yOffset?: number;
-};
-
 const ORDER_RANGE_FOR_STRATEGY = {
   ['Front Runner']: [1, 1],
   ['Pace Chaser']: [2, 4],

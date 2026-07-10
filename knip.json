@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["rustup", "wasm-pack"],
+  "ignoreBinaries": ["rustup", "wasm-pack", "hiker"],
   "rules": {
     "files": "off",
     "duplicates": "off",

@@ -9,7 +9,8 @@ This guide will help you set up a development environment, understand the codeba
 Before you begin, ensure you have the following installed:
 
 - **Node.js** v24 or later
-- **bun** (the project's package manager, specified in `packageManager` field)
+- **pnpm** (the project's package manager, specified in `packageManager` field)
+- **Node 26+** (CLI scripts run via `tsx` and use `node:sqlite`)
 
 ### Game Data Access
 
@@ -18,7 +19,7 @@ The project ships with pre-extracted JSON data in `src/modules/data/`, so you ca
 **Option A: Download via script (recommended)**
 
 ```bash
-bun run db:fetch <version-id> # e.g. 10004010
+pnpm run db:fetch <version-id> # e.g. 10004010
 ```
 
 This downloads `master.mdb` into `db/master.mdb`, which the extraction scripts detect automatically.
@@ -214,13 +215,13 @@ umalator-global/
 ```bash
 git clone https://github.com/jalbarrang/umalator-global.git
 cd umalator-global
-bun install
+pnpm install
 ```
 
 ### 2. Run the Development Server
 
 ```bash
-bun run dev
+pnpm run dev
 ```
 
 Default port is 5173. Open `http://localhost:5173` in your browser.
@@ -232,13 +233,13 @@ The repo ships with pre-extracted JSON data, so this step is only needed when up
 **Fetch the latest database:**
 
 ```bash
-bun run db:fetch
+pnpm run db:fetch
 ```
 
 **Extract all data at once (merge mode, recommended):**
 
 ```bash
-bun run extract:all
+pnpm run extract:all
 ```
 
 Merge mode (the default) updates entries from `master.mdb` while preserving future/datamined content not yet in the database.
@@ -246,15 +247,15 @@ Merge mode (the default) updates entries from `master.mdb` while preserving futu
 **Full replacement mode** (removes future content):
 
 ```bash
-bun run extract:all -- --replace
+pnpm run extract:all -- --replace
 ```
 
 **Extract individual data files:**
 
 ```bash
-bun run extract:skills           # Unified skill data
-bun run extract:uma-info         # Uma musume data
-bun run extract:course-data      # Course/track data
+pnpm run extract:skills           # Unified skill data
+pnpm run extract:uma-info         # Uma musume data
+pnpm run extract:course-data      # Course/track data
 ```
 
 All scripts support `--replace` for full replacement mode. See [`scripts/README.md`](scripts/README.md) for detailed documentation.
@@ -392,49 +393,49 @@ Simulations run in background threads to keep the UI responsive:
 1. **Start the dev server:**
 
    ```bash
-   bun run dev
+   pnpm run dev
    ```
 
 2. **Check for TypeScript errors:**
 
    ```bash
-   bun run typecheck
+   pnpm run typecheck
    ```
 
 3. **Run the linter:**
 
    ```bash
-   bun run lint
+   pnpm run lint
    ```
 
 4. **Fix lint issues automatically:**
 
    ```bash
-   bun run lint:fix
+   pnpm run lint:fix
    ```
 
 5. **Format code:**
 
    ```bash
-   bun run format
+   pnpm run format
    ```
 
 6. **Check formatting without writing:**
 
    ```bash
-   bun run format:check
+   pnpm run format:check
    ```
 
 7. **Run unit tests:**
 
    ```bash
-   bun run test
+   pnpm run test
    ```
 
 8. **Build for production:**
 
    ```bash
-   bun run build
+   pnpm run build
    ```
 
 ### Code Style
@@ -479,7 +480,7 @@ TypeScript strict mode is enabled. Use functional React components with hooks. S
 2. Run the extraction:
 
 ```bash
-bun run extract:course-data
+pnpm run extract:course-data
 ```
 
 3. Verify course geometry in the visualization
@@ -492,8 +493,8 @@ bun run extract:course-data
 Run with Vitest:
 
 ```bash
-bun run test          # Run once
-bun run test:watch    # Watch mode
+pnpm run test          # Run once
+pnpm run test:watch    # Watch mode
 ```
 
 Add tests in `*.test.ts` files alongside the code they test.
@@ -515,18 +516,18 @@ Add tests in `*.test.ts` files alongside the code they test.
 
 Runs on pull requests to `main`:
 
-- TypeScript type checking (`bun run typecheck`)
-- Linting (`bun run lint`)
-- Production build validation (`bun run build`)
+- TypeScript type checking (`pnpm run typecheck`)
+- Linting (`pnpm run lint`)
+- Production build validation (`pnpm run build`)
 
-Both workflows use Bun with frozen lockfile.
+Both workflows use pnpm with a frozen lockfile on Node 26.
 
 ### Deployment
 
 The project deploys to **Cloudflare Pages** (https://torena-sim.pages.dev) via `.github/workflows/deploy-cloudflare.yml`.
 
 - Deploys automatically on pushes to `main`
-- Uses Bun + the Rust/wasm toolchain to build the engine
+- Uses pnpm + the Rust/wasm toolchain to build the engine
 - Reads `VITE_PUBLIC_POSTHOG_KEY` and `VITE_PUBLIC_POSTHOG_HOST` from repository variables at build time
 
 > The old GitHub Pages and Netlify URLs now serve a static 301 redirect to the canonical Cloudflare domain.
@@ -538,13 +539,13 @@ The project deploys to **Cloudflare Pages** (https://torena-sim.pages.dev) via `
 1. **Ensure code quality:**
 
    ```bash
-   bun run typecheck    # No TypeScript errors
-   bun run lint         # No linting errors
-   bun run format:check # Code is formatted
-   bun run test         # Tests pass
+   pnpm run typecheck    # No TypeScript errors
+   pnpm run lint         # No linting errors
+   pnpm run format:check # Code is formatted
+   pnpm run test         # Tests pass
    ```
 
-2. **User-facing changes** use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, etc.) so they appear in the in-app changelog after release. Do not edit `CHANGELOG.md` — deploy CI regenerates it; locally run `bun run changelog:generate` after fetching tags.
+2. **User-facing changes** use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, etc.) so they appear in the in-app changelog after release. Do not edit `CHANGELOG.md` — deploy CI regenerates it; locally run `pnpm run changelog:generate` after fetching tags.
 
 3. **Test thoroughly:**
    - Run simulations with your changes
@@ -570,7 +571,7 @@ Be prepared to:
 
 **"Cannot find module":**
 
-- Run `bun install` to ensure all dependencies are installed
+- Run `pnpm install` to ensure all dependencies are installed
 - Check that import paths are correct
 - Verify path aliases are configured in `tsconfig.json`
 
@@ -606,7 +607,7 @@ Be prepared to:
 **Port already in use:**
 
 - Vite will automatically try the next available port
-- Or specify a port: `bun run dev -- --port 3000`
+- Or specify a port: `pnpm run dev -- --port 3000`
 
 **Hot reload not working:**
 

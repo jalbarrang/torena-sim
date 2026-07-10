@@ -12,7 +12,7 @@ import type {
 } from '../definitions';
 import type { DynamicCondition } from '@/lib/uma-domain/skills/skill.types';
 
-export class EqOperator implements Operator {
+class EqOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(
@@ -31,7 +31,7 @@ export class EqOperator implements Operator {
   }
 }
 
-export class NeqOperator implements Operator {
+class NeqOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(
@@ -51,7 +51,7 @@ export class NeqOperator implements Operator {
   }
 }
 
-export class LtOperator implements Operator {
+class LtOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(
@@ -71,7 +71,7 @@ export class LtOperator implements Operator {
   }
 }
 
-export class LteOperator implements Operator {
+class LteOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(
@@ -91,7 +91,7 @@ export class LteOperator implements Operator {
   }
 }
 
-export class GtOperator implements Operator {
+class GtOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(
@@ -111,7 +111,7 @@ export class GtOperator implements Operator {
   }
 }
 
-export class GteOperator implements Operator {
+class GteOperator implements Operator {
   samplePolicy: ActivationSamplePolicy;
 
   constructor(

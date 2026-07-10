@@ -46,7 +46,7 @@ export type ConditionFilterParams = {
   extra: RaceParameters;
 };
 
-export type ConditionFilter = (
+type ConditionFilter = (
   params: ConditionFilterParams
 ) => RegionList | [RegionList, DynamicCondition];
 
@@ -87,13 +87,6 @@ export interface Parser<TCondition, TOperator> {
 
 /** Default parser type alias for convenience */
 export type DefaultParser = Parser<ICondition, Operator>;
-
-// ============================================================
-// Type Extraction Utilities
-// ============================================================
-
-export type InferCondition<TParser> = TParser extends Parser<infer C, unknown> ? C : never;
-export type InferOperator<TParser> = TParser extends Parser<unknown, infer O> ? O : never;
 
 // ============================================================
 // Helper Functions

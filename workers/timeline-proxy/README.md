@@ -33,7 +33,7 @@ Otherwise the Worker returns `403`.
 ## Setup
 
 ```bash
-bun install
+pnpm install
 wrangler login
 ```
 
@@ -51,8 +51,8 @@ For local dev, copy `.dev.vars.example` → `.dev.vars` and fill it in.
 ## Develop / deploy
 
 ```bash
-bun run dev       # wrangler dev (local)
-bun run deploy    # wrangler deploy
+pnpm run dev       # wrangler dev (local)
+pnpm run deploy    # wrangler deploy
 ```
 
 ## App wiring

@@ -2,9 +2,9 @@
  * Extract one course entry from src/modules/data/course_data.json.
  *
  * Usage:
- *   bun scripts/data-extract/extract-course-entry.ts --course-id 10914
- *   bun scripts/data-extract/extract-course-entry.ts -c 10914 --compact
- *   bun scripts/data-extract/extract-course-entry.ts -c 10914 --source path/to/course_data.json
+ *   pnpm exec tsx scripts/data-extract/extract-course-entry.ts --course-id 10914
+ *   pnpm exec tsx scripts/data-extract/extract-course-entry.ts -c 10914 --compact
+ *   pnpm exec tsx scripts/data-extract/extract-course-entry.ts -c 10914 --source path/to/course_data.json
  */
 
 import { readFileSync } from 'node:fs';
@@ -28,7 +28,7 @@ function parseCourseId(value: string): number {
 }
 
 function parseArgs(argv: Array<string>): CliOptions {
-  // `bun run <script> -- ...` can forward a standalone `--` token.
+  // `pnpm run <script> -- ...` can forward a standalone `--` token.
   const normalizedArgv = argv.filter((arg) => arg !== '--');
   const program = new Command();
   program

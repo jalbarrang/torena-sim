@@ -24,7 +24,7 @@ export type FeatureFlagKey = keyof typeof FeatureFlags;
  */
 export function isFeatureEnabled(flag: FeatureFlagKey): boolean {
   const envKey = FeatureFlags[flag];
-  const value = import.meta.env[envKey];
+  const value = (import.meta.env ?? process.env)[envKey];
 
   // Environment variables are strings, check for "true"
   return value === 'true';

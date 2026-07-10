@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
  * Download support card thumbnail art used by the development support card viewer.
  *
@@ -6,7 +6,7 @@
  */
 
 import { Command } from 'commander';
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import supportCardsJson from '../../src/modules/data/json/support-cards.json';
 
 type DownloadSupportCardImagesOptions = {
@@ -52,8 +52,10 @@ function parseCliArgs(argv: Array<string>): DownloadSupportCardImagesOptions {
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
-  const file = Bun.file(filePath);
-  return file.exists();
+  return access(filePath).then(
+    () => true,
+    () => false
+  );
 }
 
 function getSupportCardImageFileName(cardId: number) {
@@ -79,7 +81,7 @@ async function downloadSupportCardImage(
     return 'failed';
   }
 
-  await Bun.write(outputPath, response);
+  await writeFile(outputPath, Buffer.from(await response.arrayBuffer()));
 
   return 'downloaded';
 }

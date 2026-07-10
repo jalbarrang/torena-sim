@@ -342,7 +342,7 @@ export type CompareRounds = {
  * round 0; chunk `seedOffset` maps global round `seedOffset + j` to master seed
  * `baseSeed + seedOffset + j`, keeping chunked runs bit-for-bit identical.
  */
-export type ContestedComparePlan = {
+type ContestedComparePlan = {
   mode: 'contested';
   wasmParamsContested: WasmContestedCompareParams;
   nsamples: number;

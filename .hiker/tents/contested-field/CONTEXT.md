@@ -35,7 +35,7 @@ Mode encoding used by the sorts: `0 = contested`. The removed vacuum mode has no
 ## Enforcement
 
 - `hiker check` (this spec compiles) runs via the `intent` script:
-  `bun run intent`.
+  `pnpm run intent`.
 - `gen` (property-test bridge) is deferred until the initiative's code exists:
   the natural SUT functions are the TS-side validators (e.g. a
   `contestedFieldValid(f)` predicate) once the store plan lands. Regenerate

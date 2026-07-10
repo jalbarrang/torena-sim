@@ -1,7 +1,7 @@
 // Emit the runtime data datasets as content-hashed files under
 // `public/<DATA_DIR>/` plus a stable `manifest.json` (logical key -> hashed
 // filename). Used by the `data-manifest` Vite plugin (dev + build) and runnable
-// standalone via `bun run data:manifest`.
+// standalone via `pnpm run data:manifest`.
 //
 // Why hashing + a stable manifest: the app fetches data at runtime instead of
 // inlining ~3.6MB of JSON in the JS bundle, and because the bundle references
@@ -57,7 +57,7 @@ export function generateDataManifest(repoRoot: string): void {
   writeFileSync(join(outDir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-// CLI entry: `bun run data:manifest`
+// CLI entry: `pnpm run data:manifest`
 if (import.meta.main) {
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
   generateDataManifest(repoRoot);

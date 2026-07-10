@@ -170,7 +170,7 @@ The implemented sequence (each commit green + parity GO):
 ## Parity / safety gate (every step)
 
 `cargo test` across the workspace · `cargo clippy --workspace --all-targets --
--D warnings` · `cargo fmt --check` · `bun run typecheck` · `bun run lint` · `bun
+-D warnings` · `cargo fmt --check` · `pnpm run typecheck` · `pnpm run lint` · `pnpm
 run wasm:build`. The ADR-0004 statistical-parity + per-skill suites
 (`parity.test.ts`, node-target WASM) must remain **GO**.
 

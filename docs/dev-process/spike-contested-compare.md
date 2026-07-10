@@ -115,8 +115,8 @@ untouched — no breaking changes. TS side needs a new adapter path in
 ## Field-composition decision: default is `mobs` (resolved)
 
 Outcome of the `duo` vs `mobs` experiment (contested-compare-ui t-003). Reproduce
-with `bun run wasm:build` then
-`bun scripts/run-contested-field-experiment.ts --samples 400 --seed 1`
+with `pnpm run wasm:build` then
+`pnpm exec tsx scripts/run-contested-field-experiment.ts --samples 400 --seed 1`
 (`scripts/run-contested-field-experiment.ts`).
 
 400 samples/mode, seed 1, turf, balanced ~1200 spd builds:

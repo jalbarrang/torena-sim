@@ -12,9 +12,9 @@ For the end-to-end pipeline and source ownership, see:
 Start with `master.mdb` to establish what's live on Global, then sync GameTora for the full catalog:
 
 ```bash
-bun run db:fetch        # 1. Download latest master.mdb
-bun run extract:all     # 2. Extract course geometry from master.mdb
-bun run sync:data       # 3. Sync entity catalog (skills, umas, cards) from GameTora
+pnpm run db:fetch        # 1. Download latest master.mdb
+pnpm run extract:all     # 2. Extract course geometry from master.mdb
+pnpm run sync:data       # 3. Sync entity catalog (skills, umas, cards) from GameTora
 ```
 
 What that produces:
@@ -27,12 +27,12 @@ What that produces:
 
 | Source                 | Owns                                                                                          | Command                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **GameTora snapshots** | skills, character cards, support cards, support effects, training events, reward dictionaries | `bun run sync:data`                                    |
-| **master.mdb**         | course geometry only                                                                          | `bun run extract:all` or `bun run extract:course-data` |
+| **GameTora snapshots** | skills, character cards, support cards, support effects, training events, reward dictionaries | `pnpm run sync:data`                                    |
+| **master.mdb**         | course geometry only                                                                          | `pnpm run extract:all` or `pnpm run extract:course-data` |
 
 ## Prerequisites
 
-- **bun**
+- **Node 26+** (scripts run via `tsx`; sqlite access uses `node:sqlite`)
 - **master.mdb** — required for `extract:all` / `extract:course-data`
 - **Network access** — required for `sync:data`; optional for `fetch:support-events`
 
@@ -51,7 +51,7 @@ uma-sim/
 All extract scripts auto-detect this path. You can also pass a custom path:
 
 ```bash
-bun scripts/data-extract/extract-course-data.ts /path/to/master.mdb
+pnpm exec tsx scripts/data-extract/extract-course-data.ts /path/to/master.mdb
 ```
 
 Platform defaults:
@@ -65,9 +65,9 @@ Platform defaults:
 
 | Script                   | Command                       | Role                                                                 |
 | ------------------------ | ----------------------------- | -------------------------------------------------------------------- |
-| `sync-gametora.ts`       | `bun run sync:data`           | Sync GameTora snapshots for the entity catalog                       |
-| `extract-all.ts`         | `bun run extract:all`         | Primary `master.mdb` pipeline; currently runs course extraction only |
-| `extract-course-data.ts` | `bun run extract:course-data` | Extract course geometry directly                                     |
+| `sync-gametora.ts`       | `pnpm run sync:data`           | Sync GameTora snapshots for the entity catalog                       |
+| `extract-all.ts`         | `pnpm run extract:all`         | Primary `master.mdb` pipeline; currently runs course extraction only |
+| `extract-course-data.ts` | `pnpm run extract:course-data` | Extract course geometry directly                                     |
 
 ### Standalone master.mdb Fallback Tools
 
@@ -75,15 +75,15 @@ These scripts still work, but they are no longer part of the recommended pipelin
 
 | Script                     | Command                         | Output                                     |
 | -------------------------- | ------------------------------- | ------------------------------------------ |
-| `extract-skills.ts`        | `bun run extract:skills`        | `src/modules/data/json/skills.json`        |
-| `extract-support-cards.ts` | `bun run extract:support-cards` | `src/modules/data/json/support-cards.json` |
-| `extract-uma-info.ts`      | `bun run extract:uma-info`      | `src/modules/data/json/umas.json`          |
+| `extract-skills.ts`        | `pnpm run extract:skills`        | `src/modules/data/json/skills.json`        |
+| `extract-support-cards.ts` | `pnpm run extract:support-cards` | `src/modules/data/json/support-cards.json` |
+| `extract-uma-info.ts`      | `pnpm run extract:uma-info`      | `src/modules/data/json/umas.json`          |
 
 ### Legacy / Redundant Helper
 
 | Script                    | Command                        | Status                                                                                |
 | ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
-| `fetch-support-events.ts` | `bun run fetch:support-events` | Redundant for the main pipeline; support card events now come from GameTora snapshots |
+| `fetch-support-events.ts` | `pnpm run fetch:support-events` | Redundant for the main pipeline; support card events now come from GameTora snapshots |
 
 `fetch:support-events` is kept for now as a standalone utility, but it is no longer required for normal data syncs.
 
@@ -93,13 +93,13 @@ Course extraction updates `data-manifest.json` after a successful run.
 
 ```bash
 # Use a known resource version
-bun run extract:all -- --resource-version 10004010
+pnpm run extract:all -- --resource-version 10004010
 
 # Resolve the latest version from uma.moe before writing the manifest
-bun run extract:all -- --resolve-resource-version
+pnpm run extract:all -- --resolve-resource-version
 ```
 
-The same flags also work with `bun run extract:course-data`.
+The same flags also work with `pnpm run extract:course-data`.
 
 ## Output Files
 
@@ -107,18 +107,18 @@ The same flags also work with `bun run extract:course-data`.
 
 | File                                     | Source        | Produced by                                            |
 | ---------------------------------------- | ------------- | ------------------------------------------------------ |
-| `src/modules/data/json/gametora/*.json`  | GameTora      | `bun run sync:data`                                    |
-| `src/modules/data/json/course_data.json` | master.mdb    | `bun run extract:all` / `bun run extract:course-data`  |
-| `data-manifest.json`                     | sync metadata | `bun run sync:data`, then updated by course extraction |
+| `src/modules/data/json/gametora/*.json`  | GameTora      | `pnpm run sync:data`                                    |
+| `src/modules/data/json/course_data.json` | master.mdb    | `pnpm run extract:all` / `pnpm run extract:course-data`  |
+| `data-manifest.json`                     | sync metadata | `pnpm run sync:data`, then updated by course extraction |
 
 ### Standalone Fallback Outputs
 
 | File                                        | Source     | Produced by                     |
 | ------------------------------------------- | ---------- | ------------------------------- |
-| `src/modules/data/json/skills.json`         | master.mdb | `bun run extract:skills`        |
-| `src/modules/data/json/support-cards.json`  | master.mdb | `bun run extract:support-cards` |
-| `src/modules/data/json/umas.json`           | master.mdb | `bun run extract:uma-info`      |
-| `src/modules/data/json/support-events.json` | GameTora   | `bun run fetch:support-events`  |
+| `src/modules/data/json/skills.json`         | master.mdb | `pnpm run extract:skills`        |
+| `src/modules/data/json/support-cards.json`  | master.mdb | `pnpm run extract:support-cards` |
+| `src/modules/data/json/umas.json`           | master.mdb | `pnpm run extract:uma-info`      |
+| `src/modules/data/json/support-events.json` | GameTora   | `pnpm run fetch:support-events`  |
 
 ## Merge vs Replace
 
@@ -130,8 +130,8 @@ Course extraction still supports the existing modes:
 | **Replace** (`--replace`) | Overwrites with only current `master.mdb` courses       | Clean rebuild   |
 
 ```bash
-bun run extract:all
-bun run extract:all -- --replace
+pnpm run extract:all
+pnpm run extract:all -- --replace
 ```
 
 ## Shared Libraries

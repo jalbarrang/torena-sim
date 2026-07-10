@@ -1,6 +1,6 @@
 import type { CaratServer } from '@/store/carat.store';
 
-export type PaidPackId = 'p11000' | 'p7500' | 'p1500';
+type PaidPackId = 'p11000' | 'p7500' | 'p1500';
 
 export type PaidPackPurchases = Record<PaidPackId, number>;
 
@@ -15,13 +15,7 @@ type PaidPackDefinition = {
   multiplier: Partial<Record<CaratServer, number>>;
 };
 
-export const defaultPaidPackPurchases: PaidPackPurchases = {
-  p11000: 0,
-  p7500: 0,
-  p1500: 0
-};
-
-export const paidPackDefinitions: Record<PaidPackId, PaidPackDefinition> = {
+const paidPackDefinitions: Record<PaidPackId, PaidPackDefinition> = {
   p11000: { carats: 11000, usd: 140, multiplier: { jp: 1.2, global: 1.1 } },
   p7500: { carats: 7500, usd: 70, multiplier: { jp: 1.1, global: 1.1 } },
   p1500: { carats: 1500, usd: 14, multiplier: { jp: 1, global: 1 } }

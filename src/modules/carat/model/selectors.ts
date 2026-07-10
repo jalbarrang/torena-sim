@@ -1,7 +1,7 @@
 import type { TimelineAnniversary, TimelinePayload } from '@/modules/carat/data/timeline-types';
 import type { PaidPackPurchases } from '@/modules/carat/model/paid';
 
-export type SelectorStepUp = {
+type SelectorStepUp = {
   rarity: '3star' | 'ssr';
   steps: number;
   guaranteedSlots: number;

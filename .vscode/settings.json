@@ -6,8 +6,5 @@
     "source.fixAll.eslint": "always"
   },
 
-  "eslint.useFlatConfig": true,
-
-  "typescript.experimental.useTsgo": true,
-  "typescript.native-preview.tsdk": "node_modules/@typescript/native-preview"
+  "eslint.useFlatConfig": true
 }

@@ -22,4 +22,4 @@
 
 # Generated / lock files: keep LF, mark as such where helpful.
 CHANGELOG.md text eol=lf
-bun.lock text eol=lf
+pnpm-lock.yaml text eol=lf

@@ -1,8 +1,7 @@
 import type { Runner } from '../runner/types';
 import type { ActivationSamplePolicy } from './policies/ActivationSamplePolicy';
-import type { Region, RegionList } from '../shared/region';
+import type { RegionList } from '../shared/region';
 import type { ISkillRarity, ISkillTarget, ISkillType } from './definitions';
-import type { Timer } from '../simulator.types';
 
 export type DynamicCondition = (runner: Runner) => boolean;
 
@@ -25,38 +24,7 @@ export type SkillTrigger = {
   extraCondition: DynamicCondition;
 };
 
-export type PendingSkill = {
-  skillId: string;
-  rarity: ISkillRarity;
-  trigger: Region;
-  effects: Array<SkillEffect>;
-  extraCondition: DynamicCondition;
-};
-
-export type TargetedSkillOrigin = 'injection' | 'runner';
-
-export type PendingTargetedSkill = {
-  skillId: string;
-  origin: TargetedSkillOrigin;
-  sourceRunnerId?: number;
-  trigger: Region;
-  effects: Array<SkillEffect>;
-};
-
-export type ActiveSkill = {
-  skillId: string;
-  durationTimer: Timer;
-  modifier: number;
-  effectTarget: ISkillTarget;
-  effectType: ISkillType;
-};
-
-export type ActiveTargetedSkill = ActiveSkill & {
-  origin: TargetedSkillOrigin;
-  sourceRunnerId?: number;
-};
-
-export type RawSkillEffect = {
+type RawSkillEffect = {
   modifier: number;
   target: ISkillTarget;
   type: number;

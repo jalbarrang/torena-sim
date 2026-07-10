@@ -25,7 +25,7 @@ import type { RaceConditions } from '@/utils/races';
 import { candidateScanPositions } from './position-context';
 import { useSkillVisualizerStore } from './store';
 
-export const VISUALIZER_COLORS = [
+const VISUALIZER_COLORS = [
   '#2a77c5',
   '#c52a2a',
   '#188a4c',
@@ -106,7 +106,7 @@ const STRATEGY_ORDER: Array<IStrategyName> = [
 // Mirrors the field size hardcoded in racedefToParams.
 const NUM_UMAS = 9;
 
-export type VisualizerRegion = {
+type VisualizerRegion = {
   start: number;
   end: number;
 };
@@ -119,7 +119,7 @@ export type VisualizerTriggerRow = {
   hasDynamicCondition: boolean;
 };
 
-export type VisualizerEntryStatus = 'ok' | 'no-activation' | 'unsupported';
+type VisualizerEntryStatus = 'ok' | 'no-activation' | 'unsupported';
 
 export type SkillVisualizerEntry = {
   skillId: string;

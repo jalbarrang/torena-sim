@@ -2,7 +2,7 @@ import type { CreateRunner, RunnerAptitudes, StatLine } from '../runner/types';
 import { Aptitude, Mood, Strategy } from '../runner/definitions';
 import type { IMood, IStrategy } from '../runner/definitions';
 
-export type MobConfig = {
+type MobConfig = {
   strategy: IStrategy;
   stats: StatLine;
   mood: IMood;
@@ -35,7 +35,7 @@ const DEFAULT_MOB_APTITUDES: RunnerAptitudes = {
   surface: Aptitude.A
 };
 
-export function createMobRunners(configs: MobConfig[]): CreateRunner[] {
+function createMobRunners(configs: MobConfig[]): CreateRunner[] {
   return configs.map((config) => ({
     outfitId: '',
     mood: config.mood,

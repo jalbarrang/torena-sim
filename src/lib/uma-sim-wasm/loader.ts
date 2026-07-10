@@ -1,7 +1,7 @@
 // Async loader for the wasm-pack (`--target web`) module. Initializes the WASM
 // instance once per worker/realm and exposes the typed batch + streaming APIs.
 //
-// The generated bundle lives at `./pkg/uma_sim_wasm.js` after `bun run
+// The generated bundle lives at `./pkg/uma_sim_wasm.js` after `pnpm run
 // wasm:build`. We import it through a *variable* specifier so the typechecker
 // does not require the generated artifact to be present, while Vite still
 // resolves it at build time.

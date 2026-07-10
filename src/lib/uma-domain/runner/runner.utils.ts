@@ -22,7 +22,7 @@ export type BuildSkillDataParams = {
  *
  * Note: we removed isTarget call as skill targeting will be direct inside of the RaceSimulator and Runner entities.
  */
-export function buildSkillEffects(skill: SkillAlternative) {
+function buildSkillEffects(skill: SkillAlternative) {
   const effects: Array<SkillEffect> = [];
 
   for (const effect of skill.effects) {

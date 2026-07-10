@@ -1,6 +1,6 @@
 # React Doctor — deferred refactors
 
-Full scan: `bun run ql:react -- . --verbose`. Recharts chart modules are lazy-loaded at route/tab boundaries; see `src/components/bassin-chart/lazy-bassin-charts.ts` and `distribution-tab.tsx`.
+Full scan: `pnpm run ql:react -- . --verbose`. Recharts chart modules are lazy-loaded at route/tab boundaries; see `src/components/bassin-chart/lazy-bassin-charts.ts` and `distribution-tab.tsx`.
 
 Address the warnings below only when editing the related feature — avoid drive-by refactors.
 

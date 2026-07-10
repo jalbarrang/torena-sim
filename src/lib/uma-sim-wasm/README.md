@@ -13,7 +13,7 @@ which owns the condition parsing + simulation.
   `skillsService`), `resolveSkillInput`, `wasmResultToAppResult`.
 - `loader.ts` — async init (`initUmaSimWasm`) + `runRaceSim` (batch) +
   `createRaceSimulator` (streaming, per-tick callbacks).
-- `pkg/` — **generated** by `bun run wasm:build` (git-ignored).
+- `pkg/` — **generated** by `pnpm run wasm:build` (git-ignored).
 
 ## Building the WASM bundle
 
@@ -29,7 +29,7 @@ cargo install wasm-pack            # or: cargo binstall wasm-pack
 Then:
 
 ```bash
-bun run wasm:build
+pnpm run wasm:build
 # -> writes src/lib/uma-sim-wasm/pkg/{uma_sim_wasm.js,_bg.wasm,...}
 ```
 
@@ -132,7 +132,7 @@ reconstructs the rich `collectedData` the UI consumes:
 
 ```bash
 cargo install wasm-pack    # one-time; not currently installed
-bun run wasm:build         # emits src/lib/uma-sim-wasm/pkg/ (--target web)
+pnpm run wasm:build         # emits src/lib/uma-sim-wasm/pkg/ (--target web)
 ```
 
 The existing Vite config (`assetsInclude: ['**/*.wasm']` + `worker.format: 'es'`)

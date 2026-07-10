@@ -581,10 +581,10 @@ async function main(): Promise<number> {
       'after',
       `
 Examples:
-  bun scripts/master-data/fetch-master-db.ts
-  bun scripts/master-data/fetch-master-db.ts 10004010
-  bun scripts/master-data/fetch-master-db.ts --output ./downloads
-  bun scripts/master-data/fetch-master-db.ts 10004010 --platform Android --quiet
+  pnpm exec tsx scripts/master-data/fetch-master-db.ts
+  pnpm exec tsx scripts/master-data/fetch-master-db.ts 10004010
+  pnpm exec tsx scripts/master-data/fetch-master-db.ts --output ./downloads
+  pnpm exec tsx scripts/master-data/fetch-master-db.ts 10004010 --platform Android --quiet
 
 Manifest Chain:
   Root Manifest -> Platform Manifest -> Master Manifest -> master.mdb

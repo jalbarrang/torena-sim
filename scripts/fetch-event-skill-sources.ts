@@ -1,17 +1,19 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
  * Fetch eventData from GameTora for all support cards and produce a JSON mapping
  * of support_id → { chain_event_skills, random_event_skills }.
  *
- * Usage: bun scripts/fetch-event-skill-sources.ts
+ * Usage: tsx scripts/fetch-event-skill-sources.ts
  * Output: src/modules/data/json/gametora/event-skill-sources.json
  */
 
+import { setTimeout as sleep } from 'node:timers/promises';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import supportCardsJson from '../src/modules/data/json/gametora/support-cards.json';
 
 const OUTPUT_FILE = resolve(
-  import.meta.dir,
+  import.meta.dirname,
   '../src/modules/data/json/gametora/event-skill-sources.json'
 );
 
@@ -143,7 +145,7 @@ for (let i = 0; i < cards.length; i += CONCURRENCY) {
           return;
         } catch (err) {
           lastError = err;
-          await Bun.sleep(RETRY_DELAY_MS * (attempt + 1));
+          await sleep(RETRY_DELAY_MS * (attempt + 1));
         }
       }
 
@@ -181,5 +183,5 @@ if (errors.length > 0) {
   }
 }
 
-await Bun.write(OUTPUT_FILE, JSON.stringify(result));
+await writeFile(OUTPUT_FILE, JSON.stringify(result));
 console.log(`Written to ${OUTPUT_FILE}`);

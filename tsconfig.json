@@ -4,7 +4,7 @@
     "incremental": true,
     // Environment setup & latest features
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "bun"],
+    "types": ["vite/client", "node"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",

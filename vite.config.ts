@@ -72,7 +72,7 @@ function copyUmaSimWasmPkg(): Plugin {
         const from = join(srcDir, file);
         if (!existsSync(from)) {
           throw new Error(
-            `[copy-uma-sim-wasm-pkg] missing ${from}. Run \`bun run wasm:build\` before \`vite build\`.`
+            `[copy-uma-sim-wasm-pkg] missing ${from}. Run \`pnpm run wasm:build\` before \`vite build\`.`
           );
         }
         copyFileSync(from, join(destDir, file));

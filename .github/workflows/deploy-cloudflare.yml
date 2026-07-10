@@ -38,8 +38,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Setup Rust toolchain (wasm32)
         uses: dtolnay/rust-toolchain@stable
@@ -57,22 +63,22 @@ jobs:
           tool: wasm-pack
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Generate changelog for build
-        run: bun run changelog:generate
+        run: pnpm run changelog:generate
 
       - name: Run type check
-        run: bun run typecheck
+        run: pnpm run typecheck
 
       - name: Run linter
-        run: bun run lint
+        run: pnpm run lint
 
       - name: Build app
-        run: bun run build
+        run: pnpm run build
 
       - name: Verify worker bundles stay data-free
-        run: bun run check:worker-bundles
+        run: pnpm run check:worker-bundles
 
       - name: Add SPA fallback for client-side routing
         run: printf '/*    /index.html    200\n' > dist/_redirects
@@ -80,7 +86,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:
-          packageManager: bun
+          packageManager: pnpm
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=torena-sim --branch=main

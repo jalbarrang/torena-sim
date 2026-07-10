@@ -1,5 +1,3 @@
-import { RawSkillEffect } from './skill.types';
-
 export const SkillType = {
   Noop: 0,
   // Adds Stat Bonuses
@@ -51,7 +49,7 @@ export const SkillType = {
   ExtendEvolvedDuration: 42
 } as const;
 export type ISkillType = (typeof SkillType)[keyof typeof SkillType];
-export const SkillEffectName: Record<ISkillType, string> = {
+const SkillEffectName: Record<ISkillType, string> = {
   [SkillType.Noop]: 'Noop',
   [SkillType.SpeedUp]: 'Speed Up',
   [SkillType.StaminaUp]: 'Stamina Up',
@@ -78,11 +76,6 @@ export const SkillPerspective = {
   Any: 3
 } as const;
 export type ISkillPerspective = (typeof SkillPerspective)[keyof typeof SkillPerspective];
-export const SkillPerspectiveName: Record<ISkillPerspective, string> = {
-  [SkillPerspective.Self]: 'Self',
-  [SkillPerspective.Other]: 'Other',
-  [SkillPerspective.Any]: 'Any'
-};
 
 // Skill Rarity
 export const SkillRarity = {
@@ -92,12 +85,6 @@ export const SkillRarity = {
   Evolution: 6
 } as const;
 export type ISkillRarity = (typeof SkillRarity)[keyof typeof SkillRarity];
-export const SkillRarityName: Record<ISkillRarity, string> = {
-  [SkillRarity.White]: 'White',
-  [SkillRarity.Gold]: 'Gold',
-  [SkillRarity.Unique]: 'Unique',
-  [SkillRarity.Evolution]: 'Evolution'
-};
 
 export const SkillTarget = {
   Self: 1,
@@ -115,7 +102,7 @@ export const SkillTarget = {
   UsedRecovery: 23
 } as const;
 export type ISkillTarget = (typeof SkillTarget)[keyof typeof SkillTarget];
-export const SkillEffectTargetName: Record<ISkillTarget, string> = {
+const SkillEffectTargetName: Record<ISkillTarget, string> = {
   [SkillTarget.Self]: 'Self',
   [SkillTarget.All]: 'All',
   [SkillTarget.InFov]: 'In FOV',
@@ -130,47 +117,6 @@ export const SkillEffectTargetName: Record<ISkillTarget, string> = {
   [SkillTarget.UmaId]: 'Uma ID',
   [SkillTarget.UsedRecovery]: 'Used Recovery'
 };
-
-export const PositionKeepState = {
-  None: 0,
-  PaceUp: 1,
-  PaceDown: 2,
-  SpeedUp: 3,
-  Overtake: 4,
-  PaceUpEx: 5
-} as const;
-export type IPositionKeepState = (typeof PositionKeepState)[keyof typeof PositionKeepState];
-export const PositionKeepStateName: Record<IPositionKeepState, string> = {
-  [PositionKeepState.None]: 'None',
-  [PositionKeepState.PaceUp]: 'Pace Up',
-  [PositionKeepState.PaceDown]: 'Pace Down',
-  [PositionKeepState.SpeedUp]: 'Speed Up',
-  [PositionKeepState.Overtake]: 'Overtake',
-  [PositionKeepState.PaceUpEx]: 'Pace Up Ex'
-};
-
-export type ISkillData = {
-  rarity: ISkillRarity;
-  alternatives: Array<ISkillAlternative>;
-};
-
-export type ISkillAlternative = {
-  precondition: ISkillPrecondition;
-  condition: string;
-  baseDuration: number;
-  effects: Array<ISkillEffect>;
-};
-
-export type ISkillEffect = RawSkillEffect & {
-  baseDuration: number;
-};
-
-export const SkillPrecondition = {
-  Empty: '',
-  Phase2OrderRate50OvertakeTargetTime2: 'phase>=2&order_rate<=50&overtake_target_time>=2'
-} as const;
-
-export type ISkillPrecondition = (typeof SkillPrecondition)[keyof typeof SkillPrecondition];
 
 export const translateSkillEffectType = (type: ISkillType) => {
   return SkillEffectName[type];

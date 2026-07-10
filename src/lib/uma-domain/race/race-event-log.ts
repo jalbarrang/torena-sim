@@ -25,7 +25,7 @@ export type RaceEventKind =
   | 'mid-race-start'
   | 'late-race-start';
 
-export type RaceEventDetail = {
+type RaceEventDetail = {
   skillId?: string;
   otherRunnerIds?: number[];
   finishPlace?: number;

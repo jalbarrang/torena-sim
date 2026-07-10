@@ -30,7 +30,7 @@ Responses always `{ ok, ... }`:
 ## Setup
 
 ```bash
-bun install
+pnpm install
 wrangler login
 ```
 
@@ -61,8 +61,8 @@ provisions a local KV automatically).
 ## Develop / deploy
 
 ```bash
-bun run dev       # wrangler dev (local, :8787)
-bun run deploy    # wrangler deploy
+pnpm run dev       # wrangler dev (local, :8787)
+pnpm run deploy    # wrangler deploy
 ```
 
 ## App wiring

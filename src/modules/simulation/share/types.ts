@@ -3,7 +3,7 @@ import type { WitVarianceSettings, StaminaDrainOverrides } from '@/store/setting
 import type { RaceConditions } from '@/utils/races';
 import type { InjectedDebuffsMap, ScenarioOverridesMap } from '@/modules/simulation/types';
 
-export type CompareMode = 'contested' | 'vacuum';
+type CompareMode = 'contested' | 'vacuum';
 
 export const SIMULATION_SNAPSHOT_VERSION = 2 as const;
 

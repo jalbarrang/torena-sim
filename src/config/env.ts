@@ -1,4 +1,5 @@
-const env = import.meta.env;
+// vite/vitest inject import.meta.env; Node-run CLI scripts (tsx) fall back to process.env
+const env = import.meta.env ?? process.env;
 
 const appEnv: Record<string, string | undefined> = {
   VITE_BASE_PATH: env.VITE_BASE_PATH,

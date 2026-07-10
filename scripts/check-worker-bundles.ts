@@ -12,7 +12,7 @@
  * (a) contains a known dataset string, or (b) exceeds the size budget. Probe
  * strings are read from the JSON at runtime so they never go stale.
  *
- * Run:  bun scripts/check-worker-bundles.ts   (after `bun run build`)
+ * Run:  pnpm run check:worker-bundles   (after `pnpm run build`)
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -54,7 +54,7 @@ function main(): void {
   try {
     workers = readdirSync(assetsDir).filter((f) => f.includes('worker') && f.endsWith('.js'));
   } catch {
-    console.error(`[check-worker-bundles] ${assetsDir} not found — run \`bun run build\` first.`);
+    console.error(`[check-worker-bundles] ${assetsDir} not found — run \`pnpm run build\` first.`);
     process.exit(1);
   }
 

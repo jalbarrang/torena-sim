@@ -4,7 +4,7 @@ import { CARAT_PER_PULL } from '@/modules/carat/model/income-tables';
 import { totalPaidCaratsFromPurchases, type PaidPackPurchases } from '@/modules/carat/model/paid';
 import type { CaratSettings, PlannedBanner } from '@/store/carat.store';
 
-export type TicketType = 'uma' | 'support';
+type TicketType = 'uma' | 'support';
 
 export type BannerPlanRow = {
   event: TimelineEvent;

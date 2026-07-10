@@ -1,4 +1,3 @@
-import type { IGroundCondition, ISeason, ITimeOfDay, IWeather, IGrade } from '../course/definitions';
 import type { IAptitude, IMood, IStrategy } from './definitions';
 
 export type StatLine = {
@@ -32,18 +31,6 @@ export type CreateRunner = {
   forcedRank?: Array<{ start: number; end: number; rank: number }>;
 };
 
-export type RaceParameters = {
-  ground: IGroundCondition;
-  weather: IWeather;
-  season: ISeason;
-  timeOfDay: ITimeOfDay;
-  grade: IGrade;
-  strategyCounts?: Map<IStrategy, number>;
-  commonSkills?: Map<string, number>;
-  numUmas?: number;
-  [key: string]: any;
-};
-
 // Temporary structural bridge while the deprecated TS engine still compiles
 // against domain skill types. The delete-ts-engine plan removes that engine,
 // after which this can be narrowed around live parser consumers only.
@@ -52,7 +39,7 @@ export type Runner = any;
 const adjustOvercap = (stat: number): number =>
   stat > 1200 ? 1200 + Math.floor((stat - 1200) / 2) : stat;
 
-export const calculateMoodCoefficient = (mood: IMood): number => 1 + 0.02 * mood;
+const calculateMoodCoefficient = (mood: IMood): number => 1 + 0.02 * mood;
 
 export const buildBaseStats = (stats: StatLine, mood: IMood): StatLine => {
   const moodCoefficient = calculateMoodCoefficient(mood);

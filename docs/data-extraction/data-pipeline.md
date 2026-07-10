@@ -18,8 +18,8 @@ The project uses a two-layer pipeline per entity:
 
 | Source                 | Owns                                                                                       | Access path                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| **master.mdb**         | Course geometry; Global cutover JSON (`skills.json`, `umas.json`, `support-cards.json`)    | `bun run db:fetch` then `bun run extract:all` |
-| **GameTora snapshots** | Full entity catalog: skills, character cards, support cards, training events, dictionaries | `bun run sync:data`                           |
+| **master.mdb**         | Course geometry; Global cutover JSON (`skills.json`, `umas.json`, `support-cards.json`)    | `pnpm run db:fetch` then `pnpm run extract:all` |
+| **GameTora snapshots** | Full entity catalog: skills, character cards, support cards, training events, dictionaries | `pnpm run sync:data`                           |
 
 **Operator rule:** _upcoming_ = in GameTora but not in the master extract; _released on Global_ = present in the master extract.
 
@@ -28,9 +28,9 @@ The project uses a two-layer pipeline per entity:
 Refresh Global cutover first, then overlay the full catalog:
 
 ```bash
-bun run db:fetch        # 1. Download latest master.mdb (Global ground truth)
-bun run extract:all     # 2. Extract courses + Global cutover artifacts from master.mdb
-bun run sync:data       # 3. Sync full entity catalog from GameTora
+pnpm run db:fetch        # 1. Download latest master.mdb (Global ground truth)
+pnpm run extract:all     # 2. Extract courses + Global cutover artifacts from master.mdb
+pnpm run sync:data       # 3. Sync full entity catalog from GameTora
 ```
 
 `extract:all` runs course extraction plus `extract:skills`, `extract:uma-info`, and `extract:support-cards`.
@@ -38,16 +38,16 @@ bun run sync:data       # 3. Sync full entity catalog from GameTora
 If you know the `master.mdb` resource version, or want to resolve it from `uma.moe`, pass one of these when extracting courses:
 
 ```bash
-bun run extract:all -- --resource-version 10004010
-bun run extract:all -- --resolve-resource-version
+pnpm run extract:all -- --resource-version 10004010
+pnpm run extract:all -- --resolve-resource-version
 ```
 
 Individual cutover extracts (also invoked by `extract:all`):
 
 ```bash
-bun run extract:skills
-bun run extract:uma-info
-bun run extract:support-cards
+pnpm run extract:skills
+pnpm run extract:uma-info
+pnpm run extract:support-cards
 ```
 
 ## Source: GameTora Snapshots
@@ -56,7 +56,7 @@ GameTora provides the **full catalog** (released + upcoming).
 
 ### What `sync:data` writes
 
-`bun run sync:data` snapshots these manifest keys into `src/modules/data/json/gametora/`:
+`pnpm run sync:data` snapshots these manifest keys into `src/modules/data/json/gametora/`:
 
 | Manifest key             | Output file                   |
 | ------------------------ | ----------------------------- |
@@ -138,7 +138,7 @@ These scripts extract directly from `master.mdb` for diffing against GameTora. T
 
 | File                                       | Source            | Produced by                             |
 | ------------------------------------------ | ----------------- | --------------------------------------- |
-| `src/modules/data/json/gametora/*.json`    | GameTora          | `bun run sync:data`                     |
+| `src/modules/data/json/gametora/*.json`    | GameTora          | `pnpm run sync:data`                     |
 | `src/modules/data/json/skills.json`        | master.mdb        | `extract:skills` / `extract:all`        |
 | `src/modules/data/json/umas.json`          | master.mdb        | `extract:uma-info` / `extract:all`      |
 | `src/modules/data/json/support-cards.json` | master.mdb        | `extract:support-cards` / `extract:all` |

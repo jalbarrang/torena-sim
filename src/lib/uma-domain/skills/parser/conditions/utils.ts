@@ -6,7 +6,6 @@ import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import {
   ErlangRandomPolicy,
   ImmediatePolicy,
-  LogNormalRandomPolicy,
   RandomPolicy,
   UniformRandomPolicy
 } from '@/lib/uma-domain/skills/policies/ActivationSamplePolicy';
@@ -19,7 +18,7 @@ export function kTrue(_: Runner) {
   return true;
 }
 
-export const defaultRandom: ICondition = {
+const defaultRandom: ICondition = {
   samplePolicy: RandomPolicy,
   filterEq: notSupported,
   filterNeq: notSupported,
@@ -29,7 +28,7 @@ export const defaultRandom: ICondition = {
   filterGte: notSupported
 };
 
-export const defaultImmediate: ICondition = {
+const defaultImmediate: ICondition = {
   samplePolicy: ImmediatePolicy,
   filterEq: notSupported,
   filterNeq: notSupported,
@@ -54,7 +53,7 @@ type DistributionRandomPolicyConstructor<TArgs extends Array<unknown>> = new (
 // ive tried various things to make this return a [xRandom,noopXRandom] pair but seem to run into some typescript bugs
 // or something
 // it doesnt really make sense to me
-export const distributionRandomFactory = <TArgs extends Array<unknown>>(
+const distributionRandomFactory = <TArgs extends Array<unknown>>(
   cls: DistributionRandomPolicyConstructor<TArgs>
 ) => {
   const cache = Object.create(null);
@@ -87,11 +86,10 @@ export const distributionRandomFactory = <TArgs extends Array<unknown>>(
   };
 };
 
-export const logNormalRandom = distributionRandomFactory(LogNormalRandomPolicy);
 export const erlangRandom = distributionRandomFactory(ErlangRandomPolicy);
 export const uniformRandom = distributionRandomFactory(UniformRandomPolicy);
 
-export const noopAll: Omit<ICondition, 'samplePolicy'> = {
+const noopAll: Omit<ICondition, 'samplePolicy'> = {
   filterEq: noop,
   filterNeq: noop,
   filterLt: noop,
@@ -100,21 +98,15 @@ export const noopAll: Omit<ICondition, 'samplePolicy'> = {
   filterGte: noop
 };
 
-export const noopLogNormalRandom = (mu: number, sigma: number) => {
-  return logNormalRandom(mu, sigma, noopAll);
-};
-
 export const noopErlangRandom = (k: number, lambda: number) => {
   return erlangRandom(k, lambda, noopAll);
 };
-
-export const noopUniformRandom = uniformRandom(noopAll);
 
 export function notSupported(_params: ConditionFilterParams): never {
   throw new Error('unsupported comparison');
 }
 
-export function noop(params: ConditionFilterParams) {
+function noop(params: ConditionFilterParams) {
   return params.regions;
 }
 
@@ -122,7 +114,6 @@ export const noopImmediate: ICondition = {
   ...noopAll,
   samplePolicy: ImmediatePolicy
 };
-export const noopRandom: ICondition = { ...noopAll, samplePolicy: RandomPolicy };
 
 /**
  * Approximates the earliest distance at which a >= time condition can be satisfied,

@@ -548,7 +548,7 @@ The module includes comprehensive unit tests:
 Run tests with:
 
 ```bash
-bun run test src/modules/skill-planner/
+pnpm run test src/modules/skill-planner/
 ```
 
 ---

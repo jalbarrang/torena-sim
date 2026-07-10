@@ -29,7 +29,7 @@ export async function ensureCliWasm(): Promise<UmaSimWasmCliModule> {
     wasmModulePromise = (async () => {
       if (!existsSync(wasmJsPath) || !existsSync(wasmBgPath)) {
         throw new Error(
-          `WASM bundle not found at ${wasmPkgDir}. Run \`bun run wasm:build\` before using CLI simulation scripts.`
+          `WASM bundle not found at ${wasmPkgDir}. Run \`pnpm run wasm:build\` before using CLI simulation scripts.`
         );
       }
 

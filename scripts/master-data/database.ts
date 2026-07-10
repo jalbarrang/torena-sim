@@ -1,11 +1,11 @@
 /**
- * Database connection utilities using Bun's native SQLite
+ * Database connection utilities using Node's native SQLite (node:sqlite, Node 26+)
  */
 
-import { Database } from 'bun:sqlite';
-import type { SQLQueryBindings } from 'bun:sqlite';
+import { DatabaseSync } from 'node:sqlite';
+import type { SQLInputValue } from 'node:sqlite';
 
-export type { Database };
+export type Database = DatabaseSync;
 
 /**
  * Open a database connection in readonly mode
@@ -14,7 +14,7 @@ export type { Database };
  */
 export function openDatabase(path: string): Database {
   try {
-    const db = new Database(path, { readonly: true, create: false });
+    const db = new DatabaseSync(path, { readOnly: true });
     return db;
   } catch (err) {
     const error = err as Error;
@@ -57,10 +57,11 @@ export function queryAll<T>(db: Database, sql: string): Array<T> {
  * @param params Query parameters
  * @returns Array of result rows
  */
-export function queryAllWithParams<
-  T,
-  TParams extends Array<SQLQueryBindings> = Array<SQLQueryBindings>
->(db: Database, sql: string, ...params: TParams): Array<T> {
+export function queryAllWithParams<T, TParams extends Array<SQLInputValue> = Array<SQLInputValue>>(
+  db: Database,
+  sql: string,
+  ...params: TParams
+): Array<T> {
   try {
     const stmt = db.prepare(sql);
     return stmt.all(...params) as Array<T>;

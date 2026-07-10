@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { cloneDeep } from 'es-toolkit';
-import { defaultPaidPackPurchases, type PaidPackPurchases } from '@/modules/carat/model/paid';
+import type { PaidPackPurchases } from '@/modules/carat/model/paid';
 
 const CARAT_STORE_NAME = 'umalator-carat';
 
@@ -125,11 +125,6 @@ export function getActivePlan(state: CaratState): CaratPlan {
   return state.plans.find((plan) => plan.id === state.activePlanId) ?? state.plans[0];
 }
 
-/** Selector hook for the active plan. */
-export function useActivePlan(): CaratPlan {
-  return useCaratStore(getActivePlan);
-}
-
 function normalizeBanner(banner: PlannedBanner): PlannedBanner {
   return {
     ...banner,
@@ -219,13 +214,6 @@ export function setCaratSetting<K extends keyof CaratSettings>(key: K, value: Ca
   updateActivePlan((plan) => ({
     ...plan,
     settings: { ...plan.settings, [key]: value }
-  }));
-}
-
-export function updateCaratSettings(settings: Partial<CaratSettings>) {
-  updateActivePlan((plan) => ({
-    ...plan,
-    settings: { ...plan.settings, ...settings }
   }));
 }
 
@@ -340,48 +328,6 @@ export function reorderPlannedBanners(idsInOrder: string[]) {
       ...banner,
       order: orderById.get(banner.id) ?? banner.order
     }))
-  }));
-}
-
-export function setPaidPackPurchase(
-  anniversaryId: string,
-  packId: keyof PaidPackPurchases,
-  quantity: number
-) {
-  updateActivePlan((plan) => ({
-    ...plan,
-    paidPurchases: {
-      ...plan.paidPurchases,
-      [anniversaryId]: {
-        ...defaultPaidPackPurchases,
-        ...plan.paidPurchases[anniversaryId],
-        [packId]: Math.max(0, Math.floor(quantity || 0))
-      }
-    }
-  }));
-}
-
-export function setSelectorChoice(anniversaryId: string, choice: Partial<SelectorChoice>) {
-  updateActivePlan((plan) => ({
-    ...plan,
-    selectorChoices: {
-      ...plan.selectorChoices,
-      [anniversaryId]: {
-        ...plan.selectorChoices[anniversaryId],
-        ...choice
-      }
-    }
-  }));
-}
-
-/** Reset only the active plan's contents (keeps id/name/createdAt). */
-export function resetCaratPlan() {
-  updateActivePlan((plan) => ({
-    ...plan,
-    settings: { ...defaultCaratSettings },
-    plannedBanners: defaultPlannedBanners(),
-    paidPurchases: {},
-    selectorChoices: {}
   }));
 }
 

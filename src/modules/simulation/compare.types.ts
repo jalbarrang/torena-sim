@@ -1,5 +1,9 @@
 import { cloneDeep } from 'es-toolkit';
-import type { ISkillPerspective, ISkillTarget, ISkillType } from '@/lib/uma-domain/skills/definitions';
+import type {
+  ISkillPerspective,
+  ISkillTarget,
+  ISkillType
+} from '@/lib/uma-domain/skills/definitions';
 
 export type CompareRunnerId = 'uma1' | 'uma2';
 
@@ -130,14 +134,14 @@ export interface SimulationRun {
 }
 
 /** Per-tick series for one runner of a paired (baseline vs tracked) sample. */
-export type SkillRunSeries = {
+type SkillRunSeries = {
   time: Array<number>;
   position: Array<number>;
   velocity: Array<number>;
 };
 
 /** Baseline vs tracked-skill telemetry for one representative run. */
-export type SkillVelocityTelemetry = {
+type SkillVelocityTelemetry = {
   baseline: SkillRunSeries;
   tracked: SkillRunSeries;
 };

@@ -1,0 +1,11 @@
+packages:
+  - "workers/*"
+
+# Dependency build scripts pnpm may run (pnpm blocks all by default).
+# core-js and msw are denied deliberately: their postinstalls are message-only.
+allowBuilds:
+  core-js: false
+  esbuild: true
+  msw: false
+  sharp: true
+  workerd: true

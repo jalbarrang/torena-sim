@@ -6,11 +6,12 @@
 
 ## Dev Server
 
-- **Never** run `bun run dev`, `vite`, or any development server commands. The user manages the dev server themselves.
+- **Never** run `pnpm run dev`, `vite`, or any development server commands. The user manages the dev server themselves.
 
 ## Package Management
 
-- Prefer using `bun` for package management, avoid using `npm`/`yarn`/`pnpm`.
+- Use `pnpm` for package management, avoid using `bun`/`npm`/`yarn`.
+- CLI scripts run on Node 26 via `tsx` (never `bun`); sqlite access uses `node:sqlite`.
 - Prefer using the available `package.json` scripts instead of running commands directly for typechecking, linting, formatting, testing, etc.
 
 ## Code Style
@@ -32,6 +33,6 @@
 
 ## Simulation Engine (packages/)
 
-- **Rust changes are invisible until rebuilt.** The app imports the compiled WASM from `src/lib/uma-sim-wasm/pkg/` (gitignored, rebuilt in CI). After any change under `packages/`, run `bun run wasm:build` and hard-refresh the browser — otherwise the dev app silently runs the old engine.
+- **Rust changes are invisible until rebuilt.** The app imports the compiled WASM from `src/lib/uma-sim-wasm/pkg/` (gitignored, rebuilt in CI). After any change under `packages/`, run `pnpm run wasm:build` and hard-refresh the browser — otherwise the dev app silently runs the old engine.
 - **JS→WASM boundary: present-but-`undefined` keys are unit values, not absent.** serde's `#[serde(default)]` only fires for absent keys. Optional DTO fields in `packages/uma-sim-wasm/src/dto.rs` must be `Option<T>`, never bare types with defaults.
 - **Race-mechanics canon:** `docs/mechanics/README.md` + `quick-reference.md` are the source of truth for mechanics. Check them before implementing; when new evidence supersedes them, amend the doc in the same change, citing the source.

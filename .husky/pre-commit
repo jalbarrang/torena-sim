@@ -1,6 +1,6 @@
-bun typecheck
-bunx lint-staged
+pnpm typecheck
+pnpm exec lint-staged
 
 # Whole-project gates — knip (dead code / unused exports) + fallow (duplication).
-bun run knip
-bun run dupes
+pnpm run knip
+pnpm run dupes

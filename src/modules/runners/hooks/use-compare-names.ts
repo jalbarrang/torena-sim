@@ -1,9 +1,9 @@
-import { getFieldRunners, useComparePairRunners } from '@/store/runners.store';
+import { useComparePairRunners } from '@/store/runners.store';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 
-export const COMPARE_A_FALLBACK = 'Compare A';
-export const COMPARE_B_FALLBACK = 'Compare B';
+const COMPARE_A_FALLBACK = 'Compare A';
+const COMPARE_B_FALLBACK = 'Compare B';
 
 const displayName = (runner: IRunnerState | undefined, fallback: string): string => {
   if (!runner?.outfitId) return fallback;
@@ -16,15 +16,6 @@ const displayName = (runner: IRunnerState | undefined, fallback: string): string
  */
 export const useComparePairNames = (): { uma1: string; uma2: string } => {
   const { uma1, uma2 } = useComparePairRunners();
-  return {
-    uma1: displayName(uma1, COMPARE_A_FALLBACK),
-    uma2: displayName(uma2, COMPARE_B_FALLBACK)
-  };
-};
-
-/** Non-hook read of the compare-pair display names (for toasts / imperatives). */
-export const getComparePairNames = (): { uma1: string; uma2: string } => {
-  const { uma1, uma2 } = getFieldRunners();
   return {
     uma1: displayName(uma1, COMPARE_A_FALLBACK),
     uma2: displayName(uma2, COMPARE_B_FALLBACK)

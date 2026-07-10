@@ -31,7 +31,7 @@ Turnstile, or rate-limit failure.
 ## Setup
 
 ```bash
-bun install
+pnpm install
 wrangler login
 ```
 
@@ -61,8 +61,8 @@ Worker simply skips rate limiting.
 ## Develop / deploy
 
 ```bash
-bun run dev       # wrangler dev (local)
-bun run deploy    # wrangler deploy
+pnpm run dev       # wrangler dev (local)
+pnpm run deploy    # wrangler deploy
 ```
 
 ## App wiring

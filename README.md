@@ -34,8 +34,8 @@ Use this project when you want to:
 ### Install and Run
 
 ```bash
-bun install
-bun run dev
+pnpm install
+pnpm run dev
 ```
 
 Open the local URL printed by Vite to use the simulator UI.
@@ -43,9 +43,9 @@ Open the local URL printed by Vite to use the simulator UI.
 ### Sync Game Data
 
 ```bash
-bun run db:fetch        # 1. Download latest master.mdb to ./db
-bun run extract:all     # 2. Extract course geometry from master.mdb
-bun run sync:data       # 3. Sync entity catalog (skills, umas, cards) from GameTora
+pnpm run db:fetch        # 1. Download latest master.mdb to ./db
+pnpm run extract:all     # 2. Extract course geometry from master.mdb
+pnpm run sync:data       # 3. Sync entity catalog (skills, umas, cards) from GameTora
 ```
 
 Start with `master.mdb` to establish what's live on Global, then sync GameTora to overlay the full catalog (including upcoming content). `sync:data` only re-fetches data that changed since the last sync.
@@ -71,15 +71,15 @@ Cloudflare Pages runs the full build (incl. the Rust/wasm engine) and can also b
 Releases are driven by [Conventional Commits](https://www.conventionalcommits.org/) on `main` (enforced locally via commitlint). [semantic-release](https://github.com/semantic-release/semantic-release) tags the **deployed commit** and opens a GitHub Release — there is no `chore(release)` commit on `main`.
 
 - **`__APP__VERSION__`**: latest `v*` tag semver + current short commit hash (e.g. `0.13.0+6f1340a`)
-- **In-app changelog**: `CHANGELOG.md` is regenerated during deploy builds (`bun run changelog:generate`); locally run that after `git fetch --tags` to refresh the modal in dev
+- **In-app changelog**: `CHANGELOG.md` is regenerated during deploy builds (`pnpm run changelog:generate`); locally run that after `git fetch --tags` to refresh the modal in dev
 - **GitHub Releases**: release notes for Discord / announcements
 
 ```bash
 # Preview the next version and release notes
-GITHUB_TOKEN=<pat> bun run release:dry-run
+GITHUB_TOKEN=<pat> pnpm run release:dry-run
 
 # Tag current commit and create GitHub Release
-GITHUB_TOKEN=<pat> bun run release
+GITHUB_TOKEN=<pat> pnpm run release
 ```
 
 Use `DATA_UPDATE_PAT` as `GITHUB_TOKEN` for local releases.
@@ -97,15 +97,15 @@ Use `DATA_UPDATE_PAT` as `GITHUB_TOKEN` for local releases.
 
 ## Useful Commands
 
-- `bun run dev`: start local development server
-- `bun run build`: build production assets
-- `bun run preview`: preview built app
-- `bun run typecheck`: run TypeScript checks
-- `bun run lint`: run ESLint
-- `bun run test`: run test suite
-- `bun run sync:data`: sync entity catalog from GameTora
-- `bun run db:fetch`: download latest `master.mdb` to `./db`
-- `bun run extract:all`: extract course geometry from `master.mdb`
+- `pnpm run dev`: start local development server
+- `pnpm run build`: build production assets
+- `pnpm run preview`: preview built app
+- `pnpm run typecheck`: run TypeScript checks
+- `pnpm run lint`: run ESLint
+- `pnpm run test`: run test suite
+- `pnpm run sync:data`: sync entity catalog from GameTora
+- `pnpm run db:fetch`: download latest `master.mdb` to `./db`
+- `pnpm run extract:all`: extract course geometry from `master.mdb`
 
 ## Acknowledgements
 

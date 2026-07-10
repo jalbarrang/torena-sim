@@ -11,7 +11,7 @@ import { normalizeSkillId, createSkillSorterByGroupWith, type EffectMeta } from 
 
 export * from './shared-pure';
 
-export function getSkillEffectMetadata(skillId: string): Array<EffectMeta> {
+function getSkillEffectMetadata(skillId: string): Array<EffectMeta> {
   const baseSkillId = normalizeSkillId(skillId);
   let effects: Array<{ type: number; target?: number }>;
   try {

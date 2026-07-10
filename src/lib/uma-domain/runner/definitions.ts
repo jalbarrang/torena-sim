@@ -7,14 +7,6 @@ export const Mood = {
 } as const;
 export type IMood = (typeof Mood)[keyof typeof Mood];
 export const moods = Object.values(Mood);
-export const MoodName = {
-  [Mood.Awful]: 'Awful',
-  [Mood.Bad]: 'Bad',
-  [Mood.Normal]: 'Normal',
-  [Mood.Good]: 'Good',
-  [Mood.Great]: 'Great'
-} as const;
-export const moodNames = Object.values(MoodName);
 
 export const Aptitude = {
   S: 0,
@@ -27,7 +19,6 @@ export const Aptitude = {
   G: 7
 } as const;
 export type IAptitude = (typeof Aptitude)[keyof typeof Aptitude];
-export const aptitudes = Object.values(Aptitude);
 export const AptitudeName = {
   [Aptitude.S]: 'S',
   [Aptitude.A]: 'A',

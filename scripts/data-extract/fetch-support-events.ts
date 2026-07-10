@@ -11,8 +11,8 @@
  *   2. support-events.json — full event data (names, choices, rewards)
  *
  * Usage:
- *   bun run fetch:support-events
- *   bun run fetch:support-events -- --dry-run
+ *   pnpm run fetch:support-events
+ *   pnpm run fetch:support-events -- --dry-run
  */
 
 import { Command } from 'commander';

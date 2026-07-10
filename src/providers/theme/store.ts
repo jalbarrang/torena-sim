@@ -12,7 +12,7 @@ export type ThemeStore = ThemeState & {
   toggleTheme: () => void;
 };
 
-export const resolveTheme = (theme: Theme): 'light' | 'dark' => {
+const resolveTheme = (theme: Theme): 'light' | 'dark' => {
   if (theme !== 'system') return theme;
   if (typeof window === 'undefined') return 'dark';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
