@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { SearchIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import { useActivatableSkillsForRace } from '@/modules/simulation/hooks/skill-ba
 import type { ActivatableSkillPool } from '@/modules/simulation/utils/skill-bassin-skills';
 import {
   deselectAllSkills,
+  reconcileSkillSelectionForPool,
   resetSkillSelectionForRace,
   selectAllSkills,
   toggleSkillSelected,
@@ -39,6 +40,7 @@ import {
 } from '../stores/skill-selection.store';
 import {
   deselectAllUmaSkills,
+  reconcileUmaSkillSelectionForPool,
   resetUmaSkillSelectionForRace,
   selectAllUmaSkills,
   toggleUmaSkillSelected,
@@ -60,6 +62,7 @@ type SkillSelectionActions = {
   selectAll: (skillIds: Array<string>) => void;
   deselectAll: (skillIds: Array<string>) => void;
   resetForRace: (releasedActivatableIds: Array<string>) => void;
+  reconcileForPool: (releasedActivatableIds: Array<string>) => void;
 };
 
 type SkillSelectorDialogLabels = {
@@ -265,6 +268,7 @@ function SkillSelectorDialogBase(props: SkillSelectorDialogBaseProps) {
 
   const {
     raceSettingsKey,
+    raceOnlyKey,
     allSkills,
     releasedIds,
     releasedSkills,
@@ -273,10 +277,17 @@ function SkillSelectorDialogBase(props: SkillSelectorDialogBaseProps) {
   } = useActivatableSkillsForRace(pool);
 
   const selectedSkillIds = selection.useSelectedSkillIds();
+  const previousRaceOnlyKey = useRef<string | null>(null);
 
   useEffect(() => {
-    selection.resetForRace(releasedActivatableIds);
-  }, [raceSettingsKey, releasedActivatableIds, selection]);
+    if (previousRaceOnlyKey.current === null || previousRaceOnlyKey.current !== raceOnlyKey) {
+      selection.resetForRace(releasedActivatableIds);
+    } else {
+      selection.reconcileForPool(releasedActivatableIds);
+    }
+
+    previousRaceOnlyKey.current = raceOnlyKey;
+  }, [raceOnlyKey, releasedActivatableIds, selection]);
 
   const selectedCount = selectedSkillIds.size;
   const totalCount = allSkills.length;
@@ -361,7 +372,8 @@ const skillBassinSelection: SkillSelectionActions = {
   toggle: toggleSkillSelected,
   selectAll: selectAllSkills,
   deselectAll: deselectAllSkills,
-  resetForRace: resetSkillSelectionForRace
+  resetForRace: resetSkillSelectionForRace,
+  reconcileForPool: reconcileSkillSelectionForPool
 };
 
 const umaBassinSelection: SkillSelectionActions = {
@@ -369,7 +381,8 @@ const umaBassinSelection: SkillSelectionActions = {
   toggle: toggleUmaSkillSelected,
   selectAll: selectAllUmaSkills,
   deselectAll: deselectAllUmaSkills,
-  resetForRace: resetUmaSkillSelectionForRace
+  resetForRace: resetUmaSkillSelectionForRace,
+  reconcileForPool: reconcileUmaSkillSelectionForPool
 };
 
 export function SkillSelectorDialog() {

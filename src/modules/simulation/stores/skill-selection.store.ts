@@ -4,11 +4,13 @@ import { getBaseSkillsToTest } from '@/modules/skills/utils';
 
 type SkillSelectionState = {
   selectedSkillIds: Set<string>;
+  lastActivatableIds: Set<string> | null;
   initialized: boolean;
 };
 
 export const useSkillSelectionStore = create<SkillSelectionState>()(() => ({
   selectedSkillIds: new Set<string>(),
+  lastActivatableIds: null,
   initialized: false
 }));
 
@@ -35,7 +37,32 @@ const initializeSkillSelection = () => {
 export const resetSkillSelectionForRace = (releasedActivatableIds: Array<string>) => {
   useSkillSelectionStore.setState({
     selectedSkillIds: new Set(releasedActivatableIds),
+    lastActivatableIds: new Set(releasedActivatableIds),
     initialized: true
+  });
+};
+
+export const reconcileSkillSelectionForPool = (activatableIds: Array<string>) => {
+  useSkillSelectionStore.setState((state) => {
+    if (state.lastActivatableIds === null) {
+      return {
+        selectedSkillIds: new Set(activatableIds),
+        lastActivatableIds: new Set(activatableIds),
+        initialized: true
+      };
+    }
+
+    const selectedSkillIds = new Set(
+      activatableIds.filter(
+        (id) => state.selectedSkillIds.has(id) || !state.lastActivatableIds?.has(id)
+      )
+    );
+
+    return {
+      selectedSkillIds,
+      lastActivatableIds: new Set(activatableIds),
+      initialized: true
+    };
   });
 };
 

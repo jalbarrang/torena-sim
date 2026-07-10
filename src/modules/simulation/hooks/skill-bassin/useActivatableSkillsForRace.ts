@@ -34,11 +34,11 @@ export function useActivatableSkillsForRace(pool: ActivatableSkillPool = 'base')
     }))
   );
 
-  const raceSettingsKey = useRaceSettingsKey();
+  const raceOnlyKey = useRaceSettingsKey();
 
   const contextKey = useMemo(
-    () => `${pool}-${raceSettingsKey}-${runner.strategy}-${runner.skills.join(',')}`,
-    [pool, raceSettingsKey, runner.strategy, runner.skills]
+    () => `${pool}-${raceOnlyKey}-${runner.strategy}-${runner.skills.join(',')}`,
+    [pool, raceOnlyKey, runner.strategy, runner.skills]
   );
 
   const course = useMemo(() => coursesService.getSimCourse(courseId), [courseId]);
@@ -72,6 +72,7 @@ export function useActivatableSkillsForRace(pool: ActivatableSkillPool = 'base')
 
   return {
     raceSettingsKey: contextKey,
+    raceOnlyKey,
     allSkills,
     releasedIds,
     releasedSkills,
