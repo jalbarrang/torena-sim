@@ -1,3 +1,13 @@
+## [0.29.0](https://github.com/jalbarrang/torena-sim/compare/v0.28.0...v0.29.0) (2026-07-10)
+
+### Features
+
+* **skill-bassin:** bashin distribution histogram and velocity comparison in skill details ([d33a750](https://github.com/jalbarrang/torena-sim/commit/d33a7500ff2a7a10295038c69b554ab6bfb9289c))
+
+### Bug Fixes
+
+* **skill-bassin:** preserve skills-to-simulate selection across runner changes ([a81210c](https://github.com/jalbarrang/torena-sim/commit/a81210cad8f723113009a32b5ce03f9b708fad97))
+
 ## [0.28.0](https://github.com/jalbarrang/torena-sim/compare/v0.27.0...v0.28.0) (2026-07-10)
 
 ### Features
