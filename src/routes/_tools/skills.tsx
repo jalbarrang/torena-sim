@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { SearchIcon, UsersIcon } from 'lucide-react';
+import { ChartNoAxesGantt, SearchIcon, UsersIcon } from 'lucide-react';
 
 import { config } from '@/config';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,8 @@ import {
 } from '@/modules/skills/components/skill-picker/store';
 import { SkillIcon } from '@/modules/skills/components/skill-list/skill-item/SkillIcon';
 import { SkillDetails } from '@/modules/skills/components/skill-details';
+import { useSkillVisualizerStore } from '@/modules/skills/components/skill-visualizer/store';
+import { VisualizeSkillButton } from '@/modules/skills/components/skill-visualizer/visualizer-content';
 import { formatEffect } from '@/modules/skills/components/formatters';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -412,6 +415,7 @@ function SkillBrowserItem(props: SkillBrowserItemProps) {
                 {skill.baseCost > 0 && <Badge variant="outline">{skill.baseCost} SP</Badge>}
                 <Badge variant="outline">{getRarityLabel(skill.rarity)}</Badge>
                 <SkillSourcesPopover skill={skill} />
+                <VisualizeSkillButton skillId={skill.id} />
               </div>
             </div>
           </div>
@@ -444,6 +448,17 @@ function SkillBrowserItem(props: SkillBrowserItemProps) {
   );
 }
 
+function OpenVisualizerButton() {
+  const selectedCount = useSkillVisualizerStore((state) => state.skillIds.length);
+
+  return (
+    <Button variant="outline" className="self-start" render={<Link to="/skill-visualizer" />}>
+      <ChartNoAxesGantt />
+      {selectedCount > 0 ? `Open visualizer (${selectedCount})` : 'Skill visualizer'}
+    </Button>
+  );
+}
+
 function SkillsBrowserContent() {
   const [searchText, setSearchText] = useState('');
   const deferredSearchText = useDeferredValue(searchText);
@@ -462,57 +477,64 @@ function SkillsBrowserContent() {
   });
 
   return (
-    <div className="grid grid-cols md:grid-cols-12 h-full min-h-0 w-full gap-3 p-3 md:p-4">
-      <header className="col-span-4 flex shrink-0 flex-col gap-2">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold leading-tight">Skills</h1>
-          <div className="text-sm text-muted-foreground">
-            {filteredSkills.length} of {allSkills.length} skills
-          </div>
-        </div>
-
-        <InputGroup>
-          <InputGroupAddon>
-            <SearchIcon className="size-4" />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="text"
-            value={searchText}
-            placeholder="Search skill by name"
-            onChange={(event) => setSearchText(event.target.value)}
-          />
-        </InputGroup>
-
-        <SkillPickerFilterRow />
-      </header>
-
-      <div ref={parentRef} className="col-span-8 min-h-0 flex-1 overflow-y-auto pr-1">
-        {filteredSkills.length > 0 ? (
-          <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const skill = filteredSkills[virtualRow.index];
-              if (!skill) return null;
-
-              return (
-                <div
-                  key={virtualRow.key}
-                  ref={rowVirtualizer.measureElement}
-                  className="absolute left-0 top-0 w-full"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
-                  data-index={virtualRow.index}
-                >
-                  <SkillBrowserItem skill={skill} />
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center rounded-lg border">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3 p-3 md:p-4">
+      <div className="grid grid-cols md:grid-cols-12 min-h-0 flex-1 w-full gap-3">
+        <header className="col-span-4 flex shrink-0 flex-col gap-2">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-semibold leading-tight">Skills</h1>
             <div className="text-sm text-muted-foreground">
-              No skills match the current filters.
+              {filteredSkills.length} of {allSkills.length} skills
             </div>
           </div>
-        )}
+
+          <InputGroup>
+            <InputGroupAddon>
+              <SearchIcon className="size-4" />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="text"
+              value={searchText}
+              placeholder="Search skill by name"
+              onChange={(event) => setSearchText(event.target.value)}
+            />
+          </InputGroup>
+
+          <SkillPickerFilterRow />
+
+          <OpenVisualizerButton />
+        </header>
+
+        <div ref={parentRef} className="col-span-8 min-h-0 flex-1 overflow-y-auto pr-1">
+          {filteredSkills.length > 0 ? (
+            <div
+              className="relative w-full"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const skill = filteredSkills[virtualRow.index];
+                if (!skill) return null;
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    data-index={virtualRow.index}
+                  >
+                    <SkillBrowserItem skill={skill} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center rounded-lg border">
+              <div className="text-sm text-muted-foreground">
+                No skills match the current filters.
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

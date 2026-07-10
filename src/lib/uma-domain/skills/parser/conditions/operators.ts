@@ -189,6 +189,11 @@ export class OrOperator implements Operator {
       return [branchRegions, kTrue];
     }
 
+    if (leftcond === kTrue && rightcond === kTrue) {
+      // avoid allocating an unnecessary closure object in the common case of no dynamic conditions
+      return [leftval.union(rightval), kTrue];
+    }
+
     // FIXME this is, technically, completely broken. really the correct way to do this is to tie dynamic conditions to regions
     // and propagate them during union and intersection. however, that's really annoying, and it turns out in practice that
     // dynamic conditions never actually change between branches of an or operator if the static conditions differ, in which case

@@ -49,6 +49,7 @@ import RaceSimRun from './race-sim/run';
 import RaceSimResults from './race-sim/results';
 // Tools
 import { SkillsPage } from './_tools/skills';
+import { SkillVisualizerPage } from './_tools/skill-visualizer';
 import { SparkOddsPage } from './_tools/spark-odds';
 import { CaratCalculatorPage } from './_tools/carat-calculator';
 
@@ -193,6 +194,18 @@ export function RootComponent() {
               element={
                 <RoutePage title="Skills" description="Browse all skills">
                   <SkillsPage />
+                </RoutePage>
+              }
+            />
+
+            <Route
+              path="/skill-visualizer"
+              element={
+                <RoutePage
+                  title="Skill Visualizer"
+                  description="Visualize where skill conditions activate on each track"
+                >
+                  <SkillVisualizerPage />
                 </RoutePage>
               }
             />
