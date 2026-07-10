@@ -1,3 +1,9 @@
+## [0.28.0](https://github.com/jalbarrang/torena-sim/compare/v0.27.0...v0.28.0) (2026-07-10)
+
+### Features
+
+* **skills:** visualizer position probing, persisted selections, and share links ([ad6e1ed](https://github.com/jalbarrang/torena-sim/commit/ad6e1ed97f106a8ed4c01869a90df3e0076053cd))
+
 ## [0.27.0](https://github.com/jalbarrang/torena-sim/compare/v0.26.1...v0.27.0) (2026-07-10)
 
 ### Features
