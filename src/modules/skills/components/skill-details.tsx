@@ -9,7 +9,7 @@ import type { SkillEntry } from '@/modules/data/services/SkillService';
 import { formatEffect, FormatParser } from './formatters';
 import { HumanReadableParser } from './human-readable-formatter';
 
-type SkillDetailsVariant = 'default' | 'compact';
+type SkillDetailsVariant = 'default' | 'compact' | 'plain';
 
 type SkillDetailsProps = {
   skill: SkillEntry;
@@ -136,10 +136,16 @@ function SkillTiming(props: { alternative: SkillAlternative; distanceFactor?: nu
 function SkillAlternativeDetails(props: SkillAlternativeDetailsProps) {
   const { alternative, title, distanceFactor, variant = 'default' } = props;
   const precondition = alternative.precondition ?? '';
-  const compact = variant === 'compact';
+  const compact = variant === 'compact' || variant === 'plain';
 
   return (
-    <div className="grid min-w-0 gap-2 rounded-lg border bg-background p-3 text-xs">
+    <div
+      className={
+        variant === 'plain'
+          ? 'grid min-w-0 gap-2 text-xs'
+          : 'grid min-w-0 gap-2 rounded-lg border bg-background p-3 text-xs'
+      }
+    >
       {title && <div className="text-sm font-medium">{title}</div>}
 
       <div className={compact ? 'grid gap-2 md:grid-cols-2' : 'grid gap-2 md:grid-cols-3'}>

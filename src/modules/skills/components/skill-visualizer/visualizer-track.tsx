@@ -17,6 +17,7 @@ const AXIS_HEIGHT = 24;
 
 type TrackRow = {
   key: string;
+  skillId: string;
   label: string;
   color: string;
   trigger: VisualizerTriggerRow | null;
@@ -30,6 +31,7 @@ function buildRows(entries: Array<SkillVisualizerEntry>): Array<TrackRow> {
     if (entry.status === 'unsupported') {
       rows.push({
         key: `${entry.skillId}-unsupported`,
+        skillId: entry.skillId,
         label: entry.name,
         color: entry.color,
         trigger: null,
@@ -41,6 +43,7 @@ function buildRows(entries: Array<SkillVisualizerEntry>): Array<TrackRow> {
     if (entry.status === 'no-activation') {
       rows.push({
         key: `${entry.skillId}-none`,
+        skillId: entry.skillId,
         label: entry.name,
         color: entry.color,
         trigger: null,
@@ -55,6 +58,7 @@ function buildRows(entries: Array<SkillVisualizerEntry>): Array<TrackRow> {
       const suffix = entry.triggers.length > 1 ? ` (trigger ${index + 1})` : '';
       rows.push({
         key: `${entry.skillId}-${index}`,
+        skillId: entry.skillId,
         label: `${entry.name}${suffix}${contextSuffix}`,
         color: entry.color,
         trigger
@@ -69,10 +73,11 @@ type VisualizerTrackRowProps = {
   row: TrackRow;
   y: number;
   courseDistance: number;
+  dimmed: boolean;
 };
 
 function VisualizerTrackRow(props: VisualizerTrackRowProps) {
-  const { row, y, courseDistance } = props;
+  const { row, y, courseDistance, dimmed } = props;
   const { trigger } = row;
 
   const bandY = ROW_HEIGHT - BAND_HEIGHT - 2;
@@ -84,6 +89,7 @@ function VisualizerTrackRow(props: VisualizerTrackRowProps) {
       width={RaceTrackDimensions.RenderWidth}
       height={ROW_HEIGHT}
       overflow="visible"
+      style={{ opacity: dimmed ? 0.3 : 1, transition: 'opacity 150ms ease-out' }}
     >
       <line
         x1="0"
@@ -156,16 +162,28 @@ function VisualizerTrackRow(props: VisualizerTrackRowProps) {
 export type SkillVisualizerTrackProps = {
   course: CourseData;
   entries: Array<SkillVisualizerEntry>;
+  focusedSkillId?: string | null;
 };
 
 export function SkillVisualizerTrack(props: SkillVisualizerTrackProps) {
-  const { course, entries } = props;
+  const { course, entries, focusedSkillId = null } = props;
 
   const rows = useMemo(() => buildRows(entries), [entries]);
 
   const rowsTop = RaceTrackDimensions.SectionNumbersBarY + ROWS_GAP;
   const axisY = rowsTop + rows.length * ROW_HEIGHT + ROWS_GAP;
   const viewHeight = axisY + AXIS_HEIGHT;
+
+  const focusedEntry = focusedSkillId
+    ? entries.find((entry) => entry.skillId === focusedSkillId && entry.status === 'ok')
+    : undefined;
+
+  const spotlightRegions = useMemo(() => {
+    if (!focusedEntry) return [];
+    return focusedEntry.triggers.flatMap((trigger) => trigger.regions);
+  }, [focusedEntry]);
+
+  const barsTop = RaceTrackDimensions.SlopeVisualizationY - 5;
 
   return (
     <div className="overflow-x-auto md:overflow-x-hidden">
@@ -189,6 +207,7 @@ export function SkillVisualizerTrack(props: SkillVisualizerTrackProps) {
               row={row}
               y={rowsTop + index * ROW_HEIGHT}
               courseDistance={course.distance}
+              dimmed={focusedEntry !== undefined && row.skillId !== focusedEntry.skillId}
             />
           ))}
 
@@ -196,6 +215,54 @@ export function SkillVisualizerTrack(props: SkillVisualizerTrackProps) {
           <g transform={`translate(0, ${axisY - RaceTrackDimensions.xAxisY})`}>
             <XAxis courseDistance={course.distance} />
           </g>
+
+          {/* Spotlight overlay: projects the focused skill's activation windows across the full track height. */}
+          {focusedEntry && (
+            <svg
+              x={RaceTrackDimensions.xOffset}
+              y={barsTop}
+              width={RaceTrackDimensions.RenderWidth}
+              height={axisY - barsTop}
+              overflow="visible"
+              pointerEvents="none"
+            >
+              {spotlightRegions.map((region) => {
+                const xPct = (region.start / course.distance) * 100;
+                const widthPct = ((region.end - region.start) / course.distance) * 100;
+
+                return (
+                  <Fragment key={`spot-${region.start}-${region.end}`}>
+                    <rect
+                      x={`${xPct}%`}
+                      y={0}
+                      width={`${Math.max(widthPct, 0.25)}%`}
+                      height="100%"
+                      fill={focusedEntry.color}
+                      fillOpacity={0.14}
+                    />
+                    <line
+                      x1={`${xPct}%`}
+                      x2={`${xPct}%`}
+                      y1={0}
+                      y2="100%"
+                      stroke={focusedEntry.color}
+                      strokeWidth={1}
+                      strokeOpacity={0.7}
+                    />
+                    <line
+                      x1={`${xPct + Math.max(widthPct, 0.25)}%`}
+                      x2={`${xPct + Math.max(widthPct, 0.25)}%`}
+                      y1={0}
+                      y2="100%"
+                      stroke={focusedEntry.color}
+                      strokeWidth={1}
+                      strokeOpacity={0.7}
+                    />
+                  </Fragment>
+                );
+              })}
+            </svg>
+          )}
         </svg>
       </div>
     </div>
