@@ -10,7 +10,7 @@ import type { SkillVisualizerEntry, VisualizerTriggerRow } from './use-skill-vis
 
 import '@/modules/racetrack/components/RaceTrack.css';
 
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = 34;
 const ROWS_GAP = 6;
 const BAND_HEIGHT = 12;
 const AXIS_HEIGHT = 24;
@@ -52,14 +52,12 @@ function buildRows(entries: Array<SkillVisualizerEntry>): Array<TrackRow> {
       continue;
     }
 
-    const contextSuffix = entry.contextLabel ? ` (${entry.contextLabel})` : '';
-
     for (const [index, trigger] of entry.triggers.entries()) {
       const suffix = entry.triggers.length > 1 ? ` (trigger ${index + 1})` : '';
       rows.push({
         key: `${entry.skillId}-${index}`,
         skillId: entry.skillId,
-        label: `${entry.name}${suffix}${contextSuffix}`,
+        label: `${entry.name}${suffix}`,
         color: entry.color,
         trigger
       });
@@ -143,7 +141,7 @@ function VisualizerTrackRow(props: VisualizerTrackRowProps) {
       <text
         x={2}
         y={bandY - 3}
-        fontSize={10}
+        fontSize={8}
         fontWeight={600}
         fill="var(--color-foreground)"
         stroke="var(--color-background)"

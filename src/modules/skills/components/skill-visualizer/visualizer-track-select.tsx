@@ -66,7 +66,7 @@ export function VisualizerTrackSelect(props: VisualizerTrackSelectProps) {
       </Select>
 
       <Select value={courseId.toString()} onValueChange={handleChangeCourse}>
-        <SelectTrigger className="w-full md:w-40">
+        <SelectTrigger className="w-full md:w-auto">
           <SelectValue>{trackDescription({ courseid: courseId })}</SelectValue>
         </SelectTrigger>
 

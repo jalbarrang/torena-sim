@@ -1,9 +1,11 @@
-import { ChartNoAxesGantt, XIcon } from 'lucide-react';
+import { ChartNoAxesGantt, Link2, XIcon } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { SkillDetails } from '@/modules/skills/components/skill-details';
 import { SkillIcon } from '@/modules/skills/components/skill-list/skill-item/SkillIcon';
+import { buildVisualizerShareParams } from './share-params';
 import {
   clearVisualizedSkills,
   MAX_VISUALIZED_SKILLS,
@@ -21,6 +23,18 @@ const STATUS_MESSAGES: Record<string, string> = {
   'no-activation': 'Does not activate on this course',
   unsupported: 'Cannot be simulated yet (unsupported conditions)'
 };
+
+async function copyVisualizerShareLink() {
+  try {
+    const { skillIds, courseId } = useSkillVisualizerStore.getState();
+    const url = new URL(window.location.href);
+    url.search = buildVisualizerShareParams(skillIds, courseId).toString();
+    await navigator.clipboard.writeText(url.toString());
+    toast.success('Share link copied to clipboard');
+  } catch {
+    toast.error('Failed to copy link');
+  }
+}
 
 type VisualizedSkillCardProps = {
   entry: SkillVisualizerEntry;
@@ -69,15 +83,11 @@ function VisualizedSkillCard(props: VisualizedSkillCardProps) {
 
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{entry.name}</span>
-            {entry.contextLabel ? (
-              <span className="block truncate text-[11px] text-muted-foreground">
-                Activates {entry.contextLabel}
-              </span>
-            ) : statusMessage ? (
+            {statusMessage && (
               <span className="block truncate text-[11px] text-muted-foreground">
                 {statusMessage}
               </span>
-            ) : null}
+            )}
           </span>
 
           {isFocused && (
@@ -117,7 +127,6 @@ export function SkillVisualizerContent() {
   const hasDynamicConditions = entries.some((entry) =>
     entry.triggers.some((trigger) => trigger.hasDynamicCondition)
   );
-  const hasContextLabels = entries.some((entry) => entry.contextLabel);
 
   return (
     <div className="flex flex-col gap-3">
@@ -143,11 +152,6 @@ export function SkillVisualizerContent() {
                 during the race.
               </span>
             )}
-            {hasContextLabels && (
-              <span>
-                Labels in parentheses show the strategy or conditions required for activation.
-              </span>
-            )}
           </div>
 
           <div className="flex items-center justify-between gap-2">
@@ -155,14 +159,25 @@ export function SkillVisualizerContent() {
               {entries.length} of {MAX_VISUALIZED_SKILLS} skills · click a skill to spotlight its
               windows on the track
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={clearVisualizedSkills}
-            >
-              Clear all
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={copyVisualizerShareLink}
+              >
+                <Link2 />
+                Share
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={clearVisualizedSkills}
+              >
+                Clear all
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">

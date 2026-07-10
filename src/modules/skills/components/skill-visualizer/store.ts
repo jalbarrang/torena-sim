@@ -1,5 +1,8 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { getDefaultCourseId } from '@/store/race/defaults';
+
+const SKILL_VISUALIZER_STORE_NAME = 'umalator-skill-visualizer';
 
 export const MAX_VISUALIZED_SKILLS = 10;
 
@@ -9,11 +12,22 @@ type SkillVisualizerStore = {
   focusedSkillId: string | null;
 };
 
-export const useSkillVisualizerStore = create<SkillVisualizerStore>(() => ({
-  skillIds: [],
-  courseId: getDefaultCourseId(),
-  focusedSkillId: null
-}));
+export const useSkillVisualizerStore = create<SkillVisualizerStore>()(
+  persist(
+    (): SkillVisualizerStore => ({
+      skillIds: [],
+      courseId: getDefaultCourseId(),
+      focusedSkillId: null
+    }),
+    {
+      name: SKILL_VISUALIZER_STORE_NAME,
+      storage: createJSONStorage(() => localStorage),
+      version: 0,
+      // Spotlight is transient inspection state; only the selections persist.
+      partialize: (state) => ({ skillIds: state.skillIds, courseId: state.courseId })
+    }
+  )
+);
 
 export const toggleVisualizedSkill = (skillId: string) => {
   useSkillVisualizerStore.setState((state) => {

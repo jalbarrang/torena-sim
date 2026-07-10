@@ -21,6 +21,7 @@ import {
   useSkillVisualizerStore
 } from '@/modules/skills/components/skill-visualizer/store';
 import { SkillVisualizerContent } from '@/modules/skills/components/skill-visualizer/visualizer-content';
+import { useVisualizerImport } from '@/modules/skills/components/skill-visualizer/use-visualizer-import';
 
 const MAX_SEARCH_RESULTS = 20;
 
@@ -116,6 +117,8 @@ function SkillSearch() {
 }
 
 export function SkillVisualizerPage() {
+  useVisualizerImport();
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-3 p-3 md:p-4">
       <header className="flex flex-wrap items-start justify-between gap-2">

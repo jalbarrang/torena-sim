@@ -22,6 +22,7 @@ import { coursesService } from '@/modules/data/services/CourseService';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { createRaceConditions, racedefToParams } from '@/utils/races';
 import type { RaceConditions } from '@/utils/races';
+import { candidateScanPositions } from './position-context';
 import { useSkillVisualizerStore } from './store';
 
 export const VISUALIZER_COLORS = [
@@ -102,7 +103,8 @@ const STRATEGY_ORDER: Array<IStrategyName> = [
   'Runaway'
 ];
 
-const DEFAULT_STRATEGY = STRATEGY_ORDER[0];
+// Mirrors the field size hardcoded in racedefToParams.
+const NUM_UMAS = 9;
 
 export type VisualizerRegion = {
   start: number;
@@ -126,8 +128,6 @@ export type SkillVisualizerEntry = {
   color: string;
   status: VisualizerEntryStatus;
   triggers: Array<VisualizerTriggerRow>;
-  /** Strategy/conditions required for activation when the defaults do not trigger, e.g. 'as Late Surger' or 'in Rainy weather'. */
-  contextLabel?: string;
 };
 
 export function useSkillVisualizerData() {
@@ -135,87 +135,111 @@ export function useSkillVisualizerData() {
     useShallow((state) => ({ skillIds: state.skillIds, courseId: state.courseId }))
   );
 
-  return useMemo(() => {
-    const course = coursesService.getSimCourse(courseId);
+  return useMemo(() => computeSkillVisualizerData(skillIds, courseId), [skillIds, courseId]);
+}
 
-    const parser = createParser();
-    const wholeCourse = new RegionList();
-    wholeCourse.push(new Region(0, course.distance));
+export function computeSkillVisualizerData(skillIds: Array<string>, courseId: number) {
+  const course = coursesService.getSimCourse(courseId);
 
-    const entries: Array<SkillVisualizerEntry> = skillIds.map((skillId, index) => {
-      const skill = skillsService.getById(skillId);
-      const base = {
-        skillId,
-        name: skill?.name ?? skillId,
-        iconId: skill?.iconId ?? '',
-        color: VISUALIZER_COLORS[index % VISUALIZER_COLORS.length]
-      };
+  const parser = createParser();
+  const wholeCourse = new RegionList();
+  wholeCourse.push(new Region(0, course.distance));
 
-      try {
-        let sawTriggers = false;
+  const entries: Array<SkillVisualizerEntry> = skillIds.map((skillId, index) => {
+    const skill = skillsService.getById(skillId);
+    const base = {
+      skillId,
+      name: skill?.name ?? skillId,
+      iconId: skill?.iconId ?? '',
+      color: VISUALIZER_COLORS[index % VISUALIZER_COLORS.length]
+    };
 
-        for (const variant of CONDITION_VARIANTS) {
-          for (const strategy of STRATEGY_ORDER) {
-            const skillTriggers = buildSkillData({
-              runner: {
-                baseStats: buildBaseStats(DEFAULT_STATS, variant.conditions.mood),
-                strategy: parseStrategyName(strategy),
-                mood: variant.conditions.mood
-              },
-              raceParams: racedefToParams(variant.conditions, strategy),
-              course,
-              wholeCourse,
-              parser,
-              skillId,
-              ignoreNullEffects: true
-            });
+    try {
+      let sawTriggers = false;
 
-            if (skillTriggers.length === 0) continue;
-            sawTriggers = true;
+      const evaluate = (
+        variant: ConditionVariant,
+        strategy: IStrategyName,
+        raceParams: ReturnType<typeof racedefToParams>
+      ): Array<VisualizerTriggerRow> => {
+        const skillTriggers = buildSkillData({
+          runner: {
+            baseStats: buildBaseStats(DEFAULT_STATS, variant.conditions.mood),
+            strategy: parseStrategyName(strategy),
+            mood: variant.conditions.mood
+          },
+          raceParams,
+          course,
+          wholeCourse,
+          parser,
+          skillId,
+          ignoreNullEffects: true
+        });
 
-            const triggers: Array<VisualizerTriggerRow> = [];
-            for (const trigger of skillTriggers) {
-              const regions = trigger.regions
-                .filter((region) => region.start < course.distance)
-                .map((region) => ({
-                  start: region.start,
-                  end: Math.min(region.end, course.distance)
-                }));
+        if (skillTriggers.length === 0) return [];
+        sawTriggers = true;
 
-              if (regions.length === 0) continue;
+        const triggers: Array<VisualizerTriggerRow> = [];
+        for (const trigger of skillTriggers) {
+          const regions = trigger.regions
+            .filter((region) => region.start < course.distance)
+            .map((region) => ({
+              start: region.start,
+              end: Math.min(region.end, course.distance)
+            }));
 
-              triggers.push({
-                regions,
-                isRandom: trigger.samplePolicy !== ImmediatePolicy,
-                hasDynamicCondition: trigger.extraCondition !== kTrue
-              });
-            }
+          if (regions.length === 0) continue;
 
-            if (triggers.length === 0) continue;
-
-            const labelParts: Array<string> = [];
-            if (strategy !== DEFAULT_STRATEGY) labelParts.push(`as ${strategy}`);
-            if (variant.labelPart) labelParts.push(variant.labelPart);
-
-            return {
-              ...base,
-              status: 'ok' as const,
-              triggers,
-              contextLabel: labelParts.length > 0 ? labelParts.join(', ') : undefined
-            };
-          }
+          triggers.push({
+            regions,
+            isRandom: trigger.samplePolicy !== ImmediatePolicy,
+            hasDynamicCondition: trigger.extraCondition !== kTrue
+          });
         }
 
-        return {
-          ...base,
-          status: sawTriggers ? ('no-activation' as const) : ('unsupported' as const),
-          triggers: []
-        };
-      } catch {
-        return { ...base, status: 'unsupported' as const, triggers: [] };
-      }
-    });
+        return triggers;
+      };
 
-    return { course, entries };
-  }, [skillIds, courseId]);
+      const scanPositions = candidateScanPositions(skill?.alternatives ?? [], NUM_UMAS);
+
+      for (const variant of CONDITION_VARIANTS) {
+        for (const strategy of STRATEGY_ORDER) {
+          // The strategy's typical position band ([2,4] for Pace Chaser etc.).
+          const bandTriggers = evaluate(
+            variant,
+            strategy,
+            racedefToParams(variant.conditions, strategy)
+          );
+
+          if (bandTriggers.length > 0) {
+            return { ...base, status: 'ok' as const, triggers: bandTriggers };
+          }
+
+          // Position conditions are independent of strategy — any runner can end up in any
+          // spot depending on the field. When the typical band fails, probe the positions the
+          // skill's order conditions allow so position-gated skills still get visualized.
+          for (const position of scanPositions) {
+            const raceParams = {
+              ...racedefToParams(variant.conditions),
+              orderRange: [position, position] as [number, number]
+            };
+            const triggers = evaluate(variant, strategy, raceParams);
+            if (triggers.length === 0) continue;
+
+            return { ...base, status: 'ok' as const, triggers };
+          }
+        }
+      }
+
+      return {
+        ...base,
+        status: sawTriggers ? ('no-activation' as const) : ('unsupported' as const),
+        triggers: []
+      };
+    } catch {
+      return { ...base, status: 'unsupported' as const, triggers: [] };
+    }
+  });
+
+  return { course, entries };
 }
