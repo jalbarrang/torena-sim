@@ -18,6 +18,11 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
+import {
+  APTITUDE_SLOTS,
+  bannerAptitudes,
+  type BannerAptitudeKey
+} from '@/modules/carat/data/banner-aptitudes';
 import { bannerImageUrl } from '@/modules/carat/data/banner-image';
 import { resolveBannerLabel } from '@/modules/carat/data/card-names';
 import type {
@@ -34,7 +39,6 @@ import {
 import { cn } from '@/lib/utils';
 
 type BannerTypeFilter = 'all' | 'character' | 'support';
-type ConfidenceFilter = 'all' | TimelinePredictionKind;
 
 type AddBannerDialogProps = {
   timeline: TimelinePayload;
@@ -46,13 +50,6 @@ const TYPE_OPTIONS: FilterOption<BannerTypeFilter>[] = [
   { value: 'all', label: 'All' },
   { value: 'character', label: 'Characters' },
   { value: 'support', label: 'Support' }
-];
-
-const CONFIDENCE_OPTIONS: FilterOption<ConfidenceFilter>[] = [
-  { value: 'all', label: 'All' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'interpolated', label: 'Estimated' },
-  { value: 'extrapolated', label: 'Predicted' }
 ];
 
 /**
@@ -109,13 +106,11 @@ function FilterGroup<T extends string>(props: {
 }) {
   const { label, value, options, onChange } = props;
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
-      <div
-        role="group"
-        aria-label={label}
-        className="flex flex-wrap gap-0.5 rounded-lg bg-muted p-0.5"
-      >
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-xs font-medium whitespace-nowrap text-muted-foreground">
+        {label}
+      </span>
+      <div role="group" aria-label={label} className="flex gap-0.5 rounded-lg bg-muted p-0.5">
         {options.map((option) => {
           const active = value === option.value;
           return (
@@ -125,7 +120,7 @@ function FilterGroup<T extends string>(props: {
               aria-pressed={active}
               onClick={() => onChange(option.value)}
               className={cn(
-                'inline-flex min-h-9 items-center rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8',
+                'inline-flex min-h-9 items-center rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8',
                 active
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
@@ -140,22 +135,75 @@ function FilterGroup<T extends string>(props: {
   );
 }
 
+// Multi-toggle chips for the innate grade-A ("main") aptitudes of a banner's
+// pickup umas. Any active chip implies character banners only.
+function AptitudeFilterGroup(props: {
+  value: ReadonlySet<BannerAptitudeKey>;
+  onToggle: (key: BannerAptitudeKey) => void;
+}) {
+  const { value, onToggle } = props;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-xs font-medium whitespace-nowrap text-muted-foreground">
+        Aptitude
+      </span>
+      <div
+        role="group"
+        aria-label="Main aptitude"
+        className="flex gap-0.5 rounded-lg bg-muted p-0.5"
+      >
+        {APTITUDE_SLOTS.map((slot) => {
+          const active = value.has(slot.key);
+          return (
+            <button
+              key={slot.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggle(slot.key)}
+              className={cn(
+                'inline-flex min-h-9 items-center rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8',
+                active
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {slot.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AddBannerDialog(props: AddBannerDialogProps) {
   const { timeline } = props;
   const [open, setOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<BannerTypeFilter>('all');
-  const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>('all');
+  const [aptitudeFilter, setAptitudeFilter] = useState<ReadonlySet<BannerAptitudeKey>>(new Set());
   const [search, setSearch] = useState('');
   const plannedBannerIds = useCaratStore(
     useShallow((state) => getActivePlan(state).plannedBanners.map((banner) => banner.id))
   );
   const plannedIds = useMemo(() => new Set(plannedBannerIds), [plannedBannerIds]);
 
-  const filtersActive = typeFilter !== 'all' || confidenceFilter !== 'all' || search.trim() !== '';
+  const filtersActive = typeFilter !== 'all' || aptitudeFilter.size > 0 || search.trim() !== '';
   const clearFilters = () => {
     setTypeFilter('all');
-    setConfidenceFilter('all');
+    setAptitudeFilter(new Set());
     setSearch('');
+  };
+
+  const toggleAptitude = (key: BannerAptitudeKey) => {
+    setAptitudeFilter((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
   };
 
   const banners = useMemo(() => {
@@ -170,14 +218,20 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
         return date !== null && date.getTime() >= today.getTime();
       })
       .filter((event) => typeFilter === 'all' || event.card_type === typeFilter)
-      .filter((event) => confidenceFilter === 'all' || event.prediction?.kind === confidenceFilter)
+      .filter((event) => {
+        if (aptitudeFilter.size === 0) return true;
+        const aptitudes = bannerAptitudes(event);
+        if (!aptitudes) return false;
+        const main = new Set(aptitudes.main.map((slot) => slot.key));
+        return [...aptitudeFilter].every((key) => main.has(key));
+      })
       .filter((event) => !searchText || searchableText(event).includes(searchText))
       .sort(
         (a, b) =>
           new Date(a.global_release_date ?? 0).getTime() -
           new Date(b.global_release_date ?? 0).getTime()
       );
-  }, [confidenceFilter, search, timeline.events, typeFilter]);
+  }, [aptitudeFilter, search, timeline.events, typeFilter]);
 
   // Toggle in place and keep the dialog open so a whole plan can be built in one pass.
   const handleToggle = (id: string) => {
@@ -205,19 +259,14 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-2 px-4">
+        <div className="flex flex-col items-start gap-2 px-4">
           <FilterGroup
             label="Type"
             value={typeFilter}
             options={TYPE_OPTIONS}
             onChange={setTypeFilter}
           />
-          <FilterGroup
-            label="Confidence"
-            value={confidenceFilter}
-            options={CONFIDENCE_OPTIONS}
-            onChange={setConfidenceFilter}
-          />
+          <AptitudeFilterGroup value={aptitudeFilter} onToggle={toggleAptitude} />
         </div>
 
         <div className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-muted-foreground">
@@ -237,8 +286,8 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
             onValueChange={setSearch}
             placeholder="Search banners, characters, or cards…"
           />
-          <CommandList className="max-h-[56vh] [&_[cmdk-list-sizer]]:gap-x-2 sm:[&_[cmdk-list-sizer]]:grid sm:[&_[cmdk-list-sizer]]:grid-cols-2">
-            <CommandEmpty className="sm:col-span-2">
+          <CommandList className="max-h-[56vh]">
+            <CommandEmpty>
               <div className="flex flex-col items-center gap-3 py-2">
                 <span>No future banners match these filters.</span>
                 {filtersActive ? (
@@ -251,6 +300,7 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
             {banners.map((event) => {
               const added = plannedIds.has(event.id);
               const kind = event.prediction?.kind;
+              const aptitudes = bannerAptitudes(event);
               return (
                 <CommandItem
                   key={event.id}
@@ -274,6 +324,11 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
                     <div className="mt-2 flex flex-wrap gap-1">
                       <Badge variant="outline">{typeLabel(event.card_type)}</Badge>
                       <ConfidenceBadge kind={kind} />
+                      {aptitudes?.main.map((slot) => (
+                        <Badge key={slot.key} variant="secondary">
+                          {slot.label}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
                   {added ? (

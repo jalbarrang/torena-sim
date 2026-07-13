@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { bannerAptitudes } from '@/modules/carat/data/banner-aptitudes';
 import { bannerImageUrl } from '@/modules/carat/data/banner-image';
 import { resolveBannerLabel } from '@/modules/carat/data/card-names';
 import type { BannerPlanRow } from '@/modules/carat/model/plan';
@@ -12,9 +13,11 @@ type BannerIdentityProps = {
 export function BannerIdentity(props: BannerIdentityProps) {
   const { row, showWindow } = props;
 
+  const aptitudes = bannerAptitudes(row.event);
+
   const cardType =
     row.event.card_type === 'character'
-      ? 'Uma'
+      ? 'Character'
       : row.event.card_type === 'support'
         ? 'Support Card'
         : '-';
@@ -39,6 +42,16 @@ export function BannerIdentity(props: BannerIdentityProps) {
 
         <div className="flex flex-wrap gap-1">
           <Badge variant="outline">{cardType}</Badge>
+          {aptitudes?.main.map((slot) => (
+            <Badge key={slot.key} variant="secondary">
+              {slot.label}
+            </Badge>
+          ))}
+          {aptitudes?.secondary.map((slot) => (
+            <Badge key={slot.key} variant="ghost" className="text-muted-foreground">
+              {slot.label}
+            </Badge>
+          ))}
         </div>
       </div>
     </div>
