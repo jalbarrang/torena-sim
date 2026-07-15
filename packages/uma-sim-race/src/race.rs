@@ -417,7 +417,7 @@ impl Race {
             target: RunnerId,
             source: RunnerId,
             skill_id: uma_sim_primitives::shared_kernel::ids::SkillId,
-            effect: uma_sim_primitives::skills::model::SkillEffect,
+            effect: uma_sim_primitives::skills::model::ResolvedSkillEffect,
         }
         let mut routes: Vec<Route> = Vec::new();
         for runner in &mut self.runners {
@@ -964,6 +964,7 @@ mod tests {
         p.skills = vec![Skill {
             skill_id: SkillId::new("200851"),
             rarity: SkillRarity::White,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -1040,7 +1041,7 @@ mod tests {
         use uma_sim_primitives::race_support::build_field_snapshot;
         use uma_sim_primitives::shared_kernel::ids::SkillId;
         use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
-        use uma_sim_primitives::skills::model::{EmittedDebuff, SkillEffect};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
 
         // R0 caster (Late Surger), R1 Front Runner (target), R2 Pace Chaser.
         let mut race = Race::new(
@@ -1063,13 +1064,11 @@ mod tests {
         // The caster emits a nige-targeting Current Speed debuff this frame.
         race.runners[0].emitted_debuffs.push(EmittedDebuff {
             skill_id: SkillId::new("200851"),
-            effect: SkillEffect {
+            effect: ResolvedSkillEffect {
                 target: SkillTarget::EnemyStrategy,
                 effect_type: SkillType::CurrentSpeed,
                 base_duration: 3.0,
                 modifier: -0.15,
-                value_usage: Some(1),
-                value_level_usage: Some(1),
             },
             target: SkillTarget::EnemyStrategy,
             target_strategy: Some(Strategy::FrontRunner),

@@ -2,7 +2,9 @@ import { ISkillType } from '@/lib/uma-domain/skills/definitions';
 import type { SkillAlternative } from '@/lib/uma-domain/skills/skill.types';
 import {
   areAlternativesSimulatable,
-  findUnknownConditionTokens
+  findUnsupportedSkillMechanics,
+  findUnknownConditionTokens,
+  type UnsupportedSkillMechanic
 } from '@/lib/uma-domain/skills/simulatability';
 import type { SkillMatch } from '@/modules/runners/data/types';
 import { SkillFilterer, type SkillFiltererConfig } from './SkillFilterer';
@@ -42,6 +44,8 @@ export type SkillActivationCheck = 'guaranteed' | 'wit-check';
 export type SkillEntry = {
   id: string;
   rarity: number;
+  /** Authoritative `skill_data.tag_id` values from master data. */
+  tags: Array<number>;
   alternatives: Array<SkillAlternative>;
   groupId: number;
   versions: Array<number>;
@@ -139,6 +143,13 @@ export class SkillService {
     const skill = this.skillCollection[skillId];
     if (!skill) return [];
     return findUnknownConditionTokens(skill.alternatives);
+  };
+
+  /** Returns structured condition and value-policy reasons a skill cannot run. */
+  getUnsupportedMechanics = (skillId: string): Array<UnsupportedSkillMechanic> => {
+    const skill = this.skillCollection[skillId];
+    if (!skill) return [];
+    return findUnsupportedSkillMechanics(skill.alternatives);
   };
 
   /**

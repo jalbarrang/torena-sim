@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { initUmaSimWasmFromModule } from '@/lib/uma-sim-wasm/loader';
 import type {
   WasmCompareData,
   WasmCompareParams,
@@ -40,4 +41,30 @@ export async function ensureCliWasm(): Promise<UmaSimWasmCliModule> {
   }
 
   return wasmModulePromise;
+}
+
+let loaderPrimed: Promise<void> | null = null;
+
+/**
+ * Prime the shared browser-style loader (`@/lib/uma-sim-wasm/loader`) for Node.
+ *
+ * Scripts that go through `runCompare`/`runSamplingFromPlan` reach the WASM via
+ * that loader, whose default init path `fetch`es the colocated `.wasm` — which
+ * Node's undici cannot resolve for `file:` URLs. Compile the module from disk
+ * and hand it to the loader so its subsequent calls skip the fetch entirely.
+ */
+export async function ensureLoaderWasm(): Promise<void> {
+  if (!loaderPrimed) {
+    loaderPrimed = (async () => {
+      if (!existsSync(wasmBgPath)) {
+        throw new Error(
+          `WASM bundle not found at ${wasmPkgDir}. Run \`pnpm run wasm:build\` before using CLI simulation scripts.`
+        );
+      }
+      const module = await WebAssembly.compile(readFileSync(wasmBgPath));
+      await initUmaSimWasmFromModule(module);
+    })();
+  }
+
+  return loaderPrimed;
 }

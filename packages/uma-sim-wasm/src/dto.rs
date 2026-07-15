@@ -23,6 +23,7 @@ use uma_sim_primitives::shared_kernel::language::{
 use uma_sim_primitives::shared_kernel::params::{RaceParameters, StatLine};
 use uma_sim_primitives::skills::effect::{SkillRarity, SkillTarget};
 use uma_sim_primitives::skills::model::{RawSkillEffect, Skill, SkillAlternative};
+use uma_sim_primitives::skills::value_scaling::ValueScalingPolicy;
 use uma_sim_race::collectors::{CollectedData, RaceEventLog, RaceLogEvent, RaceLogEventKind};
 use uma_sim_race::simulation::{ContestedCompareParams, FinishEntry, RaceSimParams, RaceSimResult};
 use uma_sim_race::SimulationSettings as RaceSettings;
@@ -445,22 +446,6 @@ pub struct WasmSkillAlternative {
     pub effects: Vec<WasmRawEffect>,
 }
 
-impl WasmSkillAlternative {
-    fn into_domain(self) -> Result<SkillAlternative, DtoError> {
-        Ok(SkillAlternative {
-            base_duration: self.base_duration,
-            cooldown_time: self.cooldown_time,
-            condition: self.condition,
-            precondition: self.precondition,
-            effects: self
-                .effects
-                .into_iter()
-                .map(WasmRawEffect::into_domain)
-                .collect::<Result<Vec<_>, _>>()?,
-        })
-    }
-}
-
 /// A pre-resolved skill (the TS data layer resolves alternatives + raw
 /// conditions and ships them here).
 #[derive(Debug, Clone, Deserialize)]
@@ -470,22 +455,97 @@ pub struct WasmSkillInput {
     pub skill_id: String,
     /// Rarity (numeric).
     pub rarity: i32,
+    /// Authoritative master-data tags from `skill_data.tag_id`.
+    #[serde(default)]
+    pub tags: Vec<i32>,
     /// Condition branches.
     pub alternatives: Vec<WasmSkillAlternative>,
 }
 
 impl WasmSkillInput {
     fn into_domain(self) -> Result<Skill, DtoError> {
+        let skill_id = self.skill_id;
+        let alternatives = self
+            .alternatives
+            .into_iter()
+            .enumerate()
+            .map(|(alternative_index, alternative)| {
+                let effects = alternative
+                    .effects
+                    .into_iter()
+                    .enumerate()
+                    .map(|(effect_index, effect)| {
+                        validate_effect_value_usage(
+                            &skill_id,
+                            alternative_index,
+                            effect_index,
+                            &effect,
+                        )?;
+                        effect.into_domain()
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(SkillAlternative {
+                    base_duration: alternative.base_duration,
+                    cooldown_time: alternative.cooldown_time,
+                    condition: alternative.condition,
+                    precondition: alternative.precondition,
+                    effects,
+                })
+            })
+            .collect::<Result<Vec<_>, DtoError>>()?;
+
         Ok(Skill {
-            skill_id: SkillId::new(self.skill_id),
+            skill_id: SkillId::new(skill_id),
             rarity: to_rarity(self.rarity)?,
-            alternatives: self
-                .alternatives
-                .into_iter()
-                .map(WasmSkillAlternative::into_domain)
-                .collect::<Result<Vec<_>, _>>()?,
+            tags: self.tags,
+            alternatives,
         })
     }
+}
+
+fn validate_effect_value_usage(
+    skill_id: &str,
+    alternative_index: usize,
+    effect_index: usize,
+    effect: &WasmRawEffect,
+) -> Result<(), DtoError> {
+    let usage = effect.value_usage.unwrap_or(1);
+    let policy = ValueScalingPolicy::from_value_usage(effect.value_usage).map_err(|_| {
+        DtoError(format!(
+            "skill {skill_id} alternative {alternative_index} effect {effect_index}: unsupported value usage {usage}"
+        ))
+    })?;
+    let effect_type =
+        uma_sim_primitives::skills::effect::SkillType::try_from(effect.effect_type).ok();
+    if !effect_type.is_some_and(|effect_type| policy.supports_effect_type(effect_type)) {
+        return Err(DtoError(format!(
+            "skill {skill_id} alternative {alternative_index} effect {effect_index}: value usage {usage} is invalid for effect type {}",
+            effect.effect_type
+        )));
+    }
+    Ok(())
+}
+
+/// Reject an injected debuff whose skill carries a caster-context value policy
+/// (usage 14). The injection harness has no caster, so activated-skill state
+/// cannot be resolved; Direct and MultiplyRandom are fine (resolved
+/// receiver-locally). This guard is independent of the supported-usage set so it
+/// keeps rejecting injected usage 14 even once it becomes a supported policy for
+/// normal (cast) skills.
+fn reject_caster_context_injection(skill: &WasmSkillInput) -> Result<(), DtoError> {
+    use uma_sim_primitives::skills::value_scaling::requires_caster_context;
+    for (alternative_index, alternative) in skill.alternatives.iter().enumerate() {
+        for (effect_index, effect) in alternative.effects.iter().enumerate() {
+            if requires_caster_context(effect.value_usage) {
+                return Err(DtoError(format!(
+                    "injected debuff {} alternative {alternative_index} effect {effect_index}: value usage {} requires caster context and cannot be injected",
+                    skill.skill_id,
+                    effect.value_usage.unwrap_or(0)
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A debuff injected onto a runner at a fixed position (compare mode).
@@ -582,6 +642,7 @@ impl WasmCreateRunner {
                 .injected_debuffs
                 .into_iter()
                 .map(|d| {
+                    reject_caster_context_injection(&d.skill)?;
                     Ok::<_, DtoError>(InjectedDebuff {
                         skill: d.skill.into_domain()?,
                         position: d.position,
@@ -1377,6 +1438,217 @@ impl WasmCompareData {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wasm_skill_input_carries_tags_and_defaults_missing_tags() {
+        let tagged: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "200011",
+                "rarity": 1,
+                "tags": [401, 608],
+                "alternatives": []
+            }"#,
+        )
+        .expect("tagged skill input deserializes");
+        assert_eq!(
+            tagged
+                .into_domain()
+                .expect("tagged skill input converts")
+                .tags,
+            vec![401, 608]
+        );
+
+        let legacy: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "200011",
+                "rarity": 1,
+                "alternatives": []
+            }"#,
+        )
+        .expect("legacy skill input deserializes");
+        assert!(legacy
+            .into_domain()
+            .expect("legacy skill input converts")
+            .tags
+            .is_empty());
+    }
+
+    #[test]
+    fn skill_input_rejects_unsupported_value_usage_with_coordinates() {
+        // Usage 10 (Climax) is still unsupported and must reject with coordinates.
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "210061",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 10 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        assert_eq!(
+            dto.into_domain(),
+            Err(DtoError(
+                "skill 210061 alternative 0 effect 1: unsupported value usage 10".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn skill_input_accepts_copano_rickey_mixed_direct_and_usage_14() {
+        // Copano Rickey's Luck Runs My Way (100981): one Direct Target Speed plus
+        // a usage-14 Target Speed and a usage-14 Acceleration. Usage 14 is a
+        // supported cast-skill policy, so the whole skill converts.
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "100981",
+                "rarity": 5,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 14 },
+                        { "modifier": 500, "target": 1, "type": 31, "valueUsage": 14 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let skill = dto.into_domain().expect("usage 14 cast skill converts");
+        assert_eq!(skill.alternatives[0].effects.len(), 3);
+    }
+
+    #[test]
+    fn skill_input_rejects_alternative_mixing_direct_and_usage_13() {
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "210081",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 30000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 13 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        assert_eq!(
+            dto.into_domain(),
+            Err(DtoError(
+                "skill 210081 alternative 0 effect 1: unsupported value usage 13".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn skill_input_rejects_non_recovery_multiply_random_and_later_alternatives() {
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "test-skill",
+                "rarity": 1,
+                "alternatives": [
+                    {
+                        "baseDuration": 10000,
+                        "condition": "phase>=2",
+                        "effects": [{ "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 }]
+                    },
+                    {
+                        "baseDuration": 10000,
+                        "condition": "phase>=3",
+                        "effects": [{ "modifier": 500, "target": 1, "type": 27, "valueUsage": 8 }]
+                    }
+                ]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        assert_eq!(
+            dto.into_domain(),
+            Err(DtoError(
+                "skill test-skill alternative 1 effect 0: value usage 8 is invalid for effect type 27"
+                    .to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn injected_debuff_accepts_receiver_local_recovery_multiply_random() {
+        // An injected external Recovery drain with usage 8 has no caster; it is
+        // resolved receiver-locally, so the caster-context guard accepts it.
+        let skill: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "202031",
+                "rarity": 1,
+                "alternatives": [{
+                    "baseDuration": 10000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": -10000, "target": 2, "type": 9, "valueUsage": 8 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+        assert_eq!(reject_caster_context_injection(&skill), Ok(()));
+    }
+
+    #[test]
+    fn injected_debuff_rejects_caster_context_usage_14() {
+        let skill: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "100981",
+                "rarity": 5,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 14 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+        assert_eq!(
+            reject_caster_context_injection(&skill),
+            Err(DtoError(
+                "injected debuff 100981 alternative 0 effect 0: value usage 14 requires caster context and cannot be injected"
+                    .to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn skill_input_accepts_direct_and_recovery_multiply_random() {
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "202031",
+                "rarity": 1,
+                "alternatives": [{
+                    "baseDuration": 10000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": -10000, "target": 1, "type": 9, "valueUsage": 8 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        assert!(dto.into_domain().is_ok());
+    }
 
     #[test]
     fn contested_compare_params_deserialize_into_domain() {

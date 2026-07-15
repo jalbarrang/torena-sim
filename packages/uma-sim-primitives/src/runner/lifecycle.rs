@@ -270,6 +270,7 @@ impl Runner {
             skills_activated_half_race_map: [0; 2],
             heals_activated_count: 0,
             used_skills: std::collections::HashSet::new(),
+            activated_ledger: crate::skills::activated_ledger::ActivatedSkillLedger::new(),
             activated_advantage_effect_types: 0,
             used_targeted_skills: Vec::new(),
             emitted_debuffs: Vec::new(),

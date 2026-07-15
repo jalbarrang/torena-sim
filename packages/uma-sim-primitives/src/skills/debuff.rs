@@ -5,7 +5,7 @@
 //! that can meaningfully be injected onto another runner.
 
 use crate::skills::effect::{SkillTarget, SkillType};
-use crate::skills::model::{RawSkillEffect, Skill, SkillEffect};
+use crate::skills::model::{RawSkillEffect, ResolvedSkillEffect, Skill, SkillEffectSpec};
 
 const SELF_TARGET_ID: i32 = SkillTarget::SelfTarget as i32;
 
@@ -30,7 +30,7 @@ pub trait DebuffEffectLike {
     fn modifier(&self) -> f64;
 }
 
-impl DebuffEffectLike for SkillEffect {
+impl DebuffEffectLike for SkillEffectSpec {
     fn effect_type_id(&self) -> i32 {
         self.effect_type as i32
     }
@@ -45,6 +45,18 @@ impl DebuffEffectLike for SkillEffect {
 impl DebuffEffectLike for RawSkillEffect {
     fn effect_type_id(&self) -> i32 {
         self.effect_type
+    }
+    fn target_id(&self) -> i32 {
+        self.target as i32
+    }
+    fn modifier(&self) -> f64 {
+        self.modifier
+    }
+}
+
+impl DebuffEffectLike for ResolvedSkillEffect {
+    fn effect_type_id(&self) -> i32 {
+        self.effect_type as i32
     }
     fn target_id(&self) -> i32 {
         self.target as i32
@@ -131,6 +143,7 @@ mod tests {
         let mk = |effects: Vec<RawSkillEffect>| Skill {
             skill_id: SkillId::new("x"),
             rarity: SkillRarity::Gold,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 0.0,
                 cooldown_time: None,

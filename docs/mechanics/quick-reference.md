@@ -85,16 +85,15 @@ This document is a quick reference for the race mechanics that are available cur
 ### Value Scaling Types
 
 - ✅ `Direct` (1)
-- ✅ `MultiplySkillNum` (2)
-- ✅ `Aoharu` skills (3-7)
+- ❌ `MultiplySkillNum` (2)
+- ❌ `Aoharu` skills (3-7)
 - ✅ `MultiplyRandom` (8, 9)
-- ✅ `Climax` skills (10) - Available in Global via **Trackblazer: Start of the Climax**
-  - Example skills: **Glittering Star** / **Radiant Star**
-- ✅ `MultiplyMaximumRawStatus` (13)
-- ✅ `MultiplyActivateSpecificTagSkillCount` (14)
-- ✅ `AddDistanceDiffTop` (19)
-- ✅ `MultiplyBlockedSideMaxContinueTime` (20)
-- ✅ `MultiplySpeed` (22, 23)
+- ❌ `Climax` skills (10)
+- ❌ `MultiplyMaximumRawStatus` (13)
+- ✅ `MultiplyActivateSpecificTagSkillCount` (14) — counts activated green (601–615) skills: `0–2 → 0×`, `3–4 → 1×`, `5 → 2×`, `6+ → 3×`
+- ❌ `AddDistanceDiffTop` (19)
+- ❌ `MultiplyBlockedSideMaxContinueTime` (20)
+- ❌ `MultiplySpeed` (22, 23)
 - ❌ `MultiplyArcGlobalPotentialLevel` (24) - Not in Global yet
 - ❌ `MultiplyTopLeadAmount` (25) - Not in Global yet
 

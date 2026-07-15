@@ -422,6 +422,9 @@ pub struct Runner {
     pub heals_activated_count: i64,
     /// Skill ids already used this round.
     pub used_skills: HashSet<String>,
+    /// Ledger of activated skills carrying green master-data tags, used by
+    /// caster-context value scaling (usage 14). Reset each round.
+    pub activated_ledger: crate::skills::activated_ledger::ActivatedSkillLedger,
     /// Bitmask of positive self-applied effect types activated this race (bit
     /// `n` set => SkillType id `n` activated). Read by
     /// `is_other_character_activate_advantage_skill`.

@@ -60,6 +60,7 @@ type WasmSkillAlternative = {
 export type WasmSkillInput = {
   skillId: string;
   rarity: number; // 1 white, 2 gold, 3/4/5 unique, 6 evolution
+  tags: number[];
   alternatives: WasmSkillAlternative[];
 };
 

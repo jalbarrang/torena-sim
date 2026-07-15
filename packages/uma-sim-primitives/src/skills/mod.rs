@@ -8,9 +8,11 @@
 //! only through read-only view traits declared in [`condition`]; it never
 //! depends on the `racing` module directly.
 
+pub mod activated_ledger;
 pub mod activation;
 pub mod condition;
 pub mod debuff;
 pub mod effect;
 pub mod model;
 pub mod recovery;
+pub mod value_scaling;

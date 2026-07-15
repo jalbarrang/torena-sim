@@ -83,6 +83,7 @@ export type LoadSkillsResult = {
 function cloneSkillEntry(entry: SkillEntry): SkillEntry {
   return {
     ...entry,
+    tags: [...(entry.tags ?? [])],
     alternatives: entry.alternatives.map((alternative) => ({
       ...alternative,
       effects: alternative.effects.map((effect) => ({ ...effect }))
@@ -228,6 +229,7 @@ function buildMergedSkillEntry(params: BuildMergedSkillEntryParams): SkillEntry 
     ...existingEntry,
     id: String(resolvedSkill.id),
     rarity: resolvedSkill.rarity,
+    tags: existingEntry?.tags ? [...existingEntry.tags] : [],
     alternatives: mergeAlternatives(resolvedSkill.condition_groups, existingEntry?.alternatives),
     groupId: existingEntry?.groupId ?? defaultGroupId,
     versions: existingEntry?.versions ? [...existingEntry.versions] : [],

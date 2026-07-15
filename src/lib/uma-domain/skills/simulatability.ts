@@ -13,6 +13,12 @@
 import { knownConditionTokens } from './parser/conditions/conditions';
 import type { SkillAlternative } from './skill.types';
 
+const supportedValueUsages = new Set([1, 8, 9, 14]);
+
+export type UnsupportedSkillMechanic =
+  | { kind: 'condition-token'; token: string }
+  | { kind: 'value-usage'; usage: number };
+
 /**
  * Extract identifier tokens from a condition string.
  *
@@ -91,16 +97,7 @@ export function isConditionSimulatable(condition: string): boolean {
  * all its alternatives contains only known condition tokens.
  */
 export function areAlternativesSimulatable(alternatives: Array<SkillAlternative>): boolean {
-  for (const alt of alternatives) {
-    if (!isConditionSimulatable(alt.condition)) {
-      return false;
-    }
-    if (alt.precondition && !isConditionSimulatable(alt.precondition)) {
-      return false;
-    }
-  }
-
-  return true;
+  return findUnsupportedSkillMechanics(alternatives).length === 0;
 }
 
 /**
@@ -126,4 +123,24 @@ export function findUnknownConditionTokens(alternatives: Array<SkillAlternative>
   }
 
   return Array.from(unknown);
+}
+
+/** Return every unsupported condition token and value-scaling policy in a skill. */
+export function findUnsupportedSkillMechanics(
+  alternatives: Array<SkillAlternative>
+): Array<UnsupportedSkillMechanic> {
+  const mechanics: Array<UnsupportedSkillMechanic> = findUnknownConditionTokens(alternatives).map(
+    (token) => ({ kind: 'condition-token', token })
+  );
+
+  for (const alternative of alternatives) {
+    for (const effect of alternative.effects) {
+      const usage = effect.valueUsage ?? 1;
+      if (!supportedValueUsages.has(usage)) {
+        mechanics.push({ kind: 'value-usage', usage });
+      }
+    }
+  }
+
+  return mechanics;
 }

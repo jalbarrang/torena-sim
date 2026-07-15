@@ -38,6 +38,7 @@ docs/prd/
 
 .prd/
 .plans/
+/.taskman/
 .hiker-cache/
 .issues/
 .asset-bot/
