@@ -1243,6 +1243,319 @@ mod tests {
         r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
     }
 
+    /// The Copano Rickey (109801) matchup from the saved contested-compare
+    /// scenario: `100981` (Luck Runs My Way, usage-14) plus three greens
+    /// — Pace Chaser Savvy ○ (201532, tag 612), Collaborative Graded Races ○
+    /// (202252, tag 606), Wet Conditions ○ (200162, tag 601).
+    fn copano_rickey_full_skills() -> Vec<Skill> {
+        let green = |id: &str, tags: Vec<i32>, cond: &str, effect_type: i32| Skill {
+            skill_id: SkillId::new(id),
+            rarity: SkillRarity::White,
+            tags,
+            alternatives: vec![SkillAlternative {
+                base_duration: -10000.0,
+                cooldown_time: Some(0.0),
+                condition: cond.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 400000.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
+            }],
+        };
+        vec![
+            // 100981 Luck Runs My Way: Direct Target Speed + usage-14 Target
+            // Speed + usage-14 Acceleration.
+            Skill {
+                skill_id: SkillId::new("100981"),
+                rarity: SkillRarity::Unique,
+                tags: vec![401, 403],
+                alternatives: vec![SkillAlternative {
+                    base_duration: 50000.0,
+                    cooldown_time: None,
+                    condition: "phase_laterhalf_random==1".to_owned(),
+                    precondition: Some(String::new()),
+                    effects: vec![
+                        RawSkillEffect {
+                            modifier: 2500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 27,
+                            value_usage: Some(1),
+                            value_level_usage: None,
+                        },
+                        RawSkillEffect {
+                            modifier: 500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 27,
+                            value_usage: Some(14),
+                            value_level_usage: None,
+                        },
+                        RawSkillEffect {
+                            modifier: 500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 31,
+                            value_usage: Some(14),
+                            value_level_usage: None,
+                        },
+                    ],
+                }],
+            },
+            // 201532 Pace Chaser Savvy ○: Wisdom Up (green) + vision (unmodeled).
+            Skill {
+                skill_id: SkillId::new("201532"),
+                rarity: SkillRarity::White,
+                tags: vec![102, 405, 612],
+                alternatives: vec![SkillAlternative {
+                    base_duration: -10000.0,
+                    cooldown_time: Some(0.0),
+                    condition: "running_style==2".to_owned(),
+                    precondition: Some(String::new()),
+                    effects: vec![
+                        RawSkillEffect {
+                            modifier: 400000.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 5,
+                            value_usage: Some(1),
+                            value_level_usage: Some(1),
+                        },
+                        RawSkillEffect {
+                            modifier: 50000.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 8,
+                            value_usage: Some(1),
+                            value_level_usage: Some(1),
+                        },
+                    ],
+                }],
+            },
+            green("202252", vec![401, 606], "is_dirtgrade==1", 1),
+            green(
+                "200162",
+                vec![403, 601],
+                "ground_condition==2@ground_condition==3@ground_condition==4",
+                3,
+            ),
+        ]
+    }
+
+    /// The three extra greens from the second saved scenario, all
+    /// gate-deterministic on this config: Fall Runner ○ (200192/603,
+    /// `season==3`), Right-Handed ○ (200012/608, `rotation==1`), Sunny Days ○
+    /// (200212/602, `weather==1`).
+    fn copano_rickey_extra_greens() -> Vec<Skill> {
+        let green = |id: &str, tags: Vec<i32>, cond: &str, effect_type: i32| Skill {
+            skill_id: SkillId::new(id),
+            rarity: SkillRarity::White,
+            tags,
+            alternatives: vec![SkillAlternative {
+                base_duration: -10000.0,
+                cooldown_time: Some(0.0),
+                condition: cond.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 400000.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
+            }],
+        };
+        vec![
+            green("200192", vec![401, 603], "season==3", 1),
+            green("200012", vec![401, 608], "rotation==1", 1),
+            green("200212", vec![404, 602], "weather==1", 4),
+        ]
+    }
+
+    /// Build a Copano Rickey Pace Chaser on a dirt-grade (track 10101) course
+    /// with the given skills, prepared under Good ground so all three greens'
+    /// conditions hold at the gate.
+    fn copano_on_dirtgrade(skills: Vec<Skill>) -> Runner {
+        use crate::course::model::CourseData;
+        use crate::shared_kernel::language::{DistanceType, Orientation, Surface};
+
+        let course = CourseData {
+            course_id: 11103,
+            race_track_id: 10101, // in DIRT_GRADE_TRACK_IDS -> is_dirtgrade==1
+            distance: 2000.0,
+            distance_type: DistanceType::Mid,
+            surface: Surface::Dirt,
+            turn: Orientation::Clockwise,
+            course_set_status: vec![],
+            corners: vec![],
+            straights: vec![],
+            slopes: vec![],
+            lane_max: 10.0,
+            course_width: 30.0,
+            horse_lane: 1.5,
+            lane_change_acceleration: 0.0,
+            lane_change_acceleration_per_frame: 0.0,
+            max_lane_distance: 0.0,
+            move_lane_point: 0.0,
+            is_abroad: false,
+        };
+        use crate::shared_kernel::language::{Season, Weather};
+        let mut rp = test_race_params();
+        rp.ground = GroundCondition::Good; // ground_condition==2
+        rp.season = Season::Autumn; // season==3 (Fall Runner)
+        rp.weather = Weather::Sunny; // weather==1 (Sunny Days)
+
+        let props = CreateRunner {
+            outfit_id: "109801".to_owned(),
+            name: "Copano Rickey".to_owned(),
+            mood: Mood::Normal,
+            strategy: Strategy::PaceChaser,
+            popularity: 0,
+            aptitudes: RunnerAptitudes {
+                distance: Aptitude::S,
+                strategy: Aptitude::A,
+                surface: Aptitude::A,
+            },
+            stats: StatLine {
+                speed: 1300,
+                stamina: 1000,
+                power: 1200,
+                guts: 600,
+                wit: 1100,
+            },
+            skills,
+            forced_positions: HashMap::new(),
+            injected_debuffs: vec![],
+            forced_rushed_regions: vec![],
+            forced_dueling_regions: vec![],
+            forced_spot_struggle_regions: vec![],
+            forced_rank: vec![],
+        };
+        let mut r = Runner::create(
+            RunnerId(0),
+            &course,
+            GroundCondition::Good,
+            props,
+            Box::new(NoopStaminaPolicy),
+            Box::new(Xoshiro256StarStar::from_u32_seed(1)),
+        );
+
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let wc = test_whole_course(&course);
+        let ctx = PrepareContext {
+            course: &course,
+            base_speed: 20.0,
+            condition_resolution: ConditionResolution::Dynamic,
+            pos_keep_end_multiplier: 3.0,
+            race_params: &rp,
+            whole_course: &wc,
+            parser: &parser,
+            skill_samples: 4,
+            round_iteration: 0,
+        };
+        r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
+        r
+    }
+
+    /// Force `100981` to activate and return the runner post-proc.
+    fn proc_luck_runs_my_way(r: &mut Runner) {
+        r.wit_checks_enabled = false;
+        let idx = r
+            .pending_skills
+            .iter()
+            .position(|s| s.skill_id.as_str() == "100981")
+            .expect("100981 must be pending after prepare");
+        let trigger = r.pending_skills[idx].trigger;
+        r.position = trigger.start + 0.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2000.0);
+    }
+
+    #[test]
+    fn copano_rickey_usage_14_benefits_from_activated_greens() {
+        // Uma 1: 100981 + three greens (201532/612, 202252/606, 200162/601).
+        let mut uma1 = copano_on_dirtgrade(copano_rickey_full_skills());
+        // All three greens fire at the gate and are recorded.
+        assert_eq!(
+            uma1.activated_ledger.activated_green_count(),
+            3,
+            "the three green skills must activate on a dirt-grade Good-ground course"
+        );
+
+        proc_luck_runs_my_way(&mut uma1);
+        assert!(uma1.used_skills.contains("100981"), "100981 must proc");
+
+        // Uma 2: only 100981 -> no greens -> tier 0x baseline.
+        let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
+            .into_iter()
+            .next()
+            .expect("100981 is the first skill")]);
+        assert_eq!(uma2.activated_ledger.activated_green_count(), 0);
+        proc_luck_runs_my_way(&mut uma2);
+        assert!(uma2.used_skills.contains("100981"));
+
+        // Target speed carries no start-dash term, so absolute values are clean:
+        // green count 3 -> tier 1x adds the usage-14 0.05 on top of the shared
+        // Direct 0.25; the no-green runner stays at 0.25.
+        assert!(
+            (uma1.modifiers.target_speed.total() - 0.30).abs() < 1e-9,
+            "uma1 target speed was {}",
+            uma1.modifiers.target_speed.total()
+        );
+        assert!(
+            (uma2.modifiers.target_speed.total() - 0.25).abs() < 1e-9,
+            "uma2 target speed was {}",
+            uma2.modifiers.target_speed.total()
+        );
+
+        // Acceleration shares the +24.0 start-dash baseline on both runners, so
+        // the usage-14 contribution is the delta: uma1 gets +0.05, uma2 +0.0.
+        let accel_delta = uma1.modifiers.accel.total() - uma2.modifiers.accel.total();
+        assert!(
+            (accel_delta - 0.05).abs() < 1e-9,
+            "usage-14 accel delta was {accel_delta} (uma1 {}, uma2 {})",
+            uma1.modifiers.accel.total(),
+            uma2.modifiers.accel.total()
+        );
+    }
+
+    #[test]
+    fn copano_rickey_usage_14_reaches_tier_3_with_six_greens() {
+        // Second saved scenario: 100981 + six greens (201532/612, 202252/606,
+        // 200162/601, 200192/603, 200012/608, 200212/602). All six are
+        // gate-deterministic on course 11103 (dirt grade, Good, Autumn, Sunny,
+        // clockwise, Pace Chaser).
+        let mut skills = copano_rickey_full_skills();
+        skills.extend(copano_rickey_extra_greens());
+        let mut uma1 = copano_on_dirtgrade(skills);
+        assert_eq!(
+            uma1.activated_ledger.activated_green_count(),
+            6,
+            "all six greens must activate"
+        );
+        proc_luck_runs_my_way(&mut uma1);
+        assert!(uma1.used_skills.contains("100981"));
+
+        // No-green baseline.
+        let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
+            .into_iter()
+            .next()
+            .expect("100981 is the first skill")]);
+        proc_luck_runs_my_way(&mut uma2);
+
+        // 6 greens -> tier 3x: usage-14 Target Speed 0.05*3 = 0.15 on top of the
+        // Direct 0.25 -> 0.40; usage-14 accel delta 0.15.
+        assert!(
+            (uma1.modifiers.target_speed.total() - 0.40).abs() < 1e-9,
+            "uma1 target speed was {}",
+            uma1.modifiers.target_speed.total()
+        );
+        let accel_delta = uma1.modifiers.accel.total() - uma2.modifiers.accel.total();
+        assert!(
+            (accel_delta - 0.15).abs() < 1e-9,
+            "usage-14 accel delta was {accel_delta}"
+        );
+    }
+
     #[test]
     fn pending_skills_built_on_prepare() {
         let mut r = runner_with_skills(vec![target_speed_skill(
