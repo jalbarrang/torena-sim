@@ -601,6 +601,10 @@ Note that [base Wit stat](#base-stats) is used here. As a result the activation 
 
 The Runaway skill (`202051`) always activates at the gate and changes a Front Runner's pacing strategy to Runaway. The race-entry strategy remains Front Runner for skill conditions and other immutable configuration; only the position-keep strategy used by pacing mechanics is promoted. Source: the `202051` master-data effect and description in `src/modules/data/json/skills.json`, with the runtime field contract confirmed by the project owner.
 
+#### RushedDuration (13) {#rushedduration-(13)}
+
+The *Frenzied* family (`200791` Front Runners, `200801` Pace Chasers, `200811` Late Surgers, `200821` End Closers) targets an enemy running style (KakariStrategy) and extends a **currently-rushed** opponent's remaining rushed duration by +5s (raw `50000`), delaying the 12s cap-based exit. It is emitted from a live cast as a positive-modifier external effect and routed to matching-style opponents; a non-rushed target is a no-op. Source: the Frenzied master-data effects in `src/modules/data/json/skills.json` plus the Rushed State note above.
+
 #### CurrentSpeed (21) {#currentspeed-(21)}
 
 There are two variables for a uma’s current speed: Actual Speed (LastSpeed in code) and Current Speed (LastSelfSpeed in code).
@@ -1167,7 +1171,7 @@ Examples:
 | 900 Wit  | 11.01%        |
 | 1200 Wit | 9.74%         |
 
-The "Restraint" skill (ID=202161) reduces the chance by flat 3%. i.e. 19% to 16%.
+The "Restraint" skill (ID=202161) reduces the chance by flat 3%. i.e. 19% to 16%. Modeled generically as effect type 29 (`RushedChance`): the runner sums the type-29 modifiers on its own pending skills (raw `-30000` → `-3.0` → `-0.03` probability) before the pre-race rushed roll.
 
 If a uma were to enter the rushed state, she would do so in a random [section](#section) between 2 to 9\. She will enter the rushed state as soon as she enters the section.
 

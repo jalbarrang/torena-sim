@@ -1092,6 +1092,69 @@ mod tests {
     }
 
     #[test]
+    fn frenzied_extends_only_rushed_matching_strategy_opponents() {
+        use uma_sim_primitives::race_support::build_field_snapshot;
+        use uma_sim_primitives::shared_kernel::ids::SkillId;
+        use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
+
+        // R0 caster (Pace Chaser), R1 Front Runner (rushed target), R2 Front
+        // Runner (not rushed), R3 Pace Chaser (wrong style, rushed).
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            SimulationSettings::default(),
+            test_race_params(),
+        );
+        race.add_runner(props("caster", Strategy::PaceChaser));
+        race.add_runner(props("rushed-front", Strategy::FrontRunner));
+        race.add_runner(props("calm-front", Strategy::FrontRunner));
+        race.add_runner(props("rushed-pace", Strategy::PaceChaser));
+        race.prepare_round(11);
+
+        // Put two runners into the rushed state with the default 12s cap.
+        for idx in [1usize, 3] {
+            race.runners[idx].is_rushed = true;
+            race.runners[idx].rushed_max_duration = 12.0;
+        }
+        race.runners[2].is_rushed = false;
+        race.runners[2].rushed_max_duration = 12.0;
+
+        let snapshot = build_field_snapshot(
+            &mut race.runners,
+            &race.finished_runners,
+            &mut race.order_tracker,
+        );
+
+        // Frenzied Front Runners (200791): +5.0s to the rushed timer of the
+        // Front Runner enemy strategy.
+        race.runners[0].emitted_debuffs.push(EmittedDebuff {
+            skill_id: SkillId::new("200791"),
+            effect: ResolvedSkillEffect {
+                target: SkillTarget::KakariStrategy,
+                effect_type: SkillType::RushedDuration,
+                base_duration: 0.0,
+                modifier: 5.0,
+            },
+            target: SkillTarget::KakariStrategy,
+            target_strategy: Some(Strategy::FrontRunner),
+        });
+
+        race.coordinate_external_debuffs(&snapshot);
+
+        // Rushed Front Runner: timer extended by 5s (12 -> 17).
+        assert!((race.runners[1].rushed_max_duration - 17.0).abs() < 1e-9);
+        // Non-rushed Front Runner: routed to, but the receiver no-ops.
+        assert!((race.runners[2].rushed_max_duration - 12.0).abs() < 1e-9);
+        // Rushed Pace Chaser: wrong style, not a target.
+        assert!((race.runners[3].rushed_max_duration - 12.0).abs() < 1e-9);
+        // Caster is never self-targeted.
+        assert!((race.runners[0].rushed_max_duration - 12.0).abs() < 1e-9);
+        // Emitter outbox drained.
+        assert!(race.runners[0].emitted_debuffs.is_empty());
+    }
+
+    #[test]
     fn finished_runners_keep_their_place_in_the_order_map() {
         use uma_sim_primitives::race_support::{build_field_snapshot, build_field_view};
 

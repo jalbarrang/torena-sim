@@ -15,6 +15,12 @@ export const SkillType = {
   // - Changes the pacing strategy, used by Runaway to promote Front Runner to Runaway
   ChangeStrategy: 6,
 
+  // - Extends a rushed (temptation) opponent's remaining duration (Frenzied family)
+  RushedDuration: 13,
+
+  // - Adjusts the pre-race rushed (temptation) chance, e.g. Restraint's -3%
+  RushedChance: 29,
+
   // Skills actionable during the race
   // - Skills that modify the HP of the Runner
   //   Found on Recovery Skills like: "Swinging Maestro" or "Superior Heal"
@@ -60,6 +66,8 @@ const SkillEffectName: Record<ISkillType, string> = {
   [SkillType.GutsUp]: 'Guts Up',
   [SkillType.WisdomUp]: 'Wisdom Up',
   [SkillType.ChangeStrategy]: 'Change Strategy',
+  [SkillType.RushedDuration]: 'Rushed Duration',
+  [SkillType.RushedChance]: 'Rushed Chance',
   [SkillType.Recovery]: 'Recovery',
   [SkillType.MultiplyStartDelay]: 'Multiply Start Delay',
   [SkillType.SetStartDelay]: 'Set Start Delay',

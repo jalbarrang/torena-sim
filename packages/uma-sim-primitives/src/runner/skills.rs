@@ -25,7 +25,7 @@ use crate::skills::condition::dynamic::{
 };
 use crate::skills::condition::language::ConditionParser;
 use crate::skills::condition::{ApplyParams, ConditionResolution, SkillEvalRunner};
-use crate::skills::debuff::{get_external_debuff_effects, is_external_debuff_effect};
+use crate::skills::debuff::{get_external_debuff_effects, is_emittable_external_effect};
 use crate::skills::effect::{SkillRarity, SkillType};
 use crate::skills::model::{
     build_skill_effects, ActiveSkill, ActiveTargetedSkill, EmittedDebuff, PendingSkill,
@@ -305,20 +305,30 @@ fn condition_allows_second_trigger(condition: &str) -> bool {
     condition.contains("is_activate_other_skill_detail") || condition.contains("is_used_skill_id")
 }
 
-/// Derive the running style an `EnemyStrategy` external debuff targets from its
-/// activation condition. The effect data is identical across the whole *Hesitant*
-/// family (`target:18, valueUsage:1`), so the only signal for *which* strategy is
-/// hit is the `running_style_count_<style>_otherself` token in the condition.
-/// Returns `None` when the condition names no such style.
+/// Derive the running style a strategy-targeted external debuff hits from its
+/// activation condition. The effect data is identical across each family, so the
+/// only signal for *which* strategy is hit is a running-style token in the
+/// condition: `running_style_count_<style>_otherself` for the *Hesitant*
+/// (`EnemyStrategy`) family, or `running_style_temptation_opponent_count_<style>`
+/// for the *Frenzied* (`KakariStrategy`) family. Returns `None` when the
+/// condition names no such style.
 fn derive_target_strategy(condition: &str) -> Option<Strategy> {
     use crate::shared_kernel::language::Strategy;
-    if condition.contains("running_style_count_nige_otherself") {
+    if condition.contains("running_style_count_nige_otherself")
+        || condition.contains("running_style_temptation_opponent_count_nige")
+    {
         Some(Strategy::FrontRunner)
-    } else if condition.contains("running_style_count_senko_otherself") {
+    } else if condition.contains("running_style_count_senko_otherself")
+        || condition.contains("running_style_temptation_opponent_count_senko")
+    {
         Some(Strategy::PaceChaser)
-    } else if condition.contains("running_style_count_sashi_otherself") {
+    } else if condition.contains("running_style_count_sashi_otherself")
+        || condition.contains("running_style_temptation_opponent_count_sashi")
+    {
         Some(Strategy::LateSurger)
-    } else if condition.contains("running_style_count_oikomi_otherself") {
+    } else if condition.contains("running_style_count_oikomi_otherself")
+        || condition.contains("running_style_temptation_opponent_count_oikomi")
+    {
         Some(Strategy::EndCloser)
     } else {
         None
@@ -608,7 +618,7 @@ impl Runner {
             // `coordinate_external_debuffs` pass routes it onto the target
             // runners via `receive_targeted_effect`. The caster resolves the
             // value here so the receiver never re-resolves it.
-            if is_external_debuff_effect(&resolved) {
+            if is_emittable_external_effect(&resolved) {
                 self.emitted_debuffs.push(EmittedDebuff {
                     skill_id: skill.skill_id.clone(),
                     effect: resolved,
@@ -670,6 +680,12 @@ impl Runner {
                 self.adjusted_stats.wit = (self.adjusted_stats.wit + effect.modifier).max(1.0);
             }
             SkillType::ChangeStrategy => self.position_keep_strategy = Strategy::Runaway,
+            // Read pre-race off the pending queue by `rushed_chance` (the rushed
+            // roll runs before gate skills fire), so activation is a no-op.
+            SkillType::RushedChance => {}
+            // Frenzied (type 13) only ever targets opponents (KakariStrategy);
+            // a self-application is a no-op.
+            SkillType::RushedDuration => {}
             SkillType::MultiplyStartDelay => self.start_delay *= effect.modifier,
             SkillType::SetStartDelay => self.start_delay = effect.modifier,
             SkillType::TargetSpeed => {
@@ -840,7 +856,16 @@ impl Runner {
         duration: f64,
     ) {
         match effect.effect_type {
-            SkillType::Noop | SkillType::ChangeStrategy => {}
+            SkillType::Noop | SkillType::ChangeStrategy | SkillType::RushedChance => {}
+            // Frenzied family: worsen a rushed opponent by extending its
+            // remaining rushed duration (modifier is +5.0s, already scaled).
+            // Only meaningful while the target is currently rushed; the 12s
+            // cap-based exit is delayed by the added time.
+            SkillType::RushedDuration => {
+                if self.is_rushed {
+                    self.rushed_max_duration += effect.modifier;
+                }
+            }
             SkillType::SpeedUp => {
                 self.adjusted_stats.speed = (self.adjusted_stats.speed + effect.modifier).max(1.0);
             }
@@ -1424,6 +1449,41 @@ mod tests {
         let field = FieldView::at_gate();
         r.process_skill_activations(&field, 2400.0);
         assert_eq!(r.heals_activated_count, 1);
+    }
+
+    #[test]
+    fn derive_target_strategy_reads_both_hesitant_and_frenzied_tokens() {
+        // Hesitant (EnemyStrategy) family.
+        assert_eq!(
+            derive_target_strategy("running_style_count_nige_otherself>=1"),
+            Some(Strategy::FrontRunner)
+        );
+        // Frenzied (KakariStrategy) family — the four running styles.
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_nige>=1&is_temptation==0"
+            ),
+            Some(Strategy::FrontRunner)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_senko>=1&is_temptation==0"
+            ),
+            Some(Strategy::PaceChaser)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_sashi>=1&is_temptation==0"
+            ),
+            Some(Strategy::LateSurger)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_oikomi>=1&is_temptation==0"
+            ),
+            Some(Strategy::EndCloser)
+        );
+        assert_eq!(derive_target_strategy("phase>=2"), None);
     }
 
     #[test]
