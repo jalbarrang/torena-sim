@@ -12,6 +12,9 @@ export const SkillType = {
   // - Skills like: Front Runner Savvy, Pace Chaser Savvy, etc.
   WisdomUp: 5,
 
+  // - Changes the pacing strategy, used by Runaway to promote Front Runner to Runaway
+  ChangeStrategy: 6,
+
   // Skills actionable during the race
   // - Skills that modify the HP of the Runner
   //   Found on Recovery Skills like: "Swinging Maestro" or "Superior Heal"
@@ -56,6 +59,7 @@ const SkillEffectName: Record<ISkillType, string> = {
   [SkillType.PowerUp]: 'Power Up',
   [SkillType.GutsUp]: 'Guts Up',
   [SkillType.WisdomUp]: 'Wisdom Up',
+  [SkillType.ChangeStrategy]: 'Change Strategy',
   [SkillType.Recovery]: 'Recovery',
   [SkillType.MultiplyStartDelay]: 'Multiply Start Delay',
   [SkillType.SetStartDelay]: 'Set Start Delay',

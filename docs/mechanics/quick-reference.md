@@ -73,6 +73,7 @@ This document is a quick reference for the race mechanics that are available cur
 ### Skill Types & Effects
 
 - ✅ `Green` skills (stat bonuses)
+- ✅ `ChangeStrategy` (`6`): Runaway always activates and promotes the position-keep strategy to `Runaway`
 - ✅ `TargetSpeed`, `CurrentSpeed`, `Acceleration`
 - ✅ `CurrentSpeed` instant speed change
 - ✅ `CurrentSpeedWithNaturalDeceleration` (natural deceleration)

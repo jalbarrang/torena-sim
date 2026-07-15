@@ -15,6 +15,7 @@
 use crate::runner::lifecycle::PrepareContext;
 use crate::runner::{Runner, UsedTargetedSkill};
 use crate::shared_kernel::ids::SkillId;
+use crate::shared_kernel::language::Strategy;
 use crate::shared_kernel::math::Timer;
 use crate::shared_kernel::params::{RaceParameters, StatLine};
 use crate::shared_kernel::region::{Region, RegionList};
@@ -138,7 +139,7 @@ impl RunnerView for RunnerConditionView<'_> {
     fn phase(&self) -> i64 {
         self.runner.phase.index() as i64
     }
-    fn strategy(&self) -> Option<crate::shared_kernel::language::Strategy> {
+    fn strategy(&self) -> Option<Strategy> {
         Some(self.runner.strategy)
     }
     fn is_rushed(&self) -> bool {
@@ -309,7 +310,7 @@ fn condition_allows_second_trigger(condition: &str) -> bool {
 /// family (`target:18, valueUsage:1`), so the only signal for *which* strategy is
 /// hit is the `running_style_count_<style>_otherself` token in the condition.
 /// Returns `None` when the condition names no such style.
-fn derive_target_strategy(condition: &str) -> Option<crate::shared_kernel::language::Strategy> {
+fn derive_target_strategy(condition: &str) -> Option<Strategy> {
     use crate::shared_kernel::language::Strategy;
     if condition.contains("running_style_count_nige_otherself") {
         Some(Strategy::FrontRunner)
@@ -549,7 +550,7 @@ impl Runner {
         }
         if let Some(first) = skill.effects.first() {
             let type_id = first.effect_type as i32;
-            if (1..=5).contains(&type_id) {
+            if (1..=6).contains(&type_id) {
                 return true;
             }
         }
@@ -668,6 +669,7 @@ impl Runner {
             SkillType::WisdomUp => {
                 self.adjusted_stats.wit = (self.adjusted_stats.wit + effect.modifier).max(1.0);
             }
+            SkillType::ChangeStrategy => self.position_keep_strategy = Strategy::Runaway,
             SkillType::MultiplyStartDelay => self.start_delay *= effect.modifier,
             SkillType::SetStartDelay => self.start_delay = effect.modifier,
             SkillType::TargetSpeed => {
@@ -838,7 +840,7 @@ impl Runner {
         duration: f64,
     ) {
         match effect.effect_type {
-            SkillType::Noop => {}
+            SkillType::Noop | SkillType::ChangeStrategy => {}
             SkillType::SpeedUp => {
                 self.adjusted_stats.speed = (self.adjusted_stats.speed + effect.modifier).max(1.0);
             }
@@ -1042,9 +1044,7 @@ mod tests {
         }
     }
 
-    /// A Savvy-shaped skill: Wisdom Up (type 5, modeled) bundled with a vision
-    /// effect (type 8, unmodeled), gated on the Pace Chaser running style — the
-    /// exact shape of real skill 201531 (Pace Chaser Savvy ◎).
+    /// A Savvy-shaped skill: Wisdom Up (type 5, modeled) bundled with a vision effect (type 8, unmodeled), gated on the Pace Chaser running style — the exact shape of real skill 201531 (Pace Chaser Savvy ◎).
     fn savvy_skill(id: &str) -> Skill {
         Skill {
             skill_id: SkillId::new(id),
@@ -1071,6 +1071,27 @@ mod tests {
                         value_level_usage: Some(1),
                     },
                 ],
+            }],
+        }
+    }
+
+    fn runaway_skill(condition: &str) -> Skill {
+        Skill {
+            skill_id: SkillId::new("202051"),
+            rarity: SkillRarity::Gold,
+            tags: vec![101, 612],
+            alternatives: vec![SkillAlternative {
+                base_duration: -1.0,
+                cooldown_time: Some(0.0),
+                condition: condition.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 0.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 6,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
             }],
         }
     }
@@ -1403,6 +1424,34 @@ mod tests {
         let field = FieldView::at_gate();
         r.process_skill_activations(&field, 2400.0);
         assert_eq!(r.heals_activated_count, 1);
+    }
+
+    #[test]
+    fn change_strategy_skips_wit_check() {
+        let mut r = runner_with_skills(vec![runaway_skill("phase>=2")]);
+        r.strategy = Strategy::FrontRunner;
+        prepare(&mut r);
+
+        assert_eq!(r.pending_skills.len(), 1);
+        assert!(r.should_skip_wit_check(&r.pending_skills[0]));
+    }
+
+    #[test]
+    fn runaway_activates_at_gate_and_promotes_only_position_keep_strategy() {
+        let mut r = runner_with_skills(vec![runaway_skill("running_style==1")]);
+        r.strategy = Strategy::FrontRunner;
+        r.position_keep_strategy = Strategy::FrontRunner;
+
+        prepare(&mut r);
+
+        assert_eq!(
+            r.strategy,
+            Strategy::FrontRunner,
+            "the race-entry strategy remains unchanged"
+        );
+        assert_eq!(r.position_keep_strategy, Strategy::Runaway);
+        assert_eq!(r.skills_activated_count, 1);
+        assert!(r.used_skills.contains("202051"));
     }
 
     #[test]

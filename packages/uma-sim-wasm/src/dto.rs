@@ -515,13 +515,18 @@ fn validate_effect_value_usage(
             "skill {skill_id} alternative {alternative_index} effect {effect_index}: unsupported value usage {usage}"
         ))
     })?;
-    let effect_type =
-        uma_sim_primitives::skills::effect::SkillType::try_from(effect.effect_type).ok();
-    if !effect_type.is_some_and(|effect_type| policy.supports_effect_type(effect_type)) {
-        return Err(DtoError(format!(
-            "skill {skill_id} alternative {alternative_index} effect {effect_index}: value usage {usage} is invalid for effect type {}",
-            effect.effect_type
-        )));
+    // Unmodeled effect types are intentionally dropped by `build_skill_effects`.
+    // Validate supported usages before this branch, but only validate a
+    // policy/type combination when the engine can model that type.
+    if let Ok(effect_type) =
+        uma_sim_primitives::skills::effect::SkillType::try_from(effect.effect_type)
+    {
+        if !policy.supports_effect_type(effect_type) {
+            return Err(DtoError(format!(
+                "skill {skill_id} alternative {alternative_index} effect {effect_index}: value usage {usage} is invalid for effect type {}",
+                effect.effect_type
+            )));
+        }
     }
     Ok(())
 }
@@ -1438,6 +1443,7 @@ impl WasmCompareData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uma_sim_primitives::skills::model::build_skill_effects;
 
     #[test]
     fn wasm_skill_input_carries_tags_and_defaults_missing_tags() {
@@ -1471,6 +1477,38 @@ mod tests {
             .expect("legacy skill input converts")
             .tags
             .is_empty());
+    }
+
+    #[test]
+    fn skill_input_accepts_direct_unmodeled_effect_and_preserves_modeled_effects() {
+        // Pace Chaser Savvy ○ (201532) bundles its modeled Wisdom Up effect
+        // (type 5) with a Direct vision effect (type 8) that the engine does
+        // not model. The DTO must admit the supported Direct policy so the
+        // domain can intentionally drop only the unmodeled effect.
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "201532",
+                "rarity": 1,
+                "alternatives": [{
+                    "baseDuration": -1,
+                    "condition": "running_style==2",
+                    "effects": [
+                        { "modifier": 400000, "target": 1, "type": 5, "valueUsage": 1, "valueLevelUsage": 1 },
+                        { "modifier": 50000, "target": 1, "type": 8, "valueUsage": 1, "valueLevelUsage": 1 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let skill = dto.into_domain().expect("201532-shaped skill converts");
+        let effects = build_skill_effects(&skill.alternatives[0]);
+        assert_eq!(effects.len(), 1, "the unmodeled vision effect is skipped");
+        assert_eq!(
+            effects[0].effect_type,
+            uma_sim_primitives::skills::effect::SkillType::WisdomUp
+        );
+        assert_eq!(effects[0].modifier, 40.0);
     }
 
     #[test]

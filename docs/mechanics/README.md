@@ -597,6 +597,10 @@ Note that [base Wit stat](#base-stats) is used here. As a result the activation 
 
 “Ability” refers to individual effects of a skill.
 
+#### ChangeStrategy (6) {#changestrategy-(6)}
+
+The Runaway skill (`202051`) always activates at the gate and changes a Front Runner's pacing strategy to Runaway. The race-entry strategy remains Front Runner for skill conditions and other immutable configuration; only the position-keep strategy used by pacing mechanics is promoted. Source: the `202051` master-data effect and description in `src/modules/data/json/skills.json`, with the runtime field contract confirmed by the project owner.
+
 #### CurrentSpeed (21) {#currentspeed-(21)}
 
 There are two variables for a uma’s current speed: Actual Speed (LastSpeed in code) and Current Speed (LastSelfSpeed in code).
