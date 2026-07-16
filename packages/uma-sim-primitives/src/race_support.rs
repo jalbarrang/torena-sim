@@ -248,10 +248,12 @@ pub fn build_field_view(self_id: RunnerId, snapshot: &FieldSnapshot) -> FieldVie
 /// runners (absent from `entries`) are never hit.
 ///
 /// Only the targets reachable by the self-activation routing path are modeled:
-/// `EnemyStrategy` (the Hesitant family), `All`, and the position-relative
-/// `AheadOfSelf`/`BehindSelf`. Other selectors (`InFov`, `UmaId`,
-/// `UsedRecovery`, `AheadOfPosition`, `Kakari*`, ally targets) are not yet routed
-/// from a live cast — manual debuff injection remains their path.
+/// `EnemyStrategy` (the Hesitant family) and `KakariStrategy` (the Frenzied
+/// family) both match opponents of the derived running style; `All`, and the
+/// position-relative `AheadOfSelf`/`BehindSelf`. Other selectors (`InFov`,
+/// `UmaId`, `UsedRecovery`, `AheadOfPosition`, `KakariAhead`/`KakariBehind`, ally
+/// targets) are not yet routed from a live cast — manual debuff injection remains
+/// their path.
 pub fn resolve_debuff_targets(
     snapshot: &FieldSnapshot,
     source_id: RunnerId,
@@ -268,7 +270,7 @@ pub fn resolve_debuff_targets(
         .iter()
         .filter(|e| e.id != source_id)
         .filter(|e| match target {
-            SkillTarget::EnemyStrategy => {
+            SkillTarget::EnemyStrategy | SkillTarget::KakariStrategy => {
                 target_strategy.is_some_and(|s| strategy_matches(e.strategy, s))
             }
             SkillTarget::All => true,

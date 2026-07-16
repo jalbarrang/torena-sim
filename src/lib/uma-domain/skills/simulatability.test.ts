@@ -3,6 +3,7 @@ import {
   areAlternativesSimulatable,
   extractConditionTokens,
   findUnknownConditionTokens,
+  findUnsupportedSkillMechanics,
   isConditionSimulatable
 } from './simulatability';
 import { skillsService } from '@/modules/data/services/SkillService';
@@ -86,6 +87,18 @@ describe('areAlternativesSimulatable', () => {
   it('returns true for empty alternatives', () => {
     expect(areAlternativesSimulatable([])).toBe(true);
   });
+
+  it('returns false when any effect uses an unsupported value policy', () => {
+    expect(
+      areAlternativesSimulatable([
+        {
+          condition: 'distance_rate>=50',
+          baseDuration: 60000,
+          effects: [{ type: 27, modifier: 500, target: 1, valueUsage: 13 }]
+        }
+      ])
+    ).toBe(false);
+  });
 });
 
 describe('findUnknownConditionTokens', () => {
@@ -114,6 +127,32 @@ describe('findUnknownConditionTokens', () => {
   });
 });
 
+describe('findUnsupportedSkillMechanics', () => {
+  it('reports unsupported value usages separately from condition tokens', () => {
+    expect(
+      findUnsupportedSkillMechanics([
+        {
+          condition: 'distance_rate>=50',
+          baseDuration: 60000,
+          effects: [{ type: 27, modifier: 500, target: 1, valueUsage: 13 }]
+        }
+      ])
+    ).toEqual([{ kind: 'value-usage', usage: 13 }]);
+  });
+
+  it('treats usage 14 (activated-tag count) as supported', () => {
+    expect(
+      findUnsupportedSkillMechanics([
+        {
+          condition: 'distance_rate>=50',
+          baseDuration: 60000,
+          effects: [{ type: 27, modifier: 500, target: 1, valueUsage: 14 }]
+        }
+      ])
+    ).toEqual([]);
+  });
+});
+
 describe('SkillService.isSimulatable', () => {
   it('returns true for known skills in the current dataset', () => {
     // Kitasan Black unique — uses well-known conditions
@@ -124,14 +163,30 @@ describe('SkillService.isSimulatable', () => {
     expect(skillsService.isSimulatable('999999999')).toBe(false);
   });
 
-  it('all released skills in the current dataset are simulatable', () => {
-    const releasedSkills = skillsService
-      .getAll()
-      .filter((skill) => skillsService.isReleased(skill.id));
-    const nonSimulatable = releasedSkills.filter((skill) => !skillsService.isSimulatable(skill.id));
+  it('rejects released skills with reviewed unsupported value usages', () => {
+    const unsupported = [
+      '210011',
+      '210012',
+      '210021',
+      '210022',
+      '210031',
+      '210032',
+      '210041',
+      '210042',
+      '210051',
+      '210052',
+      '210061',
+      '210062',
+      '210081',
+      '210082'
+    ];
 
-    // Released skills should remain fully simulatable even as the GameTora
-    // snapshot adds upcoming/datamined entries with newer condition tokens.
-    expect(nonSimulatable).toEqual([]);
+    for (const skillId of unsupported) {
+      expect(skillsService.isSimulatable(skillId)).toBe(false);
+    }
+  });
+
+  it('treats Copano Rickey Luck Runs My Way (100981, usage 14) as simulatable', () => {
+    expect(skillsService.isSimulatable('100981')).toBe(true);
   });
 });

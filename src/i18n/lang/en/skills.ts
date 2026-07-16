@@ -55,6 +55,7 @@ export default {
     '22': 'Current speed with natural deceleration',
     '27': 'Target speed',
     '28': 'Lane movement speed',
+    '29': 'Rushed Chance',
     '31': 'Acceleration',
     '37': 'Activate random gold skill',
     '42': 'Increase skill duration'

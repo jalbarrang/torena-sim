@@ -24,10 +24,14 @@ pub enum SkillType {
     GutsUp = 4,
     /// Flat wisdom stat bonus.
     WisdomUp = 5,
+    /// Changes the runner's position-keep strategy.
+    ChangeStrategy = 6,
     /// Modifies the runner's HP (heal or stamina drain).
     Recovery = 9,
     /// Multiplies the runner's starting delay.
     MultiplyStartDelay = 10,
+    /// Extends a rushed (temptation) target's remaining duration (Frenzied family).
+    RushedDuration = 13,
     /// Sets the runner's starting delay.
     SetStartDelay = 14,
     /// Increases the runner's actual (current) speed.
@@ -38,6 +42,8 @@ pub enum SkillType {
     TargetSpeed = 27,
     /// Increases lane-change movement speed.
     LaneMovementSpeed = 28,
+    /// Adjusts the runner's pre-race rushed (temptation) chance.
+    RushedChance = 29,
     /// Increases acceleration toward top speed.
     Accel = 31,
     /// Triggers when the runner changes lanes.
@@ -90,13 +96,16 @@ impl TryFrom<i32> for SkillType {
             3 => SkillType::PowerUp,
             4 => SkillType::GutsUp,
             5 => SkillType::WisdomUp,
+            6 => SkillType::ChangeStrategy,
             9 => SkillType::Recovery,
             10 => SkillType::MultiplyStartDelay,
+            13 => SkillType::RushedDuration,
             14 => SkillType::SetStartDelay,
             21 => SkillType::CurrentSpeed,
             22 => SkillType::CurrentSpeedWithNaturalDeceleration,
             27 => SkillType::TargetSpeed,
             28 => SkillType::LaneMovementSpeed,
+            29 => SkillType::RushedChance,
             31 => SkillType::Accel,
             35 => SkillType::ChangeLane,
             37 => SkillType::ActivateRandomGold,
@@ -191,6 +200,9 @@ mod tests {
     #[test]
     fn discriminants_match_game_values() {
         assert_eq!(SkillType::Noop as i32, 0);
+        assert_eq!(SkillType::ChangeStrategy as i32, 6);
+        assert_eq!(SkillType::RushedDuration as i32, 13);
+        assert_eq!(SkillType::RushedChance as i32, 29);
         assert_eq!(SkillType::ExtendEvolvedDuration as i32, 42);
         assert_eq!(SkillRarity::Evolution as i32, 6);
         assert_eq!(SkillTarget::UsedRecovery as i32, 23);

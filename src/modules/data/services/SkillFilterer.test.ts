@@ -6,9 +6,9 @@ import { createRaceConditions, racedefToParams } from '@/utils/races';
 import * as runnerUtils from '@/lib/uma-domain/runner/runner.utils';
 
 const TEST_COURSE_ID = 10101;
-// Tight Turns ◎ — its only condition is is_tight_track==1, which the engine does
-// not yet support, so it stays non-simulatable.
-const NON_SIMULATABLE_SKILL_ID = '202241';
+// The current data uses value usage 13 here, which is deliberately rejected
+// until its runtime policy exists.
+const NON_SIMULATABLE_SKILL_ID = '210081';
 const SIMULATABLE_SKILL_ID = '10071';
 
 describe('SkillFilterer', () => {

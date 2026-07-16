@@ -12,7 +12,7 @@
 use crate::runner::physics::{DuelingInput, FieldInputs, UpdateContext};
 use crate::runner::Runner;
 use crate::shared_kernel::language::{DistanceType, Strategy};
-use crate::skills::effect::PositionKeepState;
+use crate::skills::effect::{PositionKeepState, SkillType};
 use crate::stamina::policy::RaceStateSlice;
 
 /// Power-conservation parameters from KuromiAK's mechanics document. Values marked
@@ -159,14 +159,22 @@ impl Runner {
         (6.5 / (0.1 * wit + 1.0).log10()).powi(2) / 100.0
     }
 
-    fn has_self_control(&self) -> bool {
+    /// Pre-race rushed-chance adjustment from self `RushedChance` (type 29)
+    /// effects, in probability units. Restraint (`202161`) carries a raw
+    /// `-30000` modifier (`-3.0` after ×10000 scaling) = −3 percentage points
+    /// → `-0.03`. Read from the pending queue because the rushed roll in
+    /// `initialize_rushed_state` runs before gate skills are consumed.
+    fn rushed_chance_adjustment(&self) -> f64 {
         self.pending_skills
             .iter()
-            .any(|s| s.skill_id.as_str() == "202161")
+            .flat_map(|skill| skill.effects.iter())
+            .filter(|effect| effect.effect_type == SkillType::RushedChance)
+            .map(|effect| effect.modifier / 100.0)
+            .sum()
     }
 
     fn rushed_chance(&self) -> f64 {
-        self.base_rushed_chance() - if self.has_self_control() { 0.03 } else { 0.0 }
+        (self.base_rushed_chance() + self.rushed_chance_adjustment()).max(0.0)
     }
 
     // ===================== rushed =====================
@@ -665,6 +673,56 @@ mod tests {
         let mut r = test_runner(0, Strategy::PaceChaser);
         r.apply_rushed_strategy_override();
         assert_eq!(r.position_keep_strategy, Strategy::FrontRunner);
+    }
+
+    #[test]
+    fn rushed_chance_reduced_by_type_29_effect() {
+        use crate::shared_kernel::ids::SkillId;
+        use crate::shared_kernel::region::Region;
+        use crate::skills::effect::{SkillTarget, SkillType};
+        use crate::skills::model::{PendingSkill, SkillEffectSpec};
+        use crate::skills::value_scaling::ValueScalingPolicy;
+
+        let mut r = test_runner(0, Strategy::PaceChaser);
+        let base = r.base_rushed_chance();
+        assert!(
+            (r.rushed_chance() - base).abs() < 1e-12,
+            "no type-29 skill: no adjustment"
+        );
+
+        // Restraint (202161): the type-5 wisdom effect plus the type-29 rushed
+        // reducer (raw -30000 -> -3.0 -> -0.03 probability).
+        r.pending_skills.push(PendingSkill {
+            skill_id: SkillId::new("202161"),
+            rarity: crate::skills::effect::SkillRarity::White,
+            tags: vec![405, 615],
+            trigger: Region::new(0.0, 1.0),
+            effects: vec![
+                SkillEffectSpec {
+                    target: SkillTarget::SelfTarget,
+                    effect_type: SkillType::WisdomUp,
+                    base_duration: -1.0,
+                    modifier: 60.0,
+                    value_scaling: ValueScalingPolicy::Direct,
+                    value_level_usage: Some(1),
+                },
+                SkillEffectSpec {
+                    target: SkillTarget::SelfTarget,
+                    effect_type: SkillType::RushedChance,
+                    base_duration: -1.0,
+                    modifier: -3.0,
+                    value_scaling: ValueScalingPolicy::Direct,
+                    value_level_usage: Some(1),
+                },
+            ],
+            extra_condition: None,
+            target_strategy: None,
+        });
+
+        assert!(
+            (r.rushed_chance() - (base - 0.03)).abs() < 1e-12,
+            "type-29 effect must lower the rushed chance by 0.03"
+        );
     }
 
     #[test]

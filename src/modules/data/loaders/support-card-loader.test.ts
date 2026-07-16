@@ -7,6 +7,7 @@ const skills: SkillsMap = {
   '200012': {
     id: '200012',
     rarity: 2,
+    tags: [],
     alternatives: [],
     groupId: 0,
     versions: [],

@@ -1,5 +1,6 @@
 //! Skill **value objects** and runtime structs: [`Skill`], [`SkillAlternative`],
-//! [`SkillEffect`], and the pending/active trigger types.
+//! [`SkillEffectSpec`], [`ResolvedSkillEffect`], and the pending/active trigger
+//! types.
 //!
 //! Ports `skills/skill.types.ts`. The input DTOs ([`Skill`], [`SkillAlternative`],
 //! [`RawSkillEffect`]) arrive from the TypeScript data layer and so derive serde
@@ -17,6 +18,7 @@ use crate::shared_kernel::region::{Region, RegionList};
 use crate::skills::activation::ActivationSamplePolicy;
 use crate::skills::condition::dynamic::DynamicCondition;
 use crate::skills::effect::{SkillRarity, SkillTarget, SkillType};
+use crate::skills::value_scaling::ValueScalingPolicy;
 
 /// Raw effect as it appears in the skill data, before duration is attached and
 /// modifiers are scaled.
@@ -64,33 +66,53 @@ pub struct Skill {
     pub skill_id: SkillId,
     /// Rarity tier.
     pub rarity: SkillRarity,
+    /// Authoritative master-data tags carried from `skill_data.tag_id`.
+    #[serde(default)]
+    pub tags: Vec<i32>,
     /// Condition branches; the first satisfiable one is used.
     pub alternatives: Vec<SkillAlternative>,
 }
 
-/// A built, scaled effect (value object). `base_duration` and `modifier` are in
-/// real units (the raw ×10000 values divided by 10000).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillEffect {
+/// A built, **normalized** effect specification (value object). `base_duration`
+/// and `modifier` are in real units (the raw ×10000 values divided by 10000).
+///
+/// A spec carries a *base* modifier and the [`ValueScalingPolicy`] that governs
+/// how the runtime modifier is derived from it. It is deliberately distinct from
+/// [`ResolvedSkillEffect`] so a resolved value can never be re-resolved.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkillEffectSpec {
     /// Target selector.
     pub target: SkillTarget,
     /// Effect type.
-    #[serde(rename = "type")]
     pub effect_type: SkillType,
     /// Effect duration in seconds.
     pub base_duration: f64,
-    /// Effect strength in real units.
+    /// Base effect strength in real units (before value scaling).
     pub modifier: f64,
-    /// Optional usage discriminator.
-    #[serde(default)]
-    pub value_usage: Option<i32>,
-    /// Optional level-usage discriminator.
-    #[serde(default)]
+    /// How the runtime modifier is derived from `modifier`.
+    pub value_scaling: ValueScalingPolicy,
+    /// Optional level-usage discriminator (carried only; level scaling is out of
+    /// scope for value resolution).
     pub value_level_usage: Option<i32>,
 }
 
-/// Build the scaled [`SkillEffect`]s for one alternative.
+/// A runtime-**resolved** effect: the value-scaling policy has already been
+/// applied, yielding a concrete `modifier`. Produced from a [`SkillEffectSpec`]
+/// exactly once by the caster before self/target routing, so it can never be
+/// resolved again.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedSkillEffect {
+    /// Target selector.
+    pub target: SkillTarget,
+    /// Effect type.
+    pub effect_type: SkillType,
+    /// Effect duration in seconds.
+    pub base_duration: f64,
+    /// Resolved effect strength in real units.
+    pub modifier: f64,
+}
+
+/// Build the scaled [`SkillEffectSpec`]s for one alternative.
 ///
 /// Port of `buildSkillEffects`: `base_duration` and every `modifier` are divided
 /// by `10000`, and the raw type id is resolved to a [`SkillType`].
@@ -104,18 +126,25 @@ pub struct SkillEffect {
 /// known ones (the wit bonus) live. An alternative whose effects are *all*
 /// unmapped yields an empty list, which `build_skill_data` treats as "no trigger"
 /// (correct — there is nothing to simulate).
-pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffect> {
+///
+/// The value-scaling policy is resolved from `value_usage` here; an unsupported
+/// usage is not silently coerced to Direct — the effect is dropped (the
+/// TypeScript preflight and WASM DTO backstop already reject the whole skill
+/// before it reaches this point, so a dropped effect is only reachable through a
+/// direct native construction that bypassed both gates).
+pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffectSpec> {
     let base_duration = alt.base_duration / 10000.0;
     alt.effects
         .iter()
         .filter_map(|effect| {
             let effect_type = SkillType::try_from(effect.effect_type).ok()?;
-            Some(SkillEffect {
+            let value_scaling = ValueScalingPolicy::from_value_usage(effect.value_usage).ok()?;
+            Some(SkillEffectSpec {
                 target: effect.target,
                 effect_type,
                 base_duration,
                 modifier: effect.modifier / 10000.0,
-                value_usage: effect.value_usage,
+                value_scaling,
                 value_level_usage: effect.value_level_usage,
             })
         })
@@ -143,12 +172,15 @@ pub struct SkillTrigger {
     pub skill_id: SkillId,
     /// Rarity tier (1★/2★ uniques, upgrades, and 3★ uniques differ here).
     pub rarity: SkillRarity,
+    /// Authoritative master-data tags (`skill_data.tag_id`), carried so the
+    /// activated-skill ledger can classify green activations.
+    pub tags: Vec<i32>,
     /// How activation windows are sampled.
     pub sample_policy: ActivationSamplePolicy,
     /// Candidate activation windows.
     pub regions: RegionList,
     /// Effects applied on activation.
-    pub effects: Vec<SkillEffect>,
+    pub effects: Vec<SkillEffectSpec>,
     /// Extra runtime gate evaluated each tick (`None` == always-true).
     pub extra_condition: Option<DynamicCondition>,
     /// For `EnemyStrategy`-targeted (and Kakari-strategy) external debuffs, the
@@ -167,10 +199,13 @@ pub struct PendingSkill {
     pub skill_id: SkillId,
     /// Rarity tier.
     pub rarity: SkillRarity,
+    /// Authoritative master-data tags (`skill_data.tag_id`), recorded into the
+    /// activated-skill ledger when this skill activates.
+    pub tags: Vec<i32>,
     /// The concrete trigger window.
     pub trigger: Region,
     /// Effects applied on activation.
-    pub effects: Vec<SkillEffect>,
+    pub effects: Vec<SkillEffectSpec>,
     /// Extra runtime gate evaluated each tick (`None` == always-true).
     pub extra_condition: Option<DynamicCondition>,
     /// Derived target running style for `EnemyStrategy` external debuffs (see
@@ -186,9 +221,11 @@ pub struct PendingSkill {
 pub struct EmittedDebuff {
     /// The skill that produced the debuff.
     pub skill_id: SkillId,
-    /// The single external-debuff effect to apply to each target (unscaled — the
-    /// receiving runner scales duration by course distance).
-    pub effect: SkillEffect,
+    /// The single external-debuff effect to apply to each target, already
+    /// **resolved** by the caster (its value-scaling policy has been applied
+    /// against caster state). The receiving runner only scales duration by
+    /// course distance; it must never re-resolve the value.
+    pub effect: ResolvedSkillEffect,
     /// The effect's target selector.
     pub target: SkillTarget,
     /// Derived target running style for `EnemyStrategy`/`KakariStrategy`.
@@ -207,7 +244,7 @@ pub struct PendingTargetedSkill {
     /// The concrete trigger window.
     pub trigger: Region,
     /// Effects applied on activation.
-    pub effects: Vec<SkillEffect>,
+    pub effects: Vec<SkillEffectSpec>,
 }
 
 /// A currently-active effect on a runner (duration-based).
@@ -274,7 +311,7 @@ mod tests {
         assert_eq!(effects[0].effect_type, SkillType::TargetSpeed);
         assert_eq!(effects[1].modifier, -1.0);
         assert_eq!(effects[1].effect_type, SkillType::Recovery);
-        assert_eq!(effects[1].value_usage, Some(8));
+        assert_eq!(effects[1].value_scaling, ValueScalingPolicy::MultiplyRandom);
     }
 
     #[test]
@@ -338,6 +375,7 @@ mod tests {
         let skill = Skill {
             skill_id: SkillId::new("100012"),
             rarity: SkillRarity::Gold,
+            tags: vec![401, 608],
             alternatives: vec![SkillAlternative {
                 base_duration: 12000.0,
                 cooldown_time: Some(2000.0),

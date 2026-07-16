@@ -11,6 +11,7 @@ function createSkill(id: string): SkillEntry {
   return {
     id,
     rarity: 2,
+    tags: [],
     alternatives: [],
     groupId: 0,
     versions: [],

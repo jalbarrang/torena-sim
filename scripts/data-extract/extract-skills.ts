@@ -20,6 +20,7 @@ import type { ISkillTarget } from '@/lib/uma-domain/skills/definitions';
 interface SkillRow {
   id: number;
   rarity: number;
+  tag_id: string | null;
   grade_value: number;
   precondition_1: string;
   condition_1: string;
@@ -153,10 +154,7 @@ const EXCLUDED_SKILLS = new Set([
 
 const SPLIT_ALTERNATIVES = new Set([100701, 900701]);
 
-const GAMETORA_SKILLS_PATH = path.join(
-  process.cwd(),
-  'src/modules/data/json/gametora/skills.json'
-);
+const GAMETORA_SKILLS_PATH = path.join(process.cwd(), 'src/modules/data/json/gametora/skills.json');
 const GAME_VERSION_PATH = path.join(process.cwd(), 'game-version.json');
 const SKILL_HISTORY_PATH = path.join(process.cwd(), 'scripts/data-extract/skill-history.json');
 
@@ -226,6 +224,22 @@ function patchModifier(id: number, value: number): number {
     return value * 1.2;
   }
   return value;
+}
+
+export function parseSkillTags(value: string | null | undefined): Array<number> {
+  if (!value) {
+    return [];
+  }
+
+  return value.split('/').flatMap((segment) => {
+    const trimmed = segment.trim();
+    if (!/^\d+$/u.test(trimmed)) {
+      return [];
+    }
+
+    const tag = Number(trimmed);
+    return Number.isSafeInteger(tag) ? [tag] : [];
+  });
 }
 
 function createEffect(
@@ -460,7 +474,7 @@ async function extractSkills(options: ExtractSkillsOptions = { replaceMode: fals
   try {
     const rows = queryAll<SkillRow>(
       db,
-      `SELECT s.id, s.rarity, s.grade_value,
+      `SELECT s.id, s.rarity, s.tag_id, s.grade_value,
               s.precondition_1,
               s.condition_1,
               s.float_ability_time_1,
@@ -545,6 +559,7 @@ async function extractSkills(options: ExtractSkillsOptions = { replaceMode: fals
       const baseEntry: Omit<SkillEntry, 'alternatives'> = {
         id: row.id.toString(),
         rarity: row.rarity,
+        tags: parseSkillTags(row.tag_id),
         groupId: row.group_id,
         versions: [],
         iconId: row.icon_id.toString(),

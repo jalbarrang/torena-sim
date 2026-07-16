@@ -68,7 +68,7 @@ export function buildSkillData(params: BuildSkillDataParams): Array<SkillTrigger
     if (import.meta.env?.DEV) {
       console.warn(
         `[buildSkillData] Skipping non-simulatable skill ${skillId}:`,
-        skillsService.getUnsupportedTokens(baseSkillId)
+        skillsService.getUnsupportedMechanics(baseSkillId)
       );
     }
     return [];

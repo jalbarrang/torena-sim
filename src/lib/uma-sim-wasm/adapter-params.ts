@@ -68,6 +68,7 @@ export function resolveSkillInput(skillId: string): WasmSkillInput | null {
   return {
     skillId,
     rarity: entry.rarity,
+    tags: entry.tags ?? [],
     alternatives: entry.alternatives.map((alt) => ({
       baseDuration: alt.baseDuration,
       cooldownTime: alt.cooldownTime,

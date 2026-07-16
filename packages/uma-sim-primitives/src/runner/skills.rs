@@ -15,6 +15,7 @@
 use crate::runner::lifecycle::PrepareContext;
 use crate::runner::{Runner, UsedTargetedSkill};
 use crate::shared_kernel::ids::SkillId;
+use crate::shared_kernel::language::Strategy;
 use crate::shared_kernel::math::Timer;
 use crate::shared_kernel::params::{RaceParameters, StatLine};
 use crate::shared_kernel::region::{Region, RegionList};
@@ -24,13 +25,14 @@ use crate::skills::condition::dynamic::{
 };
 use crate::skills::condition::language::ConditionParser;
 use crate::skills::condition::{ApplyParams, ConditionResolution, SkillEvalRunner};
-use crate::skills::debuff::{get_external_debuff_effects, is_external_debuff_effect};
+use crate::skills::debuff::{get_external_debuff_effects, is_emittable_external_effect};
 use crate::skills::effect::{SkillRarity, SkillType};
 use crate::skills::model::{
     build_skill_effects, ActiveSkill, ActiveTargetedSkill, EmittedDebuff, PendingSkill,
-    PendingTargetedSkill, Skill, SkillEffect, SkillTrigger, TargetedSkillOrigin,
+    PendingTargetedSkill, ResolvedSkillEffect, Skill, SkillEffectSpec, SkillTrigger,
+    TargetedSkillOrigin,
 };
-use crate::skills::recovery::resolve_recovery_modifier;
+use crate::skills::recovery::resolve_effect_modifier;
 
 /// Snapshot-derived field data dynamic skill conditions read through the
 /// [`RunnerView`] seam. Built once per frame by the aggregate (t-017).
@@ -137,7 +139,7 @@ impl RunnerView for RunnerConditionView<'_> {
     fn phase(&self) -> i64 {
         self.runner.phase.index() as i64
     }
-    fn strategy(&self) -> Option<crate::shared_kernel::language::Strategy> {
+    fn strategy(&self) -> Option<Strategy> {
         Some(self.runner.strategy)
     }
     fn is_rushed(&self) -> bool {
@@ -260,6 +262,7 @@ pub fn build_skill_data(params: &BuildSkillDataParams<'_>) -> Vec<SkillTrigger> 
             triggers.push(SkillTrigger {
                 skill_id: skill.skill_id.clone(),
                 rarity: skill.rarity,
+                tags: skill.tags.clone(),
                 sample_policy: parsed_op.sample_policy(),
                 regions,
                 effects,
@@ -287,6 +290,7 @@ pub fn build_skill_data(params: &BuildSkillDataParams<'_>) -> Vec<SkillTrigger> 
     vec![SkillTrigger {
         skill_id: skill.skill_id.clone(),
         rarity: skill.rarity,
+        tags: skill.tags.clone(),
         sample_policy: ActivationSamplePolicy::Immediate,
         regions: after_end,
         effects,
@@ -301,20 +305,30 @@ fn condition_allows_second_trigger(condition: &str) -> bool {
     condition.contains("is_activate_other_skill_detail") || condition.contains("is_used_skill_id")
 }
 
-/// Derive the running style an `EnemyStrategy` external debuff targets from its
-/// activation condition. The effect data is identical across the whole *Hesitant*
-/// family (`target:18, valueUsage:1`), so the only signal for *which* strategy is
-/// hit is the `running_style_count_<style>_otherself` token in the condition.
-/// Returns `None` when the condition names no such style.
-fn derive_target_strategy(condition: &str) -> Option<crate::shared_kernel::language::Strategy> {
+/// Derive the running style a strategy-targeted external debuff hits from its
+/// activation condition. The effect data is identical across each family, so the
+/// only signal for *which* strategy is hit is a running-style token in the
+/// condition: `running_style_count_<style>_otherself` for the *Hesitant*
+/// (`EnemyStrategy`) family, or `running_style_temptation_opponent_count_<style>`
+/// for the *Frenzied* (`KakariStrategy`) family. Returns `None` when the
+/// condition names no such style.
+fn derive_target_strategy(condition: &str) -> Option<Strategy> {
     use crate::shared_kernel::language::Strategy;
-    if condition.contains("running_style_count_nige_otherself") {
+    if condition.contains("running_style_count_nige_otherself")
+        || condition.contains("running_style_temptation_opponent_count_nige")
+    {
         Some(Strategy::FrontRunner)
-    } else if condition.contains("running_style_count_senko_otherself") {
+    } else if condition.contains("running_style_count_senko_otherself")
+        || condition.contains("running_style_temptation_opponent_count_senko")
+    {
         Some(Strategy::PaceChaser)
-    } else if condition.contains("running_style_count_sashi_otherself") {
+    } else if condition.contains("running_style_count_sashi_otherself")
+        || condition.contains("running_style_temptation_opponent_count_sashi")
+    {
         Some(Strategy::LateSurger)
-    } else if condition.contains("running_style_count_oikomi_otherself") {
+    } else if condition.contains("running_style_count_oikomi_otherself")
+        || condition.contains("running_style_temptation_opponent_count_oikomi")
+    {
         Some(Strategy::EndCloser)
     } else {
         None
@@ -342,6 +356,7 @@ impl Runner {
         self.skills_activated_half_race_map = [0; 2];
         self.heals_activated_count = 0;
         self.used_skills.clear();
+        self.activated_ledger.clear();
         self.activated_advantage_effect_types = 0;
         self.used_targeted_skills.clear();
         self.emitted_debuffs.clear();
@@ -378,6 +393,7 @@ impl Runner {
                 pending.push(PendingSkill {
                     skill_id: trigger.skill_id,
                     rarity: trigger.rarity,
+                    tags: trigger.tags,
                     trigger: trigger_region,
                     effects: trigger.effects,
                     extra_condition: trigger.extra_condition,
@@ -416,7 +432,7 @@ impl Runner {
                 resolution: ctx.condition_resolution,
             });
             for trigger in triggers {
-                let external: Vec<SkillEffect> = get_external_debuff_effects(&trigger.effects)
+                let external: Vec<SkillEffectSpec> = get_external_debuff_effects(&trigger.effects)
                     .into_iter()
                     .copied()
                     .collect();
@@ -544,7 +560,7 @@ impl Runner {
         }
         if let Some(first) = skill.effects.first() {
             let type_id = first.effect_type as i32;
-            if (1..=5).contains(&type_id) {
+            if (1..=6).contains(&type_id) {
                 return true;
             }
         }
@@ -558,35 +574,63 @@ impl Runner {
         roll <= threshold
     }
 
-    fn get_recovery_modifier_for_skill(&mut self, skill_id: &SkillId, effect: &SkillEffect) -> f64 {
-        let override_value = self.stamina_drain_overrides.get(skill_id.base()).copied();
-        resolve_recovery_modifier(effect, Some(&mut *self.skill_rng), override_value).unwrap_or(0.0)
+    /// Resolve one effect spec into a concrete [`ResolvedSkillEffect`] against
+    /// this runner's state, applying its value-scaling policy exactly once. The
+    /// Recovery drain override is a Recovery-specific pre-step that consumes no
+    /// RNG roll (see [`resolve_effect_modifier`]).
+    fn resolve_effect(
+        &mut self,
+        base_skill_id: &str,
+        spec: &SkillEffectSpec,
+    ) -> ResolvedSkillEffect {
+        let override_value = self.stamina_drain_overrides.get(base_skill_id).copied();
+        let activated_green_count = self.activated_ledger.activated_green_count();
+        let modifier = resolve_effect_modifier(
+            spec,
+            Some(&mut *self.skill_rng),
+            override_value,
+            activated_green_count,
+        )
+        .unwrap_or(0.0);
+        ResolvedSkillEffect {
+            target: spec.target,
+            effect_type: spec.effect_type,
+            base_duration: spec.base_duration,
+            modifier,
+        }
     }
 
     fn activate_skill(&mut self, skill: &PendingSkill, course_distance: f64) {
-        let mut effects = skill.effects.clone();
-        effects.sort_by_key(|e| i32::from(e.effect_type as i32 == 42));
+        let mut specs = skill.effects.clone();
+        specs.sort_by_key(|e| i32::from(e.effect_type as i32 == 42));
+        let base_skill_id = skill.skill_id.base().to_owned();
 
-        for effect in &effects {
+        for spec in &specs {
+            // Resolve the effect's value-scaling policy exactly once against the
+            // caster's state, before self-application or external-debuff routing.
+            let resolved = self.resolve_effect(&base_skill_id, spec);
+
             // External debuffs target other runners (e.g. Wild Wind / Speed
             // Eater bundle a self-buff with an opponent-facing Current Speed
             // debuff; the Hesitant family debuffs a whole enemy strategy). They
-            // must never land on the caster: emit them to the per-frame outbox so
-            // the race aggregate's `coordinate_external_debuffs` pass routes them
-            // onto the resolved target runners via `receive_targeted_effect`.
-            if is_external_debuff_effect(effect) {
+            // must never land on the caster: emit the already-resolved effect to
+            // the per-frame outbox so the race aggregate's
+            // `coordinate_external_debuffs` pass routes it onto the target
+            // runners via `receive_targeted_effect`. The caster resolves the
+            // value here so the receiver never re-resolves it.
+            if is_emittable_external_effect(&resolved) {
                 self.emitted_debuffs.push(EmittedDebuff {
                     skill_id: skill.skill_id.clone(),
-                    effect: *effect,
-                    target: effect.target,
+                    effect: resolved,
+                    target: resolved.target,
                     target_strategy: skill.target_strategy,
                 });
                 continue;
             }
-            // Record positive self-buffs so opponents can react via
-            // is_other_character_activate_advantage_skill (arg = SkillType id).
-            if effect.modifier > 0.0 {
-                let t = effect.effect_type as i64;
+            // Record positive self-buffs (resolved value) so opponents can react
+            // via is_other_character_activate_advantage_skill (arg = SkillType).
+            if resolved.modifier > 0.0 {
+                let t = resolved.effect_type as i64;
                 if (0..64).contains(&t) {
                     self.activated_advantage_effect_types |= 1u64 << t;
                 }
@@ -596,8 +640,8 @@ impl Runner {
             } else {
                 1.0
             };
-            let scaled_duration = effect.base_duration * (course_distance / 1000.0) * scaling;
-            self.apply_self_effect(skill, effect, scaled_duration);
+            let scaled_duration = resolved.base_duration * (course_distance / 1000.0) * scaling;
+            self.apply_self_effect(skill, &resolved, scaled_duration);
         }
 
         let half_race = usize::from(self.position >= course_distance / 2.0);
@@ -605,9 +649,17 @@ impl Runner {
         self.skills_activated_phase_map[self.phase.index()] += 1;
         self.skills_activated_count += 1;
         self.used_skills.insert(skill.skill_id.0.clone());
+        // Record only after a successful activation so caster-context scaling
+        // (usage 14) counts greens that actually fired this round.
+        self.activated_ledger.record(&base_skill_id, &skill.tags);
     }
 
-    fn apply_self_effect(&mut self, skill: &PendingSkill, effect: &SkillEffect, duration: f64) {
+    fn apply_self_effect(
+        &mut self,
+        skill: &PendingSkill,
+        effect: &ResolvedSkillEffect,
+        duration: f64,
+    ) {
         match effect.effect_type {
             SkillType::Noop => {}
             SkillType::SpeedUp => {
@@ -627,6 +679,13 @@ impl Runner {
             SkillType::WisdomUp => {
                 self.adjusted_stats.wit = (self.adjusted_stats.wit + effect.modifier).max(1.0);
             }
+            SkillType::ChangeStrategy => self.position_keep_strategy = Strategy::Runaway,
+            // Read pre-race off the pending queue by `rushed_chance` (the rushed
+            // roll runs before gate skills fire), so activation is a no-op.
+            SkillType::RushedChance => {}
+            // Frenzied (type 13) only ever targets opponents (KakariStrategy);
+            // a self-application is a no-op.
+            SkillType::RushedDuration => {}
             SkillType::MultiplyStartDelay => self.start_delay *= effect.modifier,
             SkillType::SetStartDelay => self.start_delay = effect.modifier,
             SkillType::TargetSpeed => {
@@ -650,11 +709,10 @@ impl Runner {
                     .push(active_skill(skill, effect, duration, natural));
             }
             SkillType::Recovery => {
-                let resolved = self.get_recovery_modifier_for_skill(&skill.skill_id, effect);
-                if resolved > 0.0 {
+                if effect.modifier > 0.0 {
                     self.heals_activated_count += 1;
                 }
-                self.health_policy.recover(resolved);
+                self.health_policy.recover(effect.modifier);
                 if self.phase.index() >= 2 && !self.is_last_spurt {
                     self.force_last_spurt_check();
                 }
@@ -751,30 +809,63 @@ impl Runner {
             .retain(|s| s.skill.duration_timer.t < 0.0);
     }
 
+    /// Apply an **injected** targeted skill (from the debuff test harness, which
+    /// has no caster). Injected effects are unresolved specs, so they are
+    /// resolved receiver-locally here. Only caster-context policies (usage 14)
+    /// are unsafe without a caster, and those are rejected at the injection DTO
+    /// boundary before the race.
     fn apply_targeted_effect(&mut self, skill: &PendingTargetedSkill, course_distance: f64) {
-        let mut effects = skill.effects.clone();
-        effects.sort_by_key(|e| i32::from(e.effect_type as i32 == 42));
+        let mut specs = skill.effects.clone();
+        specs.sort_by_key(|e| i32::from(e.effect_type as i32 == 42));
+        let base_skill_id = skill.skill_id.base().to_owned();
+        let meta = TargetedEffectMeta {
+            skill_id: skill.skill_id.clone(),
+            origin: skill.origin,
+            source_runner_id: skill.source_runner_id,
+        };
 
-        for effect in &effects {
-            let scaled_duration = effect.base_duration * (course_distance / 1000.0);
-            self.used_targeted_skills.push(UsedTargetedSkill {
-                skill_id: skill.skill_id.clone(),
-                position: self.position,
-                effect_type: effect.effect_type,
-                effect_target: effect.target,
-            });
-            self.apply_targeted_effect_kind(skill, effect, scaled_duration);
+        for spec in &specs {
+            let resolved = self.resolve_effect(&base_skill_id, spec);
+            self.apply_resolved_targeted_effect(&meta, &resolved, course_distance);
         }
+    }
+
+    /// Record and apply one already-resolved targeted effect. Shared by the
+    /// injected path (which resolves receiver-locally) and the cross-runner path
+    /// (which receives values already resolved by the caster).
+    fn apply_resolved_targeted_effect(
+        &mut self,
+        meta: &TargetedEffectMeta,
+        effect: &ResolvedSkillEffect,
+        course_distance: f64,
+    ) {
+        let scaled_duration = effect.base_duration * (course_distance / 1000.0);
+        self.used_targeted_skills.push(UsedTargetedSkill {
+            skill_id: meta.skill_id.clone(),
+            position: self.position,
+            effect_type: effect.effect_type,
+            effect_target: effect.target,
+        });
+        self.apply_targeted_effect_kind(meta, effect, scaled_duration);
     }
 
     fn apply_targeted_effect_kind(
         &mut self,
-        skill: &PendingTargetedSkill,
-        effect: &SkillEffect,
+        meta: &TargetedEffectMeta,
+        effect: &ResolvedSkillEffect,
         duration: f64,
     ) {
         match effect.effect_type {
-            SkillType::Noop => {}
+            SkillType::Noop | SkillType::ChangeStrategy | SkillType::RushedChance => {}
+            // Frenzied family: worsen a rushed opponent by extending its
+            // remaining rushed duration (modifier is +5.0s, already scaled).
+            // Only meaningful while the target is currently rushed; the 12s
+            // cap-based exit is delayed by the added time.
+            SkillType::RushedDuration => {
+                if self.is_rushed {
+                    self.rushed_max_duration += effect.modifier;
+                }
+            }
             SkillType::SpeedUp => {
                 self.adjusted_stats.speed = (self.adjusted_stats.speed + effect.modifier).max(1.0);
             }
@@ -797,26 +888,25 @@ impl Runner {
             SkillType::TargetSpeed => {
                 self.modifiers.target_speed.add(effect.modifier);
                 self.targeted_target_speed_active
-                    .push(active_targeted(skill, effect, duration, false));
+                    .push(active_targeted(meta, effect, duration, false));
             }
             SkillType::Accel => {
                 self.modifiers.accel.add(effect.modifier);
                 self.targeted_acceleration_active
-                    .push(active_targeted(skill, effect, duration, false));
+                    .push(active_targeted(meta, effect, duration, false));
             }
             SkillType::LaneMovementSpeed => {
                 self.targeted_lane_movement_skills_active
-                    .push(active_targeted(skill, effect, duration, false));
+                    .push(active_targeted(meta, effect, duration, false));
             }
             SkillType::CurrentSpeed | SkillType::CurrentSpeedWithNaturalDeceleration => {
                 self.modifiers.current_speed.add(effect.modifier);
                 let natural = effect.effect_type == SkillType::CurrentSpeedWithNaturalDeceleration;
                 self.targeted_current_speed_active
-                    .push(active_targeted(skill, effect, duration, natural));
+                    .push(active_targeted(meta, effect, duration, natural));
             }
             SkillType::Recovery => {
-                let resolved = self.get_recovery_modifier_for_skill(&skill.skill_id, effect);
-                self.health_policy.recover(resolved);
+                self.health_policy.recover(effect.modifier);
                 if self.phase.index() >= 2 && !self.is_last_spurt {
                     self.force_last_spurt_check();
                 }
@@ -824,33 +914,47 @@ impl Runner {
             SkillType::ActivateRandomGold | SkillType::ExtendEvolvedDuration => {}
             SkillType::ChangeLane => {
                 self.targeted_change_lane_skills_active
-                    .push(active_targeted(skill, effect, duration, false));
+                    .push(active_targeted(meta, effect, duration, false));
             }
         }
     }
 
     /// Entry point for a cross-runner targeted effect (routed by the aggregate).
+    ///
+    /// The effects arrive **already resolved by the caster** (see
+    /// [`Self::activate_skill`]); the receiver must not re-resolve them, which is
+    /// enforced by the [`ResolvedSkillEffect`] type.
     pub fn receive_targeted_effect(
         &mut self,
         skill_id: SkillId,
-        effects: Vec<SkillEffect>,
+        effects: Vec<ResolvedSkillEffect>,
         source_runner_id: crate::shared_kernel::ids::RunnerId,
         course_distance: f64,
     ) {
-        let skill = PendingTargetedSkill {
+        let meta = TargetedEffectMeta {
             skill_id,
             origin: TargetedSkillOrigin::Runner,
             source_runner_id: Some(source_runner_id),
-            trigger: Region::new(self.position, self.position + 1.0),
-            effects,
         };
-        self.apply_targeted_effect(&skill, course_distance);
+        let mut effects = effects;
+        effects.sort_by_key(|e| i32::from(e.effect_type as i32 == 42));
+        for resolved in &effects {
+            self.apply_resolved_targeted_effect(&meta, resolved, course_distance);
+        }
     }
+}
+
+/// Identity of a targeted-effect application, shared by the injected and
+/// cross-runner paths so the per-effect application logic is written once.
+struct TargetedEffectMeta {
+    skill_id: SkillId,
+    origin: TargetedSkillOrigin,
+    source_runner_id: Option<crate::shared_kernel::ids::RunnerId>,
 }
 
 fn active_skill(
     skill: &PendingSkill,
-    effect: &SkillEffect,
+    effect: &ResolvedSkillEffect,
     duration: f64,
     natural_deceleration: bool,
 ) -> ActiveSkill {
@@ -865,22 +969,22 @@ fn active_skill(
 }
 
 fn active_targeted(
-    skill: &PendingTargetedSkill,
-    effect: &SkillEffect,
+    meta: &TargetedEffectMeta,
+    effect: &ResolvedSkillEffect,
     duration: f64,
     natural_deceleration: bool,
 ) -> ActiveTargetedSkill {
     ActiveTargetedSkill {
         skill: ActiveSkill {
-            skill_id: skill.skill_id.clone(),
+            skill_id: meta.skill_id.clone(),
             duration_timer: Timer::new(-duration),
             modifier: effect.modifier,
             effect_target: effect.target,
             effect_type: effect.effect_type,
             natural_deceleration,
         },
-        origin: skill.origin,
-        source_runner_id: skill.source_runner_id,
+        origin: meta.origin,
+        source_runner_id: meta.source_runner_id,
     }
 }
 
@@ -948,6 +1052,7 @@ mod tests {
         Skill {
             skill_id: SkillId::new(id),
             rarity,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -964,13 +1069,12 @@ mod tests {
         }
     }
 
-    /// A Savvy-shaped skill: Wisdom Up (type 5, modeled) bundled with a vision
-    /// effect (type 8, unmodeled), gated on the Pace Chaser running style — the
-    /// exact shape of real skill 201531 (Pace Chaser Savvy ◎).
+    /// A Savvy-shaped skill: Wisdom Up (type 5, modeled) bundled with a vision effect (type 8, unmodeled), gated on the Pace Chaser running style — the exact shape of real skill 201531 (Pace Chaser Savvy ◎).
     fn savvy_skill(id: &str) -> Skill {
         Skill {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: -10000.0,
                 cooldown_time: None,
@@ -992,6 +1096,27 @@ mod tests {
                         value_level_usage: Some(1),
                     },
                 ],
+            }],
+        }
+    }
+
+    fn runaway_skill(condition: &str) -> Skill {
+        Skill {
+            skill_id: SkillId::new("202051"),
+            rarity: SkillRarity::Gold,
+            tags: vec![101, 612],
+            alternatives: vec![SkillAlternative {
+                base_duration: -1.0,
+                cooldown_time: Some(0.0),
+                condition: condition.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 0.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 6,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
             }],
         }
     }
@@ -1118,6 +1243,319 @@ mod tests {
         r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
     }
 
+    /// The Copano Rickey (109801) matchup from the saved contested-compare
+    /// scenario: `100981` (Luck Runs My Way, usage-14) plus three greens
+    /// — Pace Chaser Savvy ○ (201532, tag 612), Collaborative Graded Races ○
+    /// (202252, tag 606), Wet Conditions ○ (200162, tag 601).
+    fn copano_rickey_full_skills() -> Vec<Skill> {
+        let green = |id: &str, tags: Vec<i32>, cond: &str, effect_type: i32| Skill {
+            skill_id: SkillId::new(id),
+            rarity: SkillRarity::White,
+            tags,
+            alternatives: vec![SkillAlternative {
+                base_duration: -10000.0,
+                cooldown_time: Some(0.0),
+                condition: cond.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 400000.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
+            }],
+        };
+        vec![
+            // 100981 Luck Runs My Way: Direct Target Speed + usage-14 Target
+            // Speed + usage-14 Acceleration.
+            Skill {
+                skill_id: SkillId::new("100981"),
+                rarity: SkillRarity::Unique,
+                tags: vec![401, 403],
+                alternatives: vec![SkillAlternative {
+                    base_duration: 50000.0,
+                    cooldown_time: None,
+                    condition: "phase_laterhalf_random==1".to_owned(),
+                    precondition: Some(String::new()),
+                    effects: vec![
+                        RawSkillEffect {
+                            modifier: 2500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 27,
+                            value_usage: Some(1),
+                            value_level_usage: None,
+                        },
+                        RawSkillEffect {
+                            modifier: 500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 27,
+                            value_usage: Some(14),
+                            value_level_usage: None,
+                        },
+                        RawSkillEffect {
+                            modifier: 500.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 31,
+                            value_usage: Some(14),
+                            value_level_usage: None,
+                        },
+                    ],
+                }],
+            },
+            // 201532 Pace Chaser Savvy ○: Wisdom Up (green) + vision (unmodeled).
+            Skill {
+                skill_id: SkillId::new("201532"),
+                rarity: SkillRarity::White,
+                tags: vec![102, 405, 612],
+                alternatives: vec![SkillAlternative {
+                    base_duration: -10000.0,
+                    cooldown_time: Some(0.0),
+                    condition: "running_style==2".to_owned(),
+                    precondition: Some(String::new()),
+                    effects: vec![
+                        RawSkillEffect {
+                            modifier: 400000.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 5,
+                            value_usage: Some(1),
+                            value_level_usage: Some(1),
+                        },
+                        RawSkillEffect {
+                            modifier: 50000.0,
+                            target: SkillTarget::SelfTarget,
+                            effect_type: 8,
+                            value_usage: Some(1),
+                            value_level_usage: Some(1),
+                        },
+                    ],
+                }],
+            },
+            green("202252", vec![401, 606], "is_dirtgrade==1", 1),
+            green(
+                "200162",
+                vec![403, 601],
+                "ground_condition==2@ground_condition==3@ground_condition==4",
+                3,
+            ),
+        ]
+    }
+
+    /// The three extra greens from the second saved scenario, all
+    /// gate-deterministic on this config: Fall Runner ○ (200192/603,
+    /// `season==3`), Right-Handed ○ (200012/608, `rotation==1`), Sunny Days ○
+    /// (200212/602, `weather==1`).
+    fn copano_rickey_extra_greens() -> Vec<Skill> {
+        let green = |id: &str, tags: Vec<i32>, cond: &str, effect_type: i32| Skill {
+            skill_id: SkillId::new(id),
+            rarity: SkillRarity::White,
+            tags,
+            alternatives: vec![SkillAlternative {
+                base_duration: -10000.0,
+                cooldown_time: Some(0.0),
+                condition: cond.to_owned(),
+                precondition: Some(String::new()),
+                effects: vec![RawSkillEffect {
+                    modifier: 400000.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type,
+                    value_usage: Some(1),
+                    value_level_usage: Some(1),
+                }],
+            }],
+        };
+        vec![
+            green("200192", vec![401, 603], "season==3", 1),
+            green("200012", vec![401, 608], "rotation==1", 1),
+            green("200212", vec![404, 602], "weather==1", 4),
+        ]
+    }
+
+    /// Build a Copano Rickey Pace Chaser on a dirt-grade (track 10101) course
+    /// with the given skills, prepared under Good ground so all three greens'
+    /// conditions hold at the gate.
+    fn copano_on_dirtgrade(skills: Vec<Skill>) -> Runner {
+        use crate::course::model::CourseData;
+        use crate::shared_kernel::language::{DistanceType, Orientation, Surface};
+
+        let course = CourseData {
+            course_id: 11103,
+            race_track_id: 10101, // in DIRT_GRADE_TRACK_IDS -> is_dirtgrade==1
+            distance: 2000.0,
+            distance_type: DistanceType::Mid,
+            surface: Surface::Dirt,
+            turn: Orientation::Clockwise,
+            course_set_status: vec![],
+            corners: vec![],
+            straights: vec![],
+            slopes: vec![],
+            lane_max: 10.0,
+            course_width: 30.0,
+            horse_lane: 1.5,
+            lane_change_acceleration: 0.0,
+            lane_change_acceleration_per_frame: 0.0,
+            max_lane_distance: 0.0,
+            move_lane_point: 0.0,
+            is_abroad: false,
+        };
+        use crate::shared_kernel::language::{Season, Weather};
+        let mut rp = test_race_params();
+        rp.ground = GroundCondition::Good; // ground_condition==2
+        rp.season = Season::Autumn; // season==3 (Fall Runner)
+        rp.weather = Weather::Sunny; // weather==1 (Sunny Days)
+
+        let props = CreateRunner {
+            outfit_id: "109801".to_owned(),
+            name: "Copano Rickey".to_owned(),
+            mood: Mood::Normal,
+            strategy: Strategy::PaceChaser,
+            popularity: 0,
+            aptitudes: RunnerAptitudes {
+                distance: Aptitude::S,
+                strategy: Aptitude::A,
+                surface: Aptitude::A,
+            },
+            stats: StatLine {
+                speed: 1300,
+                stamina: 1000,
+                power: 1200,
+                guts: 600,
+                wit: 1100,
+            },
+            skills,
+            forced_positions: HashMap::new(),
+            injected_debuffs: vec![],
+            forced_rushed_regions: vec![],
+            forced_dueling_regions: vec![],
+            forced_spot_struggle_regions: vec![],
+            forced_rank: vec![],
+        };
+        let mut r = Runner::create(
+            RunnerId(0),
+            &course,
+            GroundCondition::Good,
+            props,
+            Box::new(NoopStaminaPolicy),
+            Box::new(Xoshiro256StarStar::from_u32_seed(1)),
+        );
+
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let wc = test_whole_course(&course);
+        let ctx = PrepareContext {
+            course: &course,
+            base_speed: 20.0,
+            condition_resolution: ConditionResolution::Dynamic,
+            pos_keep_end_multiplier: 3.0,
+            race_params: &rp,
+            whole_course: &wc,
+            parser: &parser,
+            skill_samples: 4,
+            round_iteration: 0,
+        };
+        r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
+        r
+    }
+
+    /// Force `100981` to activate and return the runner post-proc.
+    fn proc_luck_runs_my_way(r: &mut Runner) {
+        r.wit_checks_enabled = false;
+        let idx = r
+            .pending_skills
+            .iter()
+            .position(|s| s.skill_id.as_str() == "100981")
+            .expect("100981 must be pending after prepare");
+        let trigger = r.pending_skills[idx].trigger;
+        r.position = trigger.start + 0.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2000.0);
+    }
+
+    #[test]
+    fn copano_rickey_usage_14_benefits_from_activated_greens() {
+        // Uma 1: 100981 + three greens (201532/612, 202252/606, 200162/601).
+        let mut uma1 = copano_on_dirtgrade(copano_rickey_full_skills());
+        // All three greens fire at the gate and are recorded.
+        assert_eq!(
+            uma1.activated_ledger.activated_green_count(),
+            3,
+            "the three green skills must activate on a dirt-grade Good-ground course"
+        );
+
+        proc_luck_runs_my_way(&mut uma1);
+        assert!(uma1.used_skills.contains("100981"), "100981 must proc");
+
+        // Uma 2: only 100981 -> no greens -> tier 0x baseline.
+        let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
+            .into_iter()
+            .next()
+            .expect("100981 is the first skill")]);
+        assert_eq!(uma2.activated_ledger.activated_green_count(), 0);
+        proc_luck_runs_my_way(&mut uma2);
+        assert!(uma2.used_skills.contains("100981"));
+
+        // Target speed carries no start-dash term, so absolute values are clean:
+        // green count 3 -> tier 1x adds the usage-14 0.05 on top of the shared
+        // Direct 0.25; the no-green runner stays at 0.25.
+        assert!(
+            (uma1.modifiers.target_speed.total() - 0.30).abs() < 1e-9,
+            "uma1 target speed was {}",
+            uma1.modifiers.target_speed.total()
+        );
+        assert!(
+            (uma2.modifiers.target_speed.total() - 0.25).abs() < 1e-9,
+            "uma2 target speed was {}",
+            uma2.modifiers.target_speed.total()
+        );
+
+        // Acceleration shares the +24.0 start-dash baseline on both runners, so
+        // the usage-14 contribution is the delta: uma1 gets +0.05, uma2 +0.0.
+        let accel_delta = uma1.modifiers.accel.total() - uma2.modifiers.accel.total();
+        assert!(
+            (accel_delta - 0.05).abs() < 1e-9,
+            "usage-14 accel delta was {accel_delta} (uma1 {}, uma2 {})",
+            uma1.modifiers.accel.total(),
+            uma2.modifiers.accel.total()
+        );
+    }
+
+    #[test]
+    fn copano_rickey_usage_14_reaches_tier_3_with_six_greens() {
+        // Second saved scenario: 100981 + six greens (201532/612, 202252/606,
+        // 200162/601, 200192/603, 200012/608, 200212/602). All six are
+        // gate-deterministic on course 11103 (dirt grade, Good, Autumn, Sunny,
+        // clockwise, Pace Chaser).
+        let mut skills = copano_rickey_full_skills();
+        skills.extend(copano_rickey_extra_greens());
+        let mut uma1 = copano_on_dirtgrade(skills);
+        assert_eq!(
+            uma1.activated_ledger.activated_green_count(),
+            6,
+            "all six greens must activate"
+        );
+        proc_luck_runs_my_way(&mut uma1);
+        assert!(uma1.used_skills.contains("100981"));
+
+        // No-green baseline.
+        let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
+            .into_iter()
+            .next()
+            .expect("100981 is the first skill")]);
+        proc_luck_runs_my_way(&mut uma2);
+
+        // 6 greens -> tier 3x: usage-14 Target Speed 0.05*3 = 0.15 on top of the
+        // Direct 0.25 -> 0.40; usage-14 accel delta 0.15.
+        assert!(
+            (uma1.modifiers.target_speed.total() - 0.40).abs() < 1e-9,
+            "uma1 target speed was {}",
+            uma1.modifiers.target_speed.total()
+        );
+        let accel_delta = uma1.modifiers.accel.total() - uma2.modifiers.accel.total();
+        assert!(
+            (accel_delta - 0.15).abs() < 1e-9,
+            "usage-14 accel delta was {accel_delta}"
+        );
+    }
+
     #[test]
     fn pending_skills_built_on_prepare() {
         let mut r = runner_with_skills(vec![target_speed_skill(
@@ -1136,6 +1574,7 @@ mod tests {
         Skill {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -1207,6 +1646,38 @@ mod tests {
         assert!(r.pending_skills.is_empty());
     }
 
+    #[test]
+    fn activation_records_green_tags_in_ledger() {
+        let mut green = target_speed_skill("200011", SkillRarity::Gold, "phase>=2");
+        green.tags = vec![401, 608];
+        let mut r = runner_with_skills(vec![green]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+        // Tags flow through the trigger onto the pending skill.
+        assert_eq!(r.pending_skills[0].tags, vec![401, 608]);
+        let trigger = r.pending_skills[0].trigger;
+        r.position = trigger.start + 0.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        // The green-tagged activation is recorded for caster-context scaling.
+        assert_eq!(r.activated_ledger.activated_green_count(), 1);
+    }
+
+    #[test]
+    fn activation_ignores_non_green_tags_in_ledger() {
+        // 99 Problems-shaped tags (404/405) are not counted greens.
+        let mut non_green = target_speed_skill("202181", SkillRarity::Gold, "phase>=2");
+        non_green.tags = vec![404, 405];
+        let mut r = runner_with_skills(vec![non_green]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+        let trigger = r.pending_skills[0].trigger;
+        r.position = trigger.start + 0.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert_eq!(r.activated_ledger.activated_green_count(), 0);
+    }
+
     /// Wild Wind / Speed Eater bundle a self-target buff with an opponent-facing
     /// Current Speed debuff in the same skill. The caster must receive the
     /// self-buff but never the debuff (regression: it used to self-apply the
@@ -1215,6 +1686,7 @@ mod tests {
         Skill {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::Gold,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 18000.0,
                 cooldown_time: None,
@@ -1267,6 +1739,7 @@ mod tests {
         let skill = Skill {
             skill_id: SkillId::new("300001"),
             rarity: SkillRarity::White,
+            tags: vec![],
             alternatives: vec![SkillAlternative {
                 base_duration: 0.0,
                 cooldown_time: None,
@@ -1289,6 +1762,69 @@ mod tests {
         let field = FieldView::at_gate();
         r.process_skill_activations(&field, 2400.0);
         assert_eq!(r.heals_activated_count, 1);
+    }
+
+    #[test]
+    fn derive_target_strategy_reads_both_hesitant_and_frenzied_tokens() {
+        // Hesitant (EnemyStrategy) family.
+        assert_eq!(
+            derive_target_strategy("running_style_count_nige_otherself>=1"),
+            Some(Strategy::FrontRunner)
+        );
+        // Frenzied (KakariStrategy) family — the four running styles.
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_nige>=1&is_temptation==0"
+            ),
+            Some(Strategy::FrontRunner)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_senko>=1&is_temptation==0"
+            ),
+            Some(Strategy::PaceChaser)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_sashi>=1&is_temptation==0"
+            ),
+            Some(Strategy::LateSurger)
+        );
+        assert_eq!(
+            derive_target_strategy(
+                "running_style_temptation_opponent_count_oikomi>=1&is_temptation==0"
+            ),
+            Some(Strategy::EndCloser)
+        );
+        assert_eq!(derive_target_strategy("phase>=2"), None);
+    }
+
+    #[test]
+    fn change_strategy_skips_wit_check() {
+        let mut r = runner_with_skills(vec![runaway_skill("phase>=2")]);
+        r.strategy = Strategy::FrontRunner;
+        prepare(&mut r);
+
+        assert_eq!(r.pending_skills.len(), 1);
+        assert!(r.should_skip_wit_check(&r.pending_skills[0]));
+    }
+
+    #[test]
+    fn runaway_activates_at_gate_and_promotes_only_position_keep_strategy() {
+        let mut r = runner_with_skills(vec![runaway_skill("running_style==1")]);
+        r.strategy = Strategy::FrontRunner;
+        r.position_keep_strategy = Strategy::FrontRunner;
+
+        prepare(&mut r);
+
+        assert_eq!(
+            r.strategy,
+            Strategy::FrontRunner,
+            "the race-entry strategy remains unchanged"
+        );
+        assert_eq!(r.position_keep_strategy, Strategy::Runaway);
+        assert_eq!(r.skills_activated_count, 1);
+        assert!(r.used_skills.contains("202051"));
     }
 
     #[test]
@@ -1335,18 +1871,19 @@ mod tests {
     fn receive_targeted_effect_applies_current_speed() {
         let mut r = runner_with_skills(vec![]);
         prepare(&mut r);
-        let effects = vec![SkillEffect {
+        let effects = vec![ResolvedSkillEffect {
             target: SkillTarget::All,
             effect_type: SkillType::CurrentSpeed,
             base_duration: 3.0,
             modifier: -0.5,
-            value_usage: None,
-            value_level_usage: None,
         }];
         r.receive_targeted_effect(SkillId::new("999"), effects, RunnerId(5), 2400.0);
         assert_eq!(r.targeted_current_speed_active.len(), 1);
         assert!(r.modifiers.current_speed.total() < 0.0);
         assert_eq!(r.used_targeted_skills.len(), 1);
+        // The receiver applies the caster-resolved value verbatim: no re-roll,
+        // no re-resolution (enforced by the ResolvedSkillEffect type).
+        assert_eq!(r.targeted_current_speed_active[0].skill.modifier, -0.5);
     }
 
     #[test]

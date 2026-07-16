@@ -2,8 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   SkillType,
-  SkillEffectName,
-  SkillEffectTargetName,
+  translateSkillEffectType,
+  translateSkillEffectTarget,
   type ISkillType,
   type ISkillTarget
 } from '../../../src/lib/uma-domain/skills/definitions';
@@ -97,12 +97,12 @@ function loadSkills(cwd: string): Map<string, RawSkillEntry> {
 // ── Helpers ────────────────────────────────────────
 
 function effectTypeName(type: number): string {
-  return SkillEffectName[type as ISkillType] ?? `Unknown (${type})`;
+  return translateSkillEffectType(type as ISkillType) ?? `Unknown (${type})`;
 }
 
 function targetName(target: number | undefined): string {
   if (target === undefined) return 'Self';
-  return SkillEffectTargetName[target as ISkillTarget] ?? `Unknown (${target})`;
+  return translateSkillEffectTarget(target as ISkillTarget) ?? `Unknown (${target})`;
 }
 
 function isDurationEffect(type: number): boolean {

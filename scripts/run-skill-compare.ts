@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { Command } from 'commander';
 
 import { initCliData } from './lib/init-data';
+import { ensureLoaderWasm } from './lib/wasm-init';
 import { DebugConfigSchema } from './runner-config.schema';
 import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
 import { coursesService } from '@/modules/data/services/CourseService';
@@ -40,6 +41,7 @@ program
   .option('-v, --verbose', 'Show detailed activation info', false)
   .action(async (skillId, options) => {
     initCliData();
+    await ensureLoaderWasm();
 
     // Load and validate config
 

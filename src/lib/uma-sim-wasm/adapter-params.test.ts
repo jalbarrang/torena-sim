@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { contestedCompareParamsToWasm } from './adapter-params';
+import { contestedCompareParamsToWasm, resolveSkillInput } from './adapter-params';
 import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import type { CreateRunner } from '@/lib/uma-domain/runner/types';
 import type { RaceParameters, SimulationSettings } from '@/lib/uma-domain/race/types';
+import { initSkillService, type SkillEntry } from '@/modules/data/services/SkillService';
 
 const course: CourseData = {
   courseId: 10101,
@@ -93,5 +94,47 @@ describe('contestedCompareParamsToWasm', () => {
     expect(params.nsamples).toBe(12);
     expect(params.masterSeed).toBe(99);
     expect('duelingRates' in params).toBe(false);
+  });
+});
+
+function skillEntry(tags?: Array<number>): SkillEntry {
+  return {
+    id: '200011',
+    rarity: 1,
+    tags: tags ?? [],
+    alternatives: [],
+    groupId: 20001,
+    versions: [],
+    family: [],
+    iconId: '20001',
+    baseCost: 0,
+    gradeValue: 0,
+    order: 0,
+    name: 'Right-Handed ◎',
+    character: []
+  };
+}
+
+describe('resolveSkillInput', () => {
+  it('carries authoritative master-data tags to the WASM DTO', () => {
+    initSkillService({
+      skills: { '200011': skillEntry([401, 608]) },
+      releasedSkillIds: new Set(['200011']),
+      activationChecks: {}
+    });
+
+    expect(resolveSkillInput('200011')?.tags).toEqual([401, 608]);
+  });
+
+  it('defaults legacy skill entries with omitted tags to an empty array', () => {
+    const legacyEntry = skillEntry();
+    delete (legacyEntry as Partial<SkillEntry>).tags;
+    initSkillService({
+      skills: { '200011': legacyEntry },
+      releasedSkillIds: new Set(['200011']),
+      activationChecks: {}
+    });
+
+    expect(resolveSkillInput('200011')?.tags).toEqual([]);
   });
 });

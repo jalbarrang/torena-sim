@@ -2,7 +2,7 @@ import type { SkillEntry } from '@/modules/data/services/SkillService';
 import type { SkillAlternative } from '@/lib/uma-domain/skills/skill.types';
 import { FormatParser, formatEffect } from '@/modules/skills/components/formatters';
 import { HumanReadableParser } from '@/modules/skills/components/human-readable-formatter';
-import { describeRecoveryEffect } from '@/lib/uma-domain/skills/recovery-effect-utils';
+import { describeValueScaling } from '@/lib/uma-domain/skills/value-scaling/registry';
 import { cn } from '@/lib/utils';
 import i18n from '@/i18n';
 import { Code } from 'lucide-react';
@@ -71,7 +71,7 @@ function AlternativeDetails(props: Readonly<IAlternativeDetailsProps>) {
             const modifier = ef.modifier / 10000;
             const effectType = formatEffect[type as keyof typeof formatEffect];
             const effectValue =
-              describeRecoveryEffect({ ...ef, modifier }) ??
+              describeValueScaling({ ...ef, modifier }) ??
               (effectType ? effectType(modifier) : modifier);
             const effectLabel =
               type === 9 && modifier < 0 ? 'HP Drain' : i18n.t(`skilleffecttypes.${type}`);

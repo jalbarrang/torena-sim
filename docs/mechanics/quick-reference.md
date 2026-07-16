@@ -73,6 +73,8 @@ This document is a quick reference for the race mechanics that are available cur
 ### Skill Types & Effects
 
 - ✅ `Green` skills (stat bonuses)
+- ✅ `ChangeStrategy` (`6`): Runaway always activates and promotes the position-keep strategy to `Runaway`
+- ✅ `RushedDuration` (`13`): Frenzied family extends a rushed matching-style opponent's timer by +5s
 - ✅ `TargetSpeed`, `CurrentSpeed`, `Acceleration`
 - ✅ `CurrentSpeed` instant speed change
 - ✅ `CurrentSpeedWithNaturalDeceleration` (natural deceleration)
@@ -85,16 +87,15 @@ This document is a quick reference for the race mechanics that are available cur
 ### Value Scaling Types
 
 - ✅ `Direct` (1)
-- ✅ `MultiplySkillNum` (2)
-- ✅ `Aoharu` skills (3-7)
+- ❌ `MultiplySkillNum` (2)
+- ❌ `Aoharu` skills (3-7)
 - ✅ `MultiplyRandom` (8, 9)
-- ✅ `Climax` skills (10) - Available in Global via **Trackblazer: Start of the Climax**
-  - Example skills: **Glittering Star** / **Radiant Star**
-- ✅ `MultiplyMaximumRawStatus` (13)
-- ✅ `MultiplyActivateSpecificTagSkillCount` (14)
-- ✅ `AddDistanceDiffTop` (19)
-- ✅ `MultiplyBlockedSideMaxContinueTime` (20)
-- ✅ `MultiplySpeed` (22, 23)
+- ❌ `Climax` skills (10)
+- ❌ `MultiplyMaximumRawStatus` (13)
+- ✅ `MultiplyActivateSpecificTagSkillCount` (14) — counts activated green (601–615) skills: `0–2 → 0×`, `3–4 → 1×`, `5 → 2×`, `6+ → 3×`
+- ❌ `AddDistanceDiffTop` (19)
+- ❌ `MultiplyBlockedSideMaxContinueTime` (20)
+- ❌ `MultiplySpeed` (22, 23)
 - ❌ `MultiplyArcGlobalPotentialLevel` (24) - Not in Global yet
 - ❌ `MultiplyTopLeadAmount` (25) - Not in Global yet
 
@@ -151,7 +152,7 @@ This document is a quick reference for the race mechanics that are available cur
 ### Rushed ✅
 
 - ✅ Pre-race `Wit` roll: `(6.5/log10(0.1*Wit+1))²%`
-- ✅ Restraint skill: `-3%` flat (ID 202161)
+- ✅ Restraint skill: `-3%` flat (ID 202161), modeled via effect type 29 (`RushedChance`)
 - ✅ Random section `2-9` activation
 - ✅ `1.6x` HP consumption modifier
 - ✅ Forces position keep mode, auto-passes `Wit` checks
