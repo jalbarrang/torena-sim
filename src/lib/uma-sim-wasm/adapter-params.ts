@@ -65,6 +65,19 @@ export function resolveSkillInput(skillId: string): WasmSkillInput | null {
   if (!entry) {
     return null;
   }
+  // Guard: the WASM DTO boundary hard-rejects skills with unsupported
+  // mechanics (unknown condition tokens, unimplemented value usages), which
+  // would fail the entire worker run. Mirror the TS preflight (ADR-0008 /
+  // ADR-0003) by excluding the skill here instead.
+  if (!skillsService.isSimulatable(baseId)) {
+    if (import.meta.env?.DEV) {
+      console.warn(
+        `[resolveSkillInput] Skipping non-simulatable skill ${skillId}:`,
+        skillsService.getUnsupportedMechanics(baseId)
+      );
+    }
+    return null;
+  }
   return {
     skillId,
     rarity: entry.rarity,

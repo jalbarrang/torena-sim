@@ -137,4 +137,42 @@ describe('resolveSkillInput', () => {
 
     expect(resolveSkillInput('200011')?.tags).toEqual([]);
   });
+
+  it('excludes non-simulatable skills so they never reach the WASM DTO boundary', () => {
+    // An unsupported value usage (13, max-raw-stat scaling) would hard-fail
+    // the whole worker run at the DTO boundary; the resolver must drop it.
+    const entry = skillEntry();
+    entry.alternatives = [
+      {
+        baseDuration: 3,
+        condition: 'phase_random==2',
+        effects: [{ target: 1, type: 27, modifier: 2000, valueUsage: 13 }]
+      }
+    ];
+    initSkillService({
+      skills: { '200011': entry },
+      releasedSkillIds: new Set(['200011']),
+      activationChecks: {}
+    });
+
+    expect(resolveSkillInput('200011')).toBeNull();
+  });
+
+  it('resolves Aoharu-scaled skills (usage 5) as simulatable inputs', () => {
+    const entry = skillEntry();
+    entry.alternatives = [
+      {
+        baseDuration: 1.2,
+        condition: 'phase_random==2',
+        effects: [{ target: 1, type: 31, modifier: 2000, valueUsage: 5 }]
+      }
+    ];
+    initSkillService({
+      skills: { '200011': entry },
+      releasedSkillIds: new Set(['200011']),
+      activationChecks: {}
+    });
+
+    expect(resolveSkillInput('200011')?.alternatives[0]?.effects[0]?.valueUsage).toBe(5);
+  });
 });

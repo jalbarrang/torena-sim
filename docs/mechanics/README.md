@@ -751,6 +751,8 @@ The effectiveness of aoharu skills scales with your team’s total [base stats](
 | 2600 \<= Total \< 3600 | 1.1x          |
 | 3600 \<= Total         | 1.2x          |
 
+Outside the Aoharu scenario (Team Trials, Champions Meetings), these skills apply their base value with no team-stats bonus (1.0x), as verified by in-game observation on Global with **Ignited Spirit** (210031/210032).
+
 ### Multiply Random (8, 9\) {#multiply-random-(8,-9)}
 
 Type 1 (ID=8) and Type 2 (ID=9) are identical.
