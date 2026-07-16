@@ -121,6 +121,9 @@ pub struct Runner {
     /// Betting popularity rank (1 = most popular). `0` means unknown/unset.
     /// Static for the race; read by the `popularity` skill condition.
     pub popularity: i64,
+    /// CM/LoH team grouping (1-based). `None` = no team. Read by the external
+    /// debuff coordinator: teammates are excluded from debuff effects.
+    pub team: Option<i32>,
     /// Distance / strategy / surface aptitudes.
     pub aptitudes: RunnerAptitudes,
     /// Raw input stats (pre-adjustment).
@@ -560,6 +563,7 @@ pub mod test_support {
             mood: Mood::Normal,
             strategy,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::A,
                 strategy: Aptitude::A,

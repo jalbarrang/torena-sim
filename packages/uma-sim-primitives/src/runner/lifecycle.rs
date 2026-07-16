@@ -63,6 +63,10 @@ pub struct CreateRunner {
     pub strategy: Strategy,
     /// Betting popularity rank (1 = most popular). `0` means unknown/unset.
     pub popularity: i64,
+    /// CM/LoH team grouping (1-based). `None` = no team. Teammates can trigger
+    /// and be targeted by skills, but are excluded from the *effect* of
+    /// external debuffs (mechanics § Skill Target).
+    pub team: Option<i32>,
     /// Aptitudes.
     pub aptitudes: RunnerAptitudes,
     /// Raw input stats.
@@ -143,6 +147,7 @@ impl Runner {
             position_keep_strategy: props.strategy,
             mood: props.mood,
             popularity: props.popularity,
+            team: props.team,
             aptitudes: props.aptitudes,
             stats: props.stats,
             base_stats,
@@ -416,6 +421,7 @@ mod tests {
             mood: Mood::Great,
             strategy,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::A,
                 strategy: Aptitude::A,

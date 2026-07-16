@@ -74,6 +74,7 @@ export type WasmCreateRunner = {
   mood: number; // -2..2
   strategy: number; // 1 front, 2 pace, 3 late, 4 end, 5 runaway
   popularity?: number; // betting rank (1 = most popular); 0/omitted = unknown
+  team?: number; // CM/LoH team grouping (1-based); omitted = no team
   aptitudes: WasmAptitudes;
   stats: WasmStatLine;
   skills?: WasmSkillInput[];
