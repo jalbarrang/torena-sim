@@ -17,6 +17,8 @@ export type GreenActivationContext = {
   raceParameters: RaceParameters;
 };
 
+const parser = createParser({ conditions: defaultConditions });
+
 function hasGreenTag(skill: GreenSkillLike): boolean {
   return skill.tags.some((tag) => tag >= 601 && tag <= 615);
 }
@@ -30,21 +32,28 @@ function applyParams(context: GreenActivationContext): ApplyParams {
   };
 }
 
+/**
+ * A gate condition is *guaranteed* when its static evaluation passes with no
+ * dynamic gate AND its regions still cover the gate (start 0). Requiring the
+ * gate keeps this a conservative floor: a hypothetical green whose condition
+ * narrows to a later region (e.g. `phase>=2`) might activate after the
+ * usage-14 carrier procs, so it must not be promised.
+ */
 function isGuaranteedAlternative(
   alternative: GreenSkillLike['alternatives'][number],
   context: GreenActivationContext
 ): boolean {
   if (!alternative.condition) return false;
 
-  const parser = createParser({ conditions: defaultConditions });
+  const coversGate = (regions: RegionList) => regions.length > 0 && regions[0].start === 0;
   try {
     if (alternative.precondition) {
       const [regions, dynamic] = parser.parse(alternative.precondition).apply(applyParams(context));
-      if (regions.length === 0 || dynamic !== kTrue) return false;
+      if (!coversGate(regions) || dynamic !== kTrue) return false;
     }
 
     const [regions, dynamic] = parser.parse(alternative.condition).apply(applyParams(context));
-    return regions.length > 0 && dynamic === kTrue;
+    return coversGate(regions) && dynamic === kTrue;
   } catch {
     return false;
   }

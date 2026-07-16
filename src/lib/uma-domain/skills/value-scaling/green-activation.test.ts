@@ -77,4 +77,21 @@ describe('countGuaranteedActivatedGreens', () => {
     const skills = realSkills(['100981']);
     expect(countGuaranteedActivatedGreens(skills, contextOn(11103, SCENARIO_PARAMETERS))).toBe(0);
   });
+
+  it('counts Restraint (always==1) as a guaranteed green', () => {
+    const skills = realSkills(['202161']);
+    expect(countGuaranteedActivatedGreens(skills, contextOn(11103, SCENARIO_PARAMETERS))).toBe(1);
+  });
+
+  it('excludes a green whose condition narrows past the gate (conservative floor)', () => {
+    // Hypothetical green gated on late-race: it could activate after the
+    // usage-14 carrier procs, so it must not be promised.
+    const phaseGatedGreen = {
+      tags: [401, 608],
+      alternatives: [{ condition: 'phase>=2' }]
+    };
+    expect(
+      countGuaranteedActivatedGreens([phaseGatedGreen], contextOn(11103, SCENARIO_PARAMETERS))
+    ).toBe(0);
+  });
 });
