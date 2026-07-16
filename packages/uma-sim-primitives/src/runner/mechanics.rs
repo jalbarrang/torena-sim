@@ -717,6 +717,7 @@ mod tests {
             ],
             extra_condition: None,
             target_strategy: None,
+            forced: false,
         });
 
         assert!(

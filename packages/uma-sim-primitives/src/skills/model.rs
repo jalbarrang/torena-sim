@@ -211,6 +211,11 @@ pub struct PendingSkill {
     /// Derived target running style for `EnemyStrategy` external debuffs (see
     /// [`SkillTrigger::target_strategy`]).
     pub target_strategy: Option<Strategy>,
+    /// User-forced activation (scripted `forcedPositions`): the skill fires
+    /// unconditionally when the runner reaches its trigger window — dynamic
+    /// condition gates and the wit check are bypassed, matching injected-debuff
+    /// semantics.
+    pub forced: bool,
 }
 
 /// An opponent-facing (external) debuff a runner emitted this frame, awaiting the
