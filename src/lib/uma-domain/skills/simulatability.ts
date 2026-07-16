@@ -11,9 +11,8 @@
  */
 
 import { knownConditionTokens } from './parser/conditions/conditions';
+import { supportedSimulatableValueUsages } from './value-scaling/registry';
 import type { SkillAlternative } from './skill.types';
-
-const supportedValueUsages = new Set([1, 8, 9, 14]);
 
 export type UnsupportedSkillMechanic =
   | { kind: 'condition-token'; token: string }
@@ -136,7 +135,7 @@ export function findUnsupportedSkillMechanics(
   for (const alternative of alternatives) {
     for (const effect of alternative.effects) {
       const usage = effect.valueUsage ?? 1;
-      if (!supportedValueUsages.has(usage)) {
+      if (!supportedSimulatableValueUsages.has(usage)) {
         mechanics.push({ kind: 'value-usage', usage });
       }
     }

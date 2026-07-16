@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { SkillType } from './definitions';
-import { describeRecoveryEffect, resolveRecoveryModifier } from './recovery-effect-utils';
+import { resolveRecoveryModifier } from './recovery-effect-utils';
+import { describeRecoveryEffect } from './value-scaling/multiply-random';
 
 function createSkillRng(roll: number) {
   return {

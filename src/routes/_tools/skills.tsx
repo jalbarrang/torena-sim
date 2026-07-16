@@ -15,7 +15,7 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover';
 import i18n from '@/i18n';
-import { describeRecoveryEffect } from '@/lib/uma-domain/skills/recovery-effect-utils';
+import { describeValueScaling } from '@/lib/uma-domain/skills/value-scaling/registry';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { umasService } from '@/modules/data/services/UmaService';
 import { supportCardsService } from '@/modules/data/services/SupportCardService';
@@ -98,7 +98,7 @@ function SkillEffectSummary(props: SkillEffectSummaryProps) {
         const modifier = effect.modifier / 10000;
         const effectType = formatEffect[effect.type as keyof typeof formatEffect];
         const effectValue =
-          describeRecoveryEffect({ ...effect, modifier }) ??
+          describeValueScaling({ ...effect, modifier }) ??
           (effectType ? effectType(modifier) : modifier);
         const effectLabel =
           effect.type === 9 && modifier < 0
@@ -434,8 +434,7 @@ function SkillBrowserItem(props: SkillBrowserItemProps) {
           {skill.description ? <p className="leading-relaxed">{skill.description}</p> : null}
           {skill.lastUpdated ? (
             <p>
-              Last updated:{' '}
-              {skill.lastUpdated === 'unreleased' ? 'Unreleased' : skill.lastUpdated}
+              Last updated: {skill.lastUpdated === 'unreleased' ? 'Unreleased' : skill.lastUpdated}
             </p>
           ) : null}
         </div>

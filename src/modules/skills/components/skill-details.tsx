@@ -4,7 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import i18n from '@/i18n';
 import type { SkillAlternative } from '@/lib/uma-domain/skills/skill.types';
-import { describeRecoveryEffect } from '@/lib/uma-domain/skills/recovery-effect-utils';
+import { describeValueScaling } from '@/lib/uma-domain/skills/value-scaling/registry';
 import type { SkillEntry } from '@/modules/data/services/SkillService';
 import { formatEffect, FormatParser } from './formatters';
 import { HumanReadableParser } from './human-readable-formatter';
@@ -67,7 +67,7 @@ function SkillEffects(props: { alternative: SkillAlternative }) {
         const modifier = effect.modifier / 10000;
         const effectType = formatEffect[effect.type as keyof typeof formatEffect];
         const effectValue =
-          describeRecoveryEffect({ ...effect, modifier }) ??
+          describeValueScaling({ ...effect, modifier }) ??
           (effectType ? effectType(modifier) : modifier);
         const effectLabel =
           effect.type === 9 && modifier < 0
