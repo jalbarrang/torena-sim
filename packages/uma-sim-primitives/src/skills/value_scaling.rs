@@ -16,6 +16,13 @@ pub enum ValueScalingPolicy {
     Direct,
     /// The effect is multiplied by one random 0×/0.02×/0.04× roll.
     MultiplyRandom,
+    /// Aoharu-scenario team-stats scaling (usages 3–7). The multiplier tier is
+    /// driven by the training team's total base stats, a datum that only exists
+    /// inside the Aoharu scenario. Outside the scenario (CM / Team Trials — the
+    /// races this simulator models) the game applies the base value unchanged
+    /// (1.0×), so this policy resolves to the direct modifier. See
+    /// docs/mechanics/README.md § "Aoharu Skills (3-7)".
+    MultiplyAoharuTeamStats,
     /// Reserved for usage 14, enabled once activated-tag state exists.
     MultiplyActivatedTaggedSkillCount,
 }
@@ -44,6 +51,7 @@ impl ValueScalingPolicy {
     pub fn from_value_usage(value_usage: Option<i32>) -> Result<Self, UnsupportedValueUsage> {
         match value_usage {
             None | Some(1) => Ok(Self::Direct),
+            Some(3..=7) => Ok(Self::MultiplyAoharuTeamStats),
             Some(8 | 9) => Ok(Self::MultiplyRandom),
             Some(14) => Ok(Self::MultiplyActivatedTaggedSkillCount),
             Some(value) => Err(UnsupportedValueUsage(value)),
@@ -54,6 +62,9 @@ impl ValueScalingPolicy {
     pub fn supports_effect_type(self, effect_type: SkillType) -> bool {
         match self {
             Self::Direct => true,
+            // Resolves as the direct value outside the Aoharu scenario; no
+            // type restriction (Ignited Spirit scales Acceleration).
+            Self::MultiplyAoharuTeamStats => true,
             Self::MultiplyRandom => effect_type == SkillType::Recovery,
             // Usage 14 is a generic count-based value multiplier (Copano Rickey
             // scales Target Speed and Acceleration); not restricted by type.
@@ -150,6 +161,8 @@ pub fn resolve_modifier(
 ) -> Result<f64, ResolveError> {
     match effect.value_scaling {
         ValueScalingPolicy::Direct => Ok(effect.modifier),
+        // 1.0× outside the Aoharu scenario; see the variant doc comment.
+        ValueScalingPolicy::MultiplyAoharuTeamStats => Ok(effect.modifier),
         ValueScalingPolicy::MultiplyRandom => {
             if effect.effect_type != SkillType::Recovery {
                 return Err(ResolveError::UnsupportedForEffect(
@@ -201,6 +214,12 @@ mod tests {
             ValueScalingPolicy::from_value_usage(Some(14)),
             Ok(ValueScalingPolicy::MultiplyActivatedTaggedSkillCount)
         );
+        for usage in 3..=7 {
+            assert_eq!(
+                ValueScalingPolicy::from_value_usage(Some(usage)),
+                Ok(ValueScalingPolicy::MultiplyAoharuTeamStats)
+            );
+        }
         assert_eq!(
             ValueScalingPolicy::from_value_usage(Some(13)),
             Err(UnsupportedValueUsage(13))
@@ -249,6 +268,20 @@ mod tests {
         let effect = spec(SkillType::TargetSpeed, 0.25, ValueScalingPolicy::Direct);
         let mut ctx = EffectResolutionContext::new(None);
         assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(0.25));
+    }
+
+    #[test]
+    fn aoharu_team_stats_resolves_to_base_modifier_outside_scenario() {
+        // Ignited Spirit (210031/210032): Acceleration with usage 5. Outside
+        // the Aoharu scenario the game applies no team-stats bonus.
+        let effect = spec(
+            SkillType::Accel,
+            0.2,
+            ValueScalingPolicy::MultiplyAoharuTeamStats,
+        );
+        let mut ctx = EffectResolutionContext::new(None);
+        assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(0.2));
+        assert!(ValueScalingPolicy::MultiplyAoharuTeamStats.supports_effect_type(SkillType::Accel));
     }
 
     #[test]

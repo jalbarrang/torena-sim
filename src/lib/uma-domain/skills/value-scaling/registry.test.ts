@@ -14,6 +14,12 @@ describe('value-scaling descriptor registry', () => {
     );
   });
 
+  it('describes Aoharu team-stats scaling (Ignited Spirit, usage 5)', () => {
+    expect(describeValueScaling({ type: 31, modifier: 0.2, valueUsage: 5 })).toBe(
+      'Scales with Aoharu team stats in-scenario; base value (1.0×) in normal races'
+    );
+  });
+
   it('describes the activated-green tier rule', () => {
     expect(describeValueScaling({ type: 27, modifier: 0.05, valueUsage: 14 })).toBe(
       'Activated greens: 0–2 → 0×, 3–4 → 1×, 5 → 2×, 6+ → 3×'
@@ -28,7 +34,7 @@ describe('value-scaling descriptor registry', () => {
 
   it('derives the simulator-supported usages from descriptors', () => {
     expect(Array.from(supportedSimulatableValueUsages).sort((a, b) => a - b)).toEqual([
-      1, 8, 9, 14
+      1, 3, 4, 5, 6, 7, 8, 9, 14
     ]);
   });
 

@@ -164,7 +164,19 @@ describe('SkillService.isSimulatable', () => {
   });
 
   it('rejects released skills with reviewed unsupported value usages', () => {
-    const unsupported = [
+    // 210061/210062: usage 10 (Climax races won); 210081/210082: usage 13
+    // (max raw stat). Both still lack an explicit policy.
+    const unsupported = ['210061', '210062', '210081', '210082'];
+
+    for (const skillId of unsupported) {
+      expect(skillsService.isSimulatable(skillId)).toBe(false);
+    }
+  });
+
+  it('treats the Aoharu family (usages 3–7) as simulatable at base value', () => {
+    // Fervor / Ignited Spirit lines: team-stats scaling only applies inside
+    // the Aoharu scenario; normal races use the base value (1.0x).
+    const aoharu = [
       '210011',
       '210012',
       '210021',
@@ -174,15 +186,11 @@ describe('SkillService.isSimulatable', () => {
       '210041',
       '210042',
       '210051',
-      '210052',
-      '210061',
-      '210062',
-      '210081',
-      '210082'
+      '210052'
     ];
 
-    for (const skillId of unsupported) {
-      expect(skillsService.isSimulatable(skillId)).toBe(false);
+    for (const skillId of aoharu) {
+      expect(skillsService.isSimulatable(skillId)).toBe(true);
     }
   });
 

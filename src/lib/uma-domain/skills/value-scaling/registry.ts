@@ -1,10 +1,12 @@
 import { activatedTagCountValueScalingDescriptor } from './activated-tag-count';
+import { aoharuTeamStatsValueScalingDescriptor } from './aoharu-team-stats';
 import type { ScalingEffectLike, ValueScalingDescriptor } from './descriptor.types';
 import { directValueScalingDescriptor } from './direct';
 import { multiplyRandomValueScalingDescriptor } from './multiply-random';
 
 const descriptors = [
   directValueScalingDescriptor,
+  aoharuTeamStatsValueScalingDescriptor,
   multiplyRandomValueScalingDescriptor,
   activatedTagCountValueScalingDescriptor
 ] as const;
