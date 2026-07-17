@@ -367,6 +367,8 @@ impl Runner {
         let eval_runner = self.skill_eval_runner();
         let skills = std::mem::take(&mut self.skills);
         let mut pending: Vec<PendingSkill> = Vec::new();
+        let mut forced_bypass_granted: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         for skill in &skills {
             let triggers = build_skill_data(&BuildSkillDataParams {
                 runner: &eval_runner,
@@ -380,8 +382,13 @@ impl Runner {
             });
             for trigger in triggers {
                 let base = trigger.skill_id.base().to_owned();
-                let policy = match self.forced_positions.get(&base) {
-                    Some(&pos) => ActivationSamplePolicy::Fixed(pos),
+                let forced_pos = self.forced_positions.get(&base).copied();
+                // A forced skill activates unconditionally at its position:
+                // only the first alternative's trigger gets the bypass so
+                // mutually exclusive alternatives cannot both fire there.
+                let forced = forced_pos.is_some() && forced_bypass_granted.insert(base);
+                let policy = match forced_pos {
+                    Some(pos) => ActivationSamplePolicy::Fixed(pos),
                     None => trigger.sample_policy,
                 };
                 let samples =
@@ -396,9 +403,46 @@ impl Runner {
                     tags: trigger.tags,
                     trigger: trigger_region,
                     effects: trigger.effects,
-                    extra_condition: trigger.extra_condition,
+                    extra_condition: if forced {
+                        None
+                    } else {
+                        trigger.extra_condition
+                    },
                     target_strategy: trigger.target_strategy,
+                    forced,
                 });
+            }
+        }
+
+        // A forced skill whose static conditions produced no trigger on this
+        // course/run must still fire: the user scripted "this skill activates
+        // here", the same contract as injected debuffs. Synthesize a pending
+        // entry from the first alternative that yields modeled effects.
+        for skill in &skills {
+            let base = skill.skill_id.base().to_owned();
+            let Some(&pos) = self.forced_positions.get(&base) else {
+                continue;
+            };
+            if forced_bypass_granted.contains(&base) {
+                continue;
+            }
+            for alt in &skill.alternatives {
+                let effects = build_skill_effects(alt);
+                if effects.is_empty() {
+                    continue;
+                }
+                forced_bypass_granted.insert(base);
+                pending.push(PendingSkill {
+                    skill_id: skill.skill_id.clone(),
+                    rarity: skill.rarity,
+                    tags: skill.tags.clone(),
+                    trigger: Region::new(pos, pos + 10.0),
+                    effects,
+                    extra_condition: None,
+                    target_strategy: derive_target_strategy(&alt.condition),
+                    forced: true,
+                });
+                break;
             }
         }
         self.skills = skills;
@@ -489,9 +533,9 @@ impl Runner {
             if i >= self.pending_skills.len() {
                 continue;
             }
-            let (trigger, skill_id) = {
+            let (trigger, skill_id, forced) = {
                 let s = &self.pending_skills[i];
-                (s.trigger, s.skill_id.0.clone())
+                (s.trigger, s.skill_id.0.clone(), s.forced)
             };
 
             if self.position >= trigger.end || self.pending_skill_removal.contains(&skill_id) {
@@ -500,8 +544,8 @@ impl Runner {
                 continue;
             }
 
-            if self.position >= trigger.start && self.pending_extra_passes(i, field) {
-                let skip = self.should_skip_wit_check_at(i);
+            if self.position >= trigger.start && (forced || self.pending_extra_passes(i, field)) {
+                let skip = forced || self.should_skip_wit_check_at(i);
                 if skip || self.do_wit_check() {
                     let skill = self.pending_skills[i].clone();
                     self.activate_skill(&skill, course_distance);
@@ -1187,6 +1231,13 @@ mod tests {
     }
 
     fn runner_with_skills(skills: Vec<Skill>) -> Runner {
+        runner_with_skills_forced(skills, HashMap::new())
+    }
+
+    fn runner_with_skills_forced(
+        skills: Vec<Skill>,
+        forced_positions: HashMap<String, f64>,
+    ) -> Runner {
         let props = CreateRunner {
             outfit_id: "100302".to_owned(),
             name: "Test".to_owned(),
@@ -1206,7 +1257,7 @@ mod tests {
                 wit: 800,
             },
             skills,
-            forced_positions: HashMap::new(),
+            forced_positions,
             injected_debuffs: vec![],
             forced_rushed_regions: vec![],
             forced_dueling_regions: vec![],
@@ -1644,6 +1695,85 @@ mod tests {
         assert_eq!(r.skills_activated_count, 1);
         assert!(r.used_skills.contains("100001"));
         assert!(r.pending_skills.is_empty());
+    }
+
+    #[test]
+    fn forced_position_bypasses_dynamic_condition_and_wit_check() {
+        // `order==1` resolves to a dynamic gate; with no field resolved
+        // (`FieldView::at_gate`, order None) it can never pass. A forced
+        // position must activate the skill anyway — and deterministically,
+        // with wit checks left enabled.
+        let skill = target_speed_skill("100001", SkillRarity::Gold, "phase>=0&order==1");
+
+        // Control: without forcing, the dynamic gate holds the skill back.
+        let mut control = runner_with_skills(vec![skill.clone()]);
+        prepare(&mut control);
+        control.position = 1000.5;
+        control.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(control.skills_activated_count, 0, "control must not fire");
+
+        let mut r =
+            runner_with_skills_forced(vec![skill], HashMap::from([("100001".to_owned(), 1000.0)]));
+        prepare(&mut r);
+        assert_eq!(r.pending_skills.len(), 1);
+        assert!(r.pending_skills[0].forced);
+        assert_eq!(r.pending_skills[0].trigger, Region::new(1000.0, 1010.0));
+
+        r.position = 1000.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert!(r.used_skills.contains("100001"));
+    }
+
+    #[test]
+    fn forced_position_overrides_statically_unsatisfiable_condition() {
+        // `distance_type==1` (sprint) never matches the Long test course: the
+        // trigger survives only as a sentinel `Region::INVALID` window the
+        // runner can never reach. Forcing a position must replace it.
+        let skill = target_speed_skill("100002", SkillRarity::Gold, "distance_type==1");
+
+        let mut control = runner_with_skills(vec![skill.clone()]);
+        prepare(&mut control);
+        // The sentinel window sits beyond the course end: unreachable.
+        assert!(control.pending_skills[0].trigger.start > 2400.0);
+
+        let mut r =
+            runner_with_skills_forced(vec![skill], HashMap::from([("100002".to_owned(), 1200.0)]));
+        prepare(&mut r);
+        assert_eq!(r.pending_skills.len(), 1);
+        assert!(r.pending_skills[0].forced);
+        assert_eq!(r.pending_skills[0].trigger, Region::new(1200.0, 1210.0));
+
+        r.position = 1200.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert!(r.used_skills.contains("100002"));
+        assert!((r.modifiers.target_speed.total() - 0.45).abs() < 1e-9);
+    }
+
+    #[test]
+    fn forced_position_synthesizes_trigger_when_none_is_built() {
+        // A condition the parser cannot handle aborts trigger building
+        // entirely (`build_skill_data` returns no triggers), so there is
+        // nothing for the forced position to override. The runner must
+        // synthesize a forced pending entry from the alternative's effects.
+        let skill = target_speed_skill("100003", SkillRarity::Gold, "unknown_token_xyz==1");
+
+        let mut control = runner_with_skills(vec![skill.clone()]);
+        prepare(&mut control);
+        assert!(control.pending_skills.is_empty(), "control has no trigger");
+
+        let mut r =
+            runner_with_skills_forced(vec![skill], HashMap::from([("100003".to_owned(), 800.0)]));
+        prepare(&mut r);
+        assert_eq!(r.pending_skills.len(), 1);
+        assert!(r.pending_skills[0].forced);
+        assert_eq!(r.pending_skills[0].trigger, Region::new(800.0, 810.0));
+
+        r.position = 800.5;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert!(r.used_skills.contains("100003"));
     }
 
     #[test]
