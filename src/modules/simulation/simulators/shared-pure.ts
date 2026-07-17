@@ -100,6 +100,8 @@ export function toCreateRunner(
     skills: sortedSkills,
     // IRunnerState.gate is the 1-based post; the engine expects a 0-based gate.
     gate: typeof runner.gate === 'number' ? runner.gate - 1 : undefined,
+    // CM/LoH team grouping: teammates are excluded from debuff effects.
+    team: typeof runner.team === 'number' ? runner.team : undefined,
     forcedPositions,
     injectedDebuffs: injectedDebuffs?.map(({ skillId, position }) => ({ skillId, position })),
     forcedRushedRegions: scenarioOverrides?.forcedRushed

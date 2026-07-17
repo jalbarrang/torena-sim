@@ -416,6 +416,7 @@ impl Race {
         struct Route {
             target: RunnerId,
             source: RunnerId,
+            source_team: Option<i32>,
             skill_id: uma_sim_primitives::shared_kernel::ids::SkillId,
             effect: uma_sim_primitives::skills::model::ResolvedSkillEffect,
         }
@@ -425,6 +426,7 @@ impl Race {
                 continue;
             }
             let source = runner.id;
+            let source_team = runner.team;
             let emitted = std::mem::take(&mut runner.emitted_debuffs);
             for debuff in emitted {
                 let targets =
@@ -433,6 +435,7 @@ impl Race {
                     routes.push(Route {
                         target,
                         source,
+                        source_team,
                         skill_id: debuff.skill_id.clone(),
                         effect: debuff.effect,
                     });
@@ -441,8 +444,15 @@ impl Race {
         }
 
         // Phase 2: apply onto each target via the targeted-effect path.
+        // Teammates stay valid *targets* (they count toward a skill's maximum
+        // target in-game) but are excluded from the debuff *effect*
+        // (docs/mechanics/README.md § Skill Target), so the exclusion happens
+        // here at application, after target resolution.
         for route in routes {
             if let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) {
+                if route.source_team.is_some() && route.source_team == target.team {
+                    continue;
+                }
                 target.receive_targeted_effect(
                     route.skill_id,
                     vec![route.effect],
@@ -884,6 +894,7 @@ mod tests {
             mood: Mood::Normal,
             strategy,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::A,
                 strategy: Aptitude::A,
@@ -1089,6 +1100,65 @@ mod tests {
             race.runners[1].used_targeted_skills[0].skill_id.as_str(),
             "200851"
         );
+    }
+
+    #[test]
+    fn external_debuff_skips_same_team_targets() {
+        use uma_sim_primitives::race_support::build_field_snapshot;
+        use uma_sim_primitives::shared_kernel::ids::SkillId;
+        use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
+
+        // R0 caster (team 1), R1 Front Runner teammate (team 1), R2 Front
+        // Runner opponent (team 2), R3 Front Runner without a team.
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            SimulationSettings::default(),
+            test_race_params(),
+        );
+        let mut caster = props("caster", Strategy::LateSurger);
+        caster.team = Some(1);
+        let mut teammate = props("teammate", Strategy::FrontRunner);
+        teammate.team = Some(1);
+        let mut opponent = props("opponent", Strategy::FrontRunner);
+        opponent.team = Some(2);
+        let teamless = props("teamless", Strategy::FrontRunner);
+        race.add_runner(caster);
+        race.add_runner(teammate);
+        race.add_runner(opponent);
+        race.add_runner(teamless);
+        race.prepare_round(7);
+
+        let snapshot = build_field_snapshot(
+            &mut race.runners,
+            &race.finished_runners,
+            &mut race.order_tracker,
+        );
+
+        race.runners[0].emitted_debuffs.push(EmittedDebuff {
+            skill_id: SkillId::new("200851"),
+            effect: ResolvedSkillEffect {
+                target: SkillTarget::EnemyStrategy,
+                effect_type: SkillType::CurrentSpeed,
+                base_duration: 3.0,
+                modifier: -0.15,
+            },
+            target: SkillTarget::EnemyStrategy,
+            target_strategy: Some(Strategy::FrontRunner),
+        });
+
+        race.coordinate_external_debuffs(&snapshot);
+
+        // Teammates are excluded from the effect of debuffs (mechanics § Skill
+        // Target): the same-team front runner is untouched, while the enemy
+        // team and teamless front runners are both hit.
+        assert!(race.runners[1].targeted_current_speed_active.is_empty());
+        assert!(race.runners[1].used_targeted_skills.is_empty());
+        assert_eq!(race.runners[2].targeted_current_speed_active.len(), 1);
+        assert!(race.runners[2].modifiers.current_speed.total() < 0.0);
+        assert_eq!(race.runners[3].targeted_current_speed_active.len(), 1);
+        assert!(race.runners[3].modifiers.current_speed.total() < 0.0);
     }
 
     #[test]

@@ -23,6 +23,8 @@ export type CreateRunner = {
   skills: Array<string>;
   gate?: number;
   popularity?: number;
+  /** CM/LoH team grouping (1-based); teammates are excluded from debuff effects. */
+  team?: number;
   forcedPositions?: Record<string, number>;
   injectedDebuffs?: Array<{ skillId: string; position: number }>;
   forcedRushedRegions?: Array<{ start: number; end: number }>;

@@ -600,6 +600,10 @@ pub struct WasmCreateRunner {
     /// Betting popularity rank (1 = most popular). `0`/omitted = unknown.
     #[serde(default)]
     pub popularity: i64,
+    /// CM/LoH team grouping (1-based). Omitted/`null` = no team. Must stay
+    /// `Option` so a present-but-`undefined` key deserializes to `None`.
+    #[serde(default)]
+    pub team: Option<i32>,
     /// Aptitudes.
     pub aptitudes: WasmAptitudes,
     /// Raw stats.
@@ -635,6 +639,7 @@ impl WasmCreateRunner {
             mood: to_mood(self.mood)?,
             strategy: to_strategy(self.strategy)?,
             popularity: self.popularity,
+            team: self.team,
             aptitudes: self.aptitudes.into_domain()?,
             stats: self.stats.into(),
             skills: self

@@ -1244,6 +1244,7 @@ mod tests {
             mood: Mood::Normal,
             strategy: Strategy::PaceChaser,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::A,
                 strategy: Aptitude::A,
@@ -1461,6 +1462,7 @@ mod tests {
             mood: Mood::Normal,
             strategy: Strategy::PaceChaser,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::S,
                 strategy: Aptitude::A,

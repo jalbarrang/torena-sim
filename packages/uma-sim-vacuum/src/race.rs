@@ -441,6 +441,7 @@ mod tests {
             mood: Mood::Normal,
             strategy,
             popularity: 0,
+            team: None,
             aptitudes: RunnerAptitudes {
                 distance: Aptitude::A,
                 strategy: Aptitude::A,
