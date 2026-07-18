@@ -166,7 +166,8 @@ export const reconcileCompareModeWithField = () => {
   }
 };
 
-reconcileCompareModeWithField();
+// Deferred to a microtask: this store and runners.store import each other (runners.store calls forceContestedForField), so running at module scope can dereference `useRunnersStore` while runners.store is still mid-initialization (TDZ ReferenceError when a vacuum mode was persisted). After the module graph settles both stores exist and have rehydrated.
+queueMicrotask(reconcileCompareModeWithField);
 
 export const setFieldSize = (fieldSize: number) => {
   useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });
