@@ -162,6 +162,7 @@ export const TrackTopDownView = memo<TrackTopDownViewProps>(function TrackTopDow
     );
     const lanes = getRunnerLanesAtTick(state.results, state.selectedRound, state.currentTick);
     const cfg = configRef.current;
+    if (cfg.builtTrack.points.length < 2) return;
     const { width, height } = sizeRef.current;
     const dpr = globalThis.devicePixelRatio || 1;
     const scene = buildTrackTopDownScene({
