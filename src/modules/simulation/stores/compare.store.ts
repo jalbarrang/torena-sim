@@ -156,6 +156,18 @@ export const forceContestedForField = () => {
   useRaceStore.setState({ compareMode: DEFAULT_COMPARE_MODE });
 };
 
+/** Startup reconciliation: vacuum is duo-only, but `compareMode` and the runner list persist in separate stores. An interrupted write (or storage tampering) can leave a persisted vacuum mode alongside a >2 field; fall back to contested. Runs once at module load, after both stores rehydrate synchronously (the runners store rehydrates first because this module imports it). Exported for unit tests. */
+export const reconcileCompareModeWithField = () => {
+  if (
+    useRaceStore.getState().compareMode === 'vacuum' &&
+    !canUseVacuum(useRunnersStore.getState().runners.length)
+  ) {
+    forceContestedForField();
+  }
+};
+
+reconcileCompareModeWithField();
+
 export const setFieldSize = (fieldSize: number) => {
   useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });
 };

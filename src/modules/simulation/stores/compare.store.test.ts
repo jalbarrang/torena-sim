@@ -6,6 +6,7 @@ import {
   clampFieldSize,
   forceContestedForField,
   migrateComparePersisted,
+  reconcileCompareModeWithField,
   setCompareMode,
   useRaceStore,
   DEFAULT_COMPARE_MODE,
@@ -116,5 +117,18 @@ describe('compare mode guards', () => {
     setCompareMode('vacuum');
     forceContestedForField();
     expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
+  });
+
+  it('reconciles a persisted vacuum mode against a >2 field at startup', () => {
+    seedRunners(3);
+    useRaceStore.setState({ compareMode: 'vacuum' });
+    reconcileCompareModeWithField();
+    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
+  });
+
+  it('leaves a persisted vacuum mode alone for a duo field', () => {
+    setCompareMode('vacuum');
+    reconcileCompareModeWithField();
+    expect(useRaceStore.getState().compareMode).toBe('vacuum');
   });
 });
