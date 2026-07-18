@@ -93,9 +93,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
   const uma2Name = preview ? runnerName(preview.runners[preview.compareB]) : '';
   const runnerCount = preview ? preview.runners.length : 0;
   const compareModeLabel = preview
-    ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
-        runnerCount === 1 ? '' : 's'
-      })`
+    ? preview.compareMode === 'contested'
+      ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
+          runnerCount === 1 ? '' : 's'
+        })`
+      : 'Vacuum (isolated)'
     : '';
 
   return (

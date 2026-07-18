@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CollectedRunnerRoundData } from '@/lib/uma-domain/race/race-observer';
 import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import type { RaceParameters } from '@/lib/uma-domain/race/types';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState, runawaySkillId } from '@/modules/runners/components/runner-card/types';
 import type { CompareParams } from '@/modules/simulation/types';
 import type {
   WasmCompareData,
+  WasmCompareParams,
   WasmCompareRoundData,
   WasmContestedCompareParams
 } from '@/lib/uma-sim-wasm/types';
@@ -16,12 +17,14 @@ import {
   splitContestedCompareRounds,
   type ComparePlan
 } from './wasm-compare';
-import { runContestedCompare } from '@/lib/uma-sim-wasm/loader';
+import { runCompare, runContestedCompare } from '@/lib/uma-sim-wasm/loader';
 
 vi.mock('@/lib/uma-sim-wasm/loader', () => ({
+  runCompare: vi.fn(),
   runContestedCompare: vi.fn()
 }));
 
+const mockedRunCompare = vi.mocked(runCompare);
 const mockedRunContestedCompare = vi.mocked(runContestedCompare);
 
 const course: CourseData = {
@@ -80,7 +83,10 @@ function compareParams(overrides: Partial<CompareParams> = {}): CompareParams {
   };
 }
 
-function wasmRunner(runnerId: number, overrides: Partial<WasmCompareRoundData> = {}): WasmCompareRoundData {
+function wasmRunner(
+  runnerId: number,
+  overrides: Partial<WasmCompareRoundData> = {}
+): WasmCompareRoundData {
   return {
     runnerId,
     time: [0, 1],
@@ -145,6 +151,33 @@ function wasmData(rounds: Array<WasmCompareRoundData[]>): WasmCompareData {
 }
 
 describe('buildComparePlan', () => {
+  it('builds the vacuum plan shape when selected', () => {
+    const plan = buildComparePlan(compareParams(), { mode: 'vacuum' });
+
+    expect(plan.mode).toBe('vacuum');
+    if (plan.mode !== 'vacuum') throw new Error('expected vacuum plan');
+    expect(plan.wasmParamsA.masterSeed).toBe(42);
+    expect(plan.wasmParamsB.masterSeed).toBe(42);
+    expect(plan.nsamples).toBe(8);
+  });
+
+  it('keeps injected debuffs in vacuum runner params', () => {
+    const plan = buildComparePlan(
+      compareParams({
+        injectedDebuffs: {
+          uma1: [{ id: 'debuff-1', skillId: runawaySkillId, position: 100 }],
+          uma2: []
+        }
+      }),
+      { mode: 'vacuum' }
+    );
+
+    if (plan.mode !== 'vacuum') throw new Error('expected vacuum plan');
+    expect(plan.wasmParamsA.runners[0]?.injectedDebuffs).toEqual([
+      expect.objectContaining({ position: 100 })
+    ]);
+  });
+
   it('builds the contested plan shape with both runners in one envelope', () => {
     const plan = buildComparePlan(compareParams(), { fieldSize: 9 });
 
@@ -169,6 +202,15 @@ describe('buildComparePlan', () => {
     // 2 compared + 3 context runners, A first / B second (insertion order)
     expect(plan.wasmParamsContested.runners).toHaveLength(5);
     expect(plan.wasmParamsContested.fillTo).toBeUndefined();
+  });
+
+  it('rejects vacuum plans with context runners', () => {
+    expect(() =>
+      buildComparePlan(compareParams(), {
+        mode: 'vacuum',
+        contextRunners: [createRunnerState()]
+      })
+    ).toThrow('Vacuum compare is duo-only and cannot include context runners');
   });
 });
 
@@ -214,7 +256,9 @@ describe('runComparisonRoundsFromPlan', () => {
 
     const plan: ComparePlan = {
       mode: 'contested',
-      wasmParamsContested: { runners: [{ name: 'A' }, { name: 'B' }] } as WasmContestedCompareParams,
+      wasmParamsContested: {
+        runners: [{ name: 'A' }, { name: 'B' }]
+      } as WasmContestedCompareParams,
       nsamples: 4,
       baseSeed: 100
     };
@@ -226,6 +270,59 @@ describe('runComparisonRoundsFromPlan', () => {
     );
     expect(rounds.roundsA).toHaveLength(1);
     expect(rounds.roundsB).toHaveLength(1);
+  });
+
+  it('splits vacuum batches by each batch primary runner', async () => {
+    mockedRunCompare
+      .mockResolvedValueOnce(wasmData([[wasmRunner(0, { hp: [1000, 900] })]]))
+      .mockResolvedValueOnce(wasmData([[wasmRunner(7, { hp: [1000, 800] })]]));
+
+    const plan: ComparePlan = {
+      mode: 'vacuum',
+      wasmParamsA: {} as WasmCompareParams,
+      wasmParamsB: {} as WasmCompareParams,
+      nsamples: 1,
+      baseSeed: 100
+    };
+
+    const rounds = await runComparisonRoundsFromPlan(plan, 1, 2);
+
+    expect(rounds.roundsA[0]?.runnerId).toBe(0);
+    expect(rounds.roundsB[0]?.runnerId).toBe(7);
+    expect(mockedRunCompare).toHaveBeenCalledTimes(2);
+    expect(mockedRunCompare).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ masterSeed: 102, nsamples: 1 })
+    );
+    expect(mockedRunCompare).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ masterSeed: 102, nsamples: 1 })
+    );
+  });
+
+  it('keeps vacuum chunk seed inputs deterministic across split chunks', async () => {
+    mockedRunCompare.mockClear();
+    mockedRunCompare.mockResolvedValue(wasmData([[wasmRunner(0)], [wasmRunner(0)]]));
+
+    const plan: ComparePlan = {
+      mode: 'vacuum',
+      wasmParamsA: {} as WasmCompareParams,
+      wasmParamsB: {} as WasmCompareParams,
+      nsamples: 4,
+      baseSeed: 10
+    };
+
+    await runComparisonRoundsFromPlan(plan, 2, 0);
+    await runComparisonRoundsFromPlan(plan, 2, 2);
+
+    expect(
+      mockedRunCompare.mock.calls.map(([params]) => [params.masterSeed, params.nsamples])
+    ).toEqual([
+      [10, 2],
+      [10, 2],
+      [12, 2],
+      [12, 2]
+    ]);
   });
 });
 

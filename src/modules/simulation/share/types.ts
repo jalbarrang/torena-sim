@@ -2,8 +2,7 @@ import type { IRunnerState } from '@/modules/runners/components/runner-card/type
 import type { WitVarianceSettings, StaminaDrainOverrides } from '@/store/settings.store';
 import type { RaceConditions } from '@/utils/races';
 import type { InjectedDebuffsMap, ScenarioOverridesMap } from '@/modules/simulation/types';
-
-type CompareMode = 'contested' | 'vacuum';
+import type { CompareMode } from '@/modules/simulation/stores/compare.store';
 
 export const SIMULATION_SNAPSHOT_VERSION = 2 as const;
 
@@ -27,7 +26,7 @@ export type SimulationSnapshot = {
   seed: number | null;
   nsamples: number;
   compareMode: CompareMode;
-  /** True when a legacy/vacuum share was coerced to contested + 2-field on decode. */
+  /** True when a legacy pre-mode snapshot was coerced to contested + 2-field on decode. */
   coercedFromVacuum?: boolean;
   /** Target field size (total gates); real umas fill first, mobs pad the rest. */
   fieldSize: number;

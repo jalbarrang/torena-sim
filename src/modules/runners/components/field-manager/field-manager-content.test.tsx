@@ -7,6 +7,7 @@ import { FieldManagerContent } from './field-manager-content';
 import { useRunnersStore, MAX_RUNNERS, MIN_RUNNERS } from '@/store/runners.store';
 import {
   useRaceStore,
+  DEFAULT_COMPARE_MODE,
   DEFAULT_FIELD_SIZE,
   MIN_FIELD_SIZE
 } from '@/modules/simulation/stores/compare.store';
@@ -32,6 +33,7 @@ const resetStores = () => {
   localStorage.clear();
   seedField(2);
   useRaceStore.setState({
+    compareMode: DEFAULT_COMPARE_MODE,
     fieldSize: DEFAULT_FIELD_SIZE
   });
 };
@@ -93,10 +95,34 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(state.compareB).toBe('r-1');
   });
 
-  it('does not render a compare mode control', () => {
+  it('hides the vacuum mode control at 3+ runners', () => {
+    seedField(2);
+    const { unmount } = render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+    expect(screen.getByRole('radiogroup', { name: /compare mode/i })).toBeInTheDocument();
+    unmount();
+
+    seedField(3);
+    render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+    expect(screen.queryByRole('radiogroup', { name: /compare mode/i })).not.toBeInTheDocument();
+  });
+
+  it('clicking Vacuum sets compare mode', () => {
+    seedField(2);
     render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
 
-    expect(screen.queryByRole('radiogroup', { name: /compare mode/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /^vacuum$/i }));
+
+    expect(useRaceStore.getState().compareMode).toBe('vacuum');
+  });
+
+  it('disables field-size controls in vacuum mode', () => {
+    seedField(2);
+    useRaceStore.setState({ compareMode: 'vacuum', fieldSize: DEFAULT_FIELD_SIZE });
+    render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+
+    expect(screen.getByRole('button', { name: /decrease field size/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /increase field size/i })).toBeDisabled();
+    expect(screen.getByRole('spinbutton')).toBeDisabled();
   });
 
   it('steps the field size with the +/- controls and clamps at bounds', () => {
@@ -161,8 +187,6 @@ describe('FieldManagerContent (pick mode)', () => {
     render(<FieldManagerContent pickRole="uma1" onClose={() => {}} />);
 
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /remove .* from field/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /remove .* from field/i })).not.toBeInTheDocument();
   });
 });

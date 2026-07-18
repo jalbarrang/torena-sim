@@ -16,6 +16,8 @@ Add contested compare as a separate use-case composition: run the existing `uma-
 
 > Amended by the contested-field initiative: the compared-runner ceiling was raised from 9 to 12 (`MAX_CONTESTED_FIELD`) and the boolean mob fill became a configurable `fill_to` target; `run_race_sim` remains exactly 9. Keep vacuum compare as the isolated paired-delta use case. The compare collector and DTO-shaped read-model types live in `uma-sim-primitives::compare` because they depend only on the observer/projection primitives and are valid for both engines.
 
+> Amended by the vacuum-compare-toggle initiative: vacuum compare is reinstated as an opt-in user-facing mode for duo fields (exactly two runners, no mobs); contested remains the default compare mode.
+
 This is not a mode flag inside formulas or the shared step kernel. Formula code stays field-agnostic; the difference remains at orchestration boundaries: vacuum compare synthesizes absent field inputs in `uma-sim-vacuum`, while contested compare obtains field inputs from a live `uma-sim-race` field and projects the same compare telemetry shape.
 
 ## Consequences
