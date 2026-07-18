@@ -119,6 +119,13 @@ describe('compare mode guards', () => {
     expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
   });
 
+  it('forces contested via subscription when the runners store grows past a duo', () => {
+    setCompareMode('vacuum');
+    expect(useRaceStore.getState().compareMode).toBe('vacuum');
+    seedRunners(3);
+    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
+  });
+
   it('reconciles a persisted vacuum mode against a >2 field at startup', () => {
     seedRunners(3);
     useRaceStore.setState({ compareMode: 'vacuum' });

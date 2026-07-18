@@ -166,8 +166,15 @@ export const reconcileCompareModeWithField = () => {
   }
 };
 
-// Deferred to a microtask: this store and runners.store import each other (runners.store calls forceContestedForField), so running at module scope can dereference `useRunnersStore` while runners.store is still mid-initialization (TDZ ReferenceError when a vacuum mode was persisted). After the module graph settles both stores exist and have rehydrated.
-queueMicrotask(reconcileCompareModeWithField);
+// Safe as a plain module-scope call: the store dependency is one-directional (this module imports runners.store; runners.store must never import back — that cycle once made this exact line a TDZ crash in the production bundle), so runners.store is fully initialized and rehydrated before this body runs.
+reconcileCompareModeWithField();
+
+// Field-growth enforcement: vacuum is duo-only, and runners.store cannot call forceContestedForField without recreating the module cycle above. React to any field change instead — this also covers every future growth path (addRunner, imports, whatever comes next) without per-callsite calls.
+useRunnersStore.subscribe((state, prevState) => {
+  if (state.runners.length !== prevState.runners.length) {
+    reconcileCompareModeWithField();
+  }
+});
 
 export const setFieldSize = (fieldSize: number) => {
   useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });

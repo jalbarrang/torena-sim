@@ -8,7 +8,6 @@ import type { IRunnerState } from '@/modules/runners/components/runner-card/type
 import { createRunnerState, runawaySkillId } from '@/modules/runners/components/runner-card/types';
 import { getGeneVersionSkillId, getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { skillsService } from '@/modules/data/services/SkillService';
-import { forceContestedForField } from '@/modules/simulation/stores/compare.store';
 
 export const MIN_RUNNERS = 2;
 export const MAX_RUNNERS = 12;
@@ -304,10 +303,8 @@ export const addRunner = (): string | null => {
   }
 
   const runner: FieldRunner = { ...createRunnerState(), fieldId: createFieldId() };
+  // Growing the field past a duo forces contested compare (vacuum is duo-only): the compare store subscribes to this store and reacts to the length change. Do not import compare.store from here — that back-edge creates a module cycle (see compare.store's field-growth subscription).
   useRunnersStore.setState((prev) => ({ runners: [...prev.runners, runner] }));
-
-  // Growing the field past a duo forces contested compare (vacuum is duo-only).
-  forceContestedForField();
 
   return runner.fieldId;
 };
