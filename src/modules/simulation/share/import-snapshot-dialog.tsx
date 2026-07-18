@@ -73,7 +73,7 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
     toast.success('Simulation settings loaded');
     if (preview.coercedFromVacuum) {
       toast.warning(
-        'This share was created with the removed vacuum mode. It was imported as a same-race head-to-head, so results will differ.'
+        'This share predates compare modes. It was imported as a same-race head-to-head, so results may differ from the original.'
       );
     }
     handleOpenChange(false);
