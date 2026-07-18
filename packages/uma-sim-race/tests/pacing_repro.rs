@@ -2,6 +2,12 @@
 //! with fronts" report. Prints a per-section dump of the focus runner vs the
 //! field; assertions encode the expected Long-G acceleration lag so a future
 //! fidelity fix has a concrete gate.
+//!
+//! Field mirrors the reporter's exported config (torena-sim-race-0i5d759.json):
+//! Tokyo turf 2500m (course 10506), Good ground, 9 runners at Great mood.
+//! Skills and course geometry (corners/slopes) are omitted — the harness has no
+//! skill-id plumbing — so absolute gaps differ from the live sim; the dump is
+//! for pacing-shape classification, not time parity.
 
 use std::collections::HashMap;
 
@@ -16,8 +22,8 @@ use uma_sim_primitives::skills::effect::PositionKeepState;
 use uma_sim_race::{Race, SimulationSettings};
 
 const FRAME_DT: f64 = 1.0 / 15.0;
-const COURSE_DISTANCE: f64 = 3200.0;
-const SEED: u64 = 42_424;
+const COURSE_DISTANCE: f64 = 2500.0;
+const SEED: u64 = 575_032;
 
 fn long_course() -> CourseData {
     let mut course = test_course();
@@ -77,34 +83,101 @@ fn bakushin() -> CreateRunner {
     r
 }
 
-fn pack_runner(name: &str, strategy: Strategy, speed: i32) -> CreateRunner {
+#[allow(clippy::too_many_arguments)]
+fn pack_runner(
+    name: &str,
+    strategy: Strategy,
+    stats: StatLine,
+    distance_apt: Aptitude,
+    strategy_apt: Aptitude,
+) -> CreateRunner {
     let mut r = empty_forced();
     r.name = name.to_owned();
+    r.mood = Mood::Great;
     r.strategy = strategy;
-    r.stats.speed = speed;
-    r.stats.stamina = 1100;
-    r.stats.power = 1000;
-    r.stats.guts = 800;
-    r.stats.wit = 900;
+    r.aptitudes = RunnerAptitudes {
+        distance: distance_apt,
+        strategy: strategy_apt,
+        surface: Aptitude::A,
+    };
+    r.stats = stats;
     r
+}
+
+fn stats(speed: i32, stamina: i32, power: i32, guts: i32, wit: i32) -> StatLine {
+    StatLine {
+        speed,
+        stamina,
+        power,
+        guts,
+        wit,
+    }
 }
 
 fn build_race() -> Race {
     let mut race = Race::new(
         long_course(),
-        GroundCondition::Firm,
+        GroundCondition::Good,
         SimulationSettings::default(),
         test_race_params(),
     );
     race.add_runner(bakushin());
-    race.add_runner(pack_runner("Mihono Bourbon", Strategy::FrontRunner, 1100));
-    race.add_runner(pack_runner("Kitasan Black", Strategy::PaceChaser, 1050));
-    race.add_runner(pack_runner("Oguri Cap", Strategy::PaceChaser, 1080));
-    race.add_runner(pack_runner("Inari One", Strategy::LateSurger, 1000));
-    race.add_runner(pack_runner("Front A", Strategy::FrontRunner, 1120));
-    race.add_runner(pack_runner("Pace B", Strategy::PaceChaser, 1020));
-    race.add_runner(pack_runner("Late C", Strategy::LateSurger, 980));
-    race.add_runner(pack_runner("End D", Strategy::EndCloser, 1000));
+    race.add_runner(pack_runner(
+        "Mob 103702",
+        Strategy::LateSurger,
+        stats(1200, 600, 800, 400, 1300),
+        Aptitude::A,
+        Aptitude::G,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 100201",
+        Strategy::Runaway,
+        stats(1200, 600, 800, 400, 1200),
+        Aptitude::D,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 100602",
+        Strategy::PaceChaser,
+        stats(1600, 750, 1100, 550, 1200),
+        Aptitude::S,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 104101",
+        Strategy::PaceChaser,
+        stats(1600, 901, 1200, 601, 1300),
+        Aptitude::S,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 105001",
+        Strategy::EndCloser,
+        stats(1600, 800, 1100, 600, 1200),
+        Aptitude::S,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 102602",
+        Strategy::FrontRunner,
+        stats(1600, 850, 1100, 600, 1300),
+        Aptitude::S,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 103402",
+        Strategy::EndCloser,
+        stats(1600, 850, 1100, 600, 1200),
+        Aptitude::S,
+        Aptitude::A,
+    ));
+    race.add_runner(pack_runner(
+        "Mob 106801",
+        Strategy::FrontRunner,
+        stats(1600, 850, 1100, 600, 1200),
+        Aptitude::S,
+        Aptitude::A,
+    ));
     race
 }
 
@@ -154,16 +227,17 @@ fn long_g_ten_speed_front_runner_pacing_dump() {
     eprintln!("pos_keep_end: {pos_keep_end:.1} (section_length={section_length:.1})");
 
     // Accel distance proficiency for G is 0.4 (NOT the speed table's 0.1).
-    // With power ≈ 1248 (1200 * 1.04 Great) and FR early strategy coef 1.0:
-    //   0.0006 * sqrt(500*1248) * 1.0 * 1.0 * 0.4 ≈ 0.1896
+    // With power ≈ 1198 (1200 * 1.04 Great − 50 Good-turf ground) and FR early
+    // strategy coef 1.0:
+    //   0.0006 * sqrt(500*1198) * 1.0 * 1.0 * 0.4 ≈ 0.1857
     assert_eq!(
         dist_apt,
         Aptitude::G,
         "G distance aptitude must survive prepare"
     );
     assert!(
-        (accel0 - 0.1896).abs() < 0.001,
-        "Long G early accel should be ~0.1896, got {accel0}"
+        (accel0 - 0.1857).abs() < 0.001,
+        "Long G early accel should be ~0.1857, got {accel0}"
     );
 
     let mut snaps: Vec<SectionSnap> = Vec::new();
