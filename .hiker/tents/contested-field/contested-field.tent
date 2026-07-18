@@ -2,8 +2,8 @@
 //
 // The collapse this prevents: an agent "unifying" the two field regimes
 // (race-sim's exact-9 and contested-compare's 2..=12) into one constant,
-// reintroducing a compare-mode branch to the user-facing flow, or reordering
-// the compare pair in engine params so the trace split silently swaps A and B.
+// silently making vacuum the default compare mode or allowing vacuum at field > 2,
+// or reordering the compare pair in engine params so the trace split silently swaps A and B.
 //
 // RaceSimField and ContestedField are deliberately DISTINCT sorts: a law
 // about one cannot be stated about the other, so "reuse the 9 check for
@@ -37,12 +37,16 @@ law mob_fill_valid(r) {
   r.fillTarget <= 12
 }
 
-// Compare mode: 0 = contested. The user-facing compare flow has no vacuum mode;
-// batch vacuum engine paths remain only for planner/basin sims outside this intent.
-sort CompareRun { fieldSize: Int, mode: Int }
-relation compare_flow_contested_only(run: CompareRun)
-law compare_flow_contested_only(run) {
-  run.mode == 0
+// Compare mode encoding (store/UI): 0 = contested (default), 1 = vacuum (opt-in).
+// Vacuum compare is a distinct sort so duo-only can be stated without disjunction;
+// contested field size stays on ContestedField (2..=12). Hiker has no `or`, so the
+// "contested default" half of the preferred disjunction is documentation + store
+// DEFAULT_COMPARE_MODE, not a law over CompareRun.mode.
+// Batch vacuum engine paths also remain for planner/basin sims outside this intent.
+sort VacuumRun { fieldSize: Int }
+relation vacuum_run_is_duo(r: VacuumRun)
+law vacuum_run_is_duo(r) {
+  r.fieldSize == 2
 }
 
 // Engine param ordering: Compare A is inserted first (index 0), B second

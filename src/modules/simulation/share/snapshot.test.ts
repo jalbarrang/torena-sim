@@ -55,7 +55,7 @@ const legacyCommon = {
 };
 
 describe('parseSnapshotJson', () => {
-  it('round-trips a v2 snapshot (field + compare pair + fillWithMobs)', () => {
+  it('round-trips a contested v2 snapshot unchanged', () => {
     const parsed = parseSnapshotJson(
       JSON.stringify(
         snapshot({
@@ -74,6 +74,7 @@ describe('parseSnapshotJson', () => {
     expect(parsed?.compareB).toBe(2);
     expect(parsed?.compareMode).toBe('contested');
     expect(parsed?.fieldSize).toBe(12);
+    expect(parsed?.coercedFromVacuum).toBeUndefined();
   });
 
   it('maps older v2 snapshots carrying fillWithMobs to field sizes', () => {
@@ -88,12 +89,8 @@ describe('parseSnapshotJson', () => {
   });
 
   it('rejects v2 snapshots with out-of-range compare indices', () => {
-    expect(
-      parseSnapshotJson(JSON.stringify(snapshot({ compareA: 0, compareB: 5 })))
-    ).toBeNull();
-    expect(
-      parseSnapshotJson(JSON.stringify(snapshot({ compareA: 1, compareB: 1 })))
-    ).toBeNull();
+    expect(parseSnapshotJson(JSON.stringify(snapshot({ compareA: 0, compareB: 5 })))).toBeNull();
+    expect(parseSnapshotJson(JSON.stringify(snapshot({ compareA: 1, compareB: 1 })))).toBeNull();
   });
 
   it('rejects unknown / future snapshot versions', () => {
@@ -101,7 +98,7 @@ describe('parseSnapshotJson', () => {
     expect(parseSnapshotJson(JSON.stringify(future))).toBeNull();
   });
 
-  it('imports a v1 legacy snapshot as contested head-to-head with a coercion flag', () => {
+  it('preserves an explicit v1 contested mode', () => {
     const v1Mobs = {
       version: 1,
       ...legacyCommon,
@@ -115,14 +112,14 @@ describe('parseSnapshotJson', () => {
     expect(parsedMobs?.compareA).toBe(0);
     expect(parsedMobs?.compareB).toBe(1);
     expect(parsedMobs?.compareMode).toBe('contested');
-    expect(parsedMobs?.fieldSize).toBe(2);
-    expect(parsedMobs?.coercedFromVacuum).toBe(true);
+    expect(parsedMobs?.fieldSize).toBe(9);
+    expect(parsedMobs?.coercedFromVacuum).toBeUndefined();
 
     const v1Duo = { ...v1Mobs, fieldComposition: 'duo' };
     const parsedDuo = parseSnapshotJson(JSON.stringify(v1Duo));
     expect(parsedDuo?.compareMode).toBe('contested');
     expect(parsedDuo?.fieldSize).toBe(2);
-    expect(parsedDuo?.coercedFromVacuum).toBe(true);
+    expect(parsedDuo?.coercedFromVacuum).toBeUndefined();
   });
 
   it('imports a pre-versioned legacy snapshot as contested head-to-head with a coercion flag', () => {
@@ -141,7 +138,7 @@ describe('parseSnapshotJson', () => {
     expect(parsed?.coercedFromVacuum).toBe(true);
   });
 
-  it('coerces a v2 vacuum snapshot to contested head-to-head with a coercion flag', () => {
+  it('round-trips a vacuum snapshot and forces a duo field', () => {
     const parsed = parseSnapshotJson(
       JSON.stringify(
         snapshot({
@@ -150,6 +147,17 @@ describe('parseSnapshotJson', () => {
         })
       )
     );
+
+    expect(parsed?.compareMode).toBe('vacuum');
+    expect(parsed?.fieldSize).toBe(2);
+    expect(parsed?.coercedFromVacuum).toBeUndefined();
+  });
+
+  it('coerces a v2 snapshot without a mode to contested head-to-head', () => {
+    const legacy = snapshot() as unknown as Record<string, unknown>;
+    delete legacy.compareMode;
+
+    const parsed = parseSnapshotJson(JSON.stringify(legacy));
 
     expect(parsed?.compareMode).toBe('contested');
     expect(parsed?.fieldSize).toBe(2);

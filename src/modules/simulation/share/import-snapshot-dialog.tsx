@@ -73,7 +73,7 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
     toast.success('Simulation settings loaded');
     if (preview.coercedFromVacuum) {
       toast.warning(
-        'This share was created with the removed vacuum mode. It was imported as a same-race head-to-head, so results will differ.'
+        'This share predates compare modes. It was imported as a same-race head-to-head, so results may differ from the original.'
       );
     }
     handleOpenChange(false);
@@ -93,9 +93,11 @@ export function ImportSnapshotDialog({ open, onOpenChange }: ImportSnapshotDialo
   const uma2Name = preview ? runnerName(preview.runners[preview.compareB]) : '';
   const runnerCount = preview ? preview.runners.length : 0;
   const compareModeLabel = preview
-    ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
-        runnerCount === 1 ? '' : 's'
-      })`
+    ? preview.compareMode === 'contested'
+      ? `Same race (field of ${Math.max(preview.fieldSize, runnerCount)}, ${runnerCount} uma${
+          runnerCount === 1 ? '' : 's'
+        })`
+      : 'Vacuum (isolated)'
     : '';
 
   return (

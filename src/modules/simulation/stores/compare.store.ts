@@ -17,6 +17,10 @@ import { MIN_RUNNERS, useRunnersStore } from '@/store/runners.store';
 
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 
+export type CompareMode = 'contested' | 'vacuum';
+
+export const DEFAULT_COMPARE_MODE: CompareMode = 'contested';
+
 // The user-facing "field size" (total gates). Real umas fill first; remaining
 // gates are padded with generated 600-stat mobs. Default 9: the
 // field-composition experiment (docs/dev-process/spike-contested-compare.md)
@@ -32,8 +36,16 @@ export const clampFieldSize = (value: number): number => {
   return Math.min(MAX_FIELD_SIZE, Math.max(MIN_FIELD_SIZE, Math.round(value)));
 };
 
+const isCompareMode = (value: unknown): value is CompareMode => {
+  return value === 'contested' || value === 'vacuum';
+};
+
+/** Vacuum mode compares two isolated runners; it is only valid for a duo field. */
+export const canUseVacuum = (fieldSize: number): boolean => fieldSize <= MIN_RUNNERS;
+
 type PersistedRaceStore = {
   injectedDebuffs?: InjectedDebuffsMap;
+  compareMode?: CompareMode;
   fieldSize?: number;
 };
 
@@ -53,6 +65,7 @@ type IRaceStore = {
   isSimulationRunning: boolean;
   simulationProgress: { current: number; total: number } | null;
   injectedDebuffs: InjectedDebuffsMap;
+  compareMode: CompareMode;
   fieldSize: number;
 };
 
@@ -74,17 +87,18 @@ export const useRaceStore = create<IRaceStore>()(
       isSimulationRunning: false,
       simulationProgress: null,
       injectedDebuffs: { uma1: [], uma2: [] },
+      compareMode: DEFAULT_COMPARE_MODE,
       fieldSize: DEFAULT_FIELD_SIZE
     }),
     {
       name: COMPARE_DEBUFFS_STORE_NAME,
       storage: createJSONStorage(() => localStorage),
-      // v4 drops `compareMode`: compare is contested-only (persisted 'vacuum'
-      // silently migrates away).
-      version: 4,
+      // v4 dropped `compareMode`; v5 reintroduces it with contested as the default.
+      version: 5,
       migrate: (persistedState, version) => migrateComparePersisted(persistedState, version),
       partialize: (state) => ({
         injectedDebuffs: state.injectedDebuffs,
+        compareMode: state.compareMode,
         fieldSize: state.fieldSize
       })
     }
@@ -101,10 +115,7 @@ export const migrateComparePersisted = (
     fillWithMobs?: boolean;
   };
 
-  // v1 stored `fieldComposition: 'duo' | 'mobs'`; v2 stored
-  // `fillWithMobs: boolean`; v3+ stores the explicit `fieldSize` (total
-  // gates). v4 drops `compareMode` entirely (contested-only compare); any
-  // persisted 'vacuum' from v3 is silently discarded.
+  // v1 stored `fieldComposition: 'duo' | 'mobs'`; v2 stored `fillWithMobs: boolean`; v3+ stores the explicit `fieldSize` (total gates). v4 dropped `compareMode`; v5 reintroduces it with contested as the default, so v4 and older persisted modes are ignored.
   let fieldSize: number;
   if (version >= 3) {
     fieldSize = clampFieldSize(state.fieldSize ?? DEFAULT_FIELD_SIZE);
@@ -119,6 +130,12 @@ export const migrateComparePersisted = (
 
   return {
     injectedDebuffs: state.injectedDebuffs ?? { uma1: [], uma2: [] },
+    compareMode:
+      version <= 4
+        ? DEFAULT_COMPARE_MODE
+        : isCompareMode(state.compareMode)
+          ? state.compareMode
+          : DEFAULT_COMPARE_MODE,
     fieldSize
   } satisfies PersistedRaceStore;
 };
@@ -126,6 +143,38 @@ export const migrateComparePersisted = (
 export const setCompareSeed = (seed: number | null) => {
   useRaceStore.setState({ seed });
 };
+
+export const setCompareMode = (compareMode: CompareMode) => {
+  if (compareMode === 'vacuum' && !canUseVacuum(useRunnersStore.getState().runners.length)) {
+    return;
+  }
+
+  useRaceStore.setState({ compareMode });
+};
+
+export const forceContestedForField = () => {
+  useRaceStore.setState({ compareMode: DEFAULT_COMPARE_MODE });
+};
+
+/** Startup reconciliation: vacuum is duo-only, but `compareMode` and the runner list persist in separate stores. An interrupted write (or storage tampering) can leave a persisted vacuum mode alongside a >2 field; fall back to contested. Runs once at module load, after both stores rehydrate synchronously (the runners store rehydrates first because this module imports it). Exported for unit tests. */
+export const reconcileCompareModeWithField = () => {
+  if (
+    useRaceStore.getState().compareMode === 'vacuum' &&
+    !canUseVacuum(useRunnersStore.getState().runners.length)
+  ) {
+    forceContestedForField();
+  }
+};
+
+// Safe as a plain module-scope call: the store dependency is one-directional (this module imports runners.store; runners.store must never import back — that cycle once made this exact line a TDZ crash in the production bundle), so runners.store is fully initialized and rehydrated before this body runs.
+reconcileCompareModeWithField();
+
+// Field-growth enforcement: vacuum is duo-only, and runners.store cannot call forceContestedForField without recreating the module cycle above. React to any field change instead — this also covers every future growth path (addRunner, imports, whatever comes next) without per-callsite calls.
+useRunnersStore.subscribe((state, prevState) => {
+  if (state.runners.length !== prevState.runners.length) {
+    reconcileCompareModeWithField();
+  }
+});
 
 export const setFieldSize = (fieldSize: number) => {
   useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });
@@ -267,6 +316,7 @@ export const useDebuffs = (): InjectedDebuffsMap => {
 export const useCompareSettings = () => {
   return useRaceStore(
     useShallow((state) => ({
+      compareMode: state.compareMode,
       fieldSize: state.fieldSize
     }))
   );

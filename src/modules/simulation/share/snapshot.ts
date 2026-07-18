@@ -7,7 +7,10 @@ import {
   DEFAULT_FIELD_SIZE,
   MIN_FIELD_SIZE,
   resetResults,
-  useRaceStore
+  setCompareMode,
+  setFieldSize,
+  useRaceStore,
+  type CompareMode
 } from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
@@ -48,7 +51,7 @@ function buildSnapshot(): SimulationSnapshot {
     racedef: cloneDeep(settings.racedef),
     seed: race.seed,
     nsamples: settings.nsamples,
-    compareMode: 'contested',
+    compareMode: race.compareMode,
     fieldSize: race.fieldSize,
     witVarianceSettings: cloneDeep(settings.witVarianceSettings),
     staminaDrainOverrides: cloneDeep(settings.staminaDrainOverrides),
@@ -96,6 +99,10 @@ function isRaceConditions(value: unknown): boolean {
     typeof value.time === 'number' &&
     typeof value.grade === 'number'
   );
+}
+
+function isCompareMode(value: unknown): value is CompareMode {
+  return value === 'contested' || value === 'vacuum';
 }
 
 function isWitVariance(value: unknown): boolean {
@@ -160,7 +167,8 @@ function parseCommonFields(
     seed: parsed.seed as number | null,
     nsamples: parsed.nsamples,
     witVarianceSettings: parsed.witVarianceSettings as SimulationSnapshot['witVarianceSettings'],
-    staminaDrainOverrides: parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
+    staminaDrainOverrides:
+      parsed.staminaDrainOverrides as SimulationSnapshot['staminaDrainOverrides'],
     forcedPositions: {
       uma1: fp.uma1 as Record<string, number>,
       uma2: fp.uma2 as Record<string, number>
@@ -187,20 +195,24 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
   if (compareB < 0 || compareB >= runners.length) return null;
   if (compareA === compareB) return null;
 
-  const coercedFromVacuum = parsed.compareMode !== 'contested';
-  // Newer v2 snapshots carry `fieldSize`; older v2 snapshots carried
-  // `fillWithMobs: boolean` (pad-to-9 vs no padding). Removed vacuum shares
-  // decode to the closest surviving analogue: contested head-to-head with no
-  // mob fill.
-  const fieldSize = coercedFromVacuum
-    ? MIN_FIELD_SIZE
-    : typeof parsed.fieldSize === 'number'
-      ? clampFieldSize(parsed.fieldSize)
-      : typeof parsed.fillWithMobs === 'boolean'
-        ? parsed.fillWithMobs
-          ? DEFAULT_FIELD_SIZE
-          : MIN_FIELD_SIZE
-        : DEFAULT_FIELD_SIZE;
+  if (parsed.compareMode !== undefined && !isCompareMode(parsed.compareMode)) return null;
+
+  // v2 snapshots without `compareMode` predate the mode field, so import them as contested head-to-head with no mob fill and surface the compatibility warning. Explicit modes preserve their original behavior.
+  const coercedFromVacuum = parsed.compareMode === undefined;
+  const compareMode: CompareMode = isCompareMode(parsed.compareMode)
+    ? parsed.compareMode
+    : 'contested';
+  if (compareMode === 'vacuum' && runners.length !== MIN_FIELD_SIZE) return null;
+  const fieldSize =
+    compareMode === 'vacuum' || coercedFromVacuum
+      ? MIN_FIELD_SIZE
+      : typeof parsed.fieldSize === 'number'
+        ? clampFieldSize(parsed.fieldSize)
+        : typeof parsed.fillWithMobs === 'boolean'
+          ? parsed.fillWithMobs
+            ? DEFAULT_FIELD_SIZE
+            : MIN_FIELD_SIZE
+          : DEFAULT_FIELD_SIZE;
 
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
@@ -208,7 +220,7 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
     runners,
     compareA,
     compareB,
-    compareMode: 'contested',
+    compareMode,
     coercedFromVacuum: coercedFromVacuum || undefined,
     fieldSize
   };
@@ -219,22 +231,30 @@ function parseLegacyPair(parsed: Record<string, unknown>): SimulationSnapshot | 
   const common = parseCommonFields(parsed);
   if (!common) return null;
   if (!isRunnerState(parsed.uma1)) return null;
+  if (parsed.compareMode !== undefined && !isCompareMode(parsed.compareMode)) return null;
 
   const uma1 = parsed.uma1 as IRunnerState;
   const uma2 = isRunnerState(parsed.uma2) ? (parsed.uma2 as IRunnerState) : createRunnerState();
 
-  // Pair-shape snapshots predate the contested-only compare flow. Import them
-  // as contested head-to-head with no mob fill and warn that results differ
-  // from the removed vacuum mode.
+  // Pair snapshots without `compareMode` predate the mode field. Preserve explicit v1 modes; legacy pre-mode pairs become contested duo shares.
+  const coercedFromVacuum = parsed.compareMode === undefined;
+  const compareMode: CompareMode = isCompareMode(parsed.compareMode)
+    ? parsed.compareMode
+    : 'contested';
+  const fieldSize =
+    compareMode === 'vacuum' || coercedFromVacuum || parsed.fieldComposition === 'duo'
+      ? MIN_FIELD_SIZE
+      : DEFAULT_FIELD_SIZE;
+
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
     ...common,
     runners: [uma1, uma2],
     compareA: 0,
     compareB: 1,
-    compareMode: 'contested',
-    coercedFromVacuum: true,
-    fieldSize: MIN_FIELD_SIZE
+    compareMode,
+    coercedFromVacuum: coercedFromVacuum || undefined,
+    fieldSize
   };
 }
 
@@ -289,9 +309,10 @@ export function importSnapshot(data: SimulationSnapshot): void {
 
   useRaceStore.setState({
     seed: data.seed,
-    fieldSize: clampFieldSize(data.fieldSize),
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
+  setFieldSize(data.compareMode === 'vacuum' ? MIN_FIELD_SIZE : data.fieldSize);
+  setCompareMode(data.compareMode);
 
   resetResults();
 }

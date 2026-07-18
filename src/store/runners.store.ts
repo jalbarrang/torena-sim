@@ -303,6 +303,7 @@ export const addRunner = (): string | null => {
   }
 
   const runner: FieldRunner = { ...createRunnerState(), fieldId: createFieldId() };
+  // Growing the field past a duo forces contested compare (vacuum is duo-only): the compare store subscribes to this store and reacts to the length change. Do not import compare.store from here — that back-edge creates a module cycle (see compare.store's field-growth subscription).
   useRunnersStore.setState((prev) => ({ runners: [...prev.runners, runner] }));
 
   return runner.fieldId;

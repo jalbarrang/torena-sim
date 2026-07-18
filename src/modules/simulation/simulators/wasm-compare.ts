@@ -13,12 +13,13 @@ import type {
 import type { CollectedRunnerRoundData } from '@/lib/uma-domain/race/race-observer';
 import type {
   WasmCompareData,
+  WasmCompareParams,
   WasmCompareRoundData,
   WasmContestedCompareParams
 } from '@/lib/uma-sim-wasm/types';
 import { initializeSimulationRun } from '@/modules/simulation/compare.types';
 import { wasmCompareRoundDataToCollected } from '@/lib/uma-sim-wasm/adapter-results';
-import { runContestedCompare } from '@/lib/uma-sim-wasm/loader';
+import { runCompare, runContestedCompare } from '@/lib/uma-sim-wasm/loader';
 import { computePositionDiff } from './shared-pure';
 
 type CompareStatsAccumulator = {
@@ -278,6 +279,17 @@ function reduceCompareRounds(
   };
 }
 
+/** Extract the primary-runner round data from a WASM compare-round list. */
+function primaryRounds(rounds: WasmCompareData['rounds']): Array<CollectedRunnerRoundData> {
+  return rounds.map((round) => {
+    const primary = round.runners[0];
+    if (!primary) {
+      throw new Error('Missing primary runner in WASM compare round');
+    }
+    return wasmCompareRoundDataToCollected(primary);
+  });
+}
+
 function findComparedRunner(
   runners: Array<WasmCompareRoundData>,
   runnerId: number,
@@ -342,6 +354,14 @@ export type CompareRounds = {
  * round 0; chunk `seedOffset` maps global round `seedOffset + j` to master seed
  * `baseSeed + seedOffset + j`, keeping chunked runs bit-for-bit identical.
  */
+type VacuumComparePlan = {
+  mode: 'vacuum';
+  wasmParamsA: WasmCompareParams;
+  wasmParamsB: WasmCompareParams;
+  nsamples: number;
+  baseSeed: number;
+};
+
 type ContestedComparePlan = {
   mode: 'contested';
   wasmParamsContested: WasmContestedCompareParams;
@@ -349,10 +369,10 @@ type ContestedComparePlan = {
   baseSeed: number;
 };
 
-export type ComparePlan = ContestedComparePlan;
+export type ComparePlan = ContestedComparePlan | VacuumComparePlan;
 
 /**
- * Run a WASM contested batch for a prebuilt {@link ComparePlan} and return the
+ * Run the WASM batch or batches for a prebuilt {@link ComparePlan} and return
  * raw per-round A/B telemetry (no reduction). Worker-safe: it only overrides
  * `masterSeed` + `nsamples` on the already-resolved params.
  */
@@ -363,16 +383,26 @@ export async function runComparisonRoundsFromPlan(
 ): Promise<CompareRounds> {
   const masterSeed = plan.baseSeed + seedOffset;
 
-  if (plan.wasmParamsContested.runners.length < 2) {
-    throw new Error('Contested compare plan requires at least two compared runners');
+  if (plan.mode === 'contested') {
+    if (plan.wasmParamsContested.runners.length < 2) {
+      throw new Error('Contested compare plan requires at least two compared runners');
+    }
+
+    const data = await runContestedCompare({
+      ...plan.wasmParamsContested,
+      masterSeed,
+      nsamples: chunkSamples
+    });
+    const rounds = splitContestedCompareRounds(data);
+    assertAlignedRounds(rounds, chunkSamples);
+    return rounds;
   }
 
-  const data = await runContestedCompare({
-    ...plan.wasmParamsContested,
-    masterSeed,
-    nsamples: chunkSamples
-  });
-  const rounds = splitContestedCompareRounds(data);
+  const [dataA, dataB] = await Promise.all([
+    runCompare({ ...plan.wasmParamsA, masterSeed, nsamples: chunkSamples }),
+    runCompare({ ...plan.wasmParamsB, masterSeed, nsamples: chunkSamples })
+  ]);
+  const rounds = { roundsA: primaryRounds(dataA.rounds), roundsB: primaryRounds(dataB.rounds) };
   assertAlignedRounds(rounds, chunkSamples);
   return rounds;
 }

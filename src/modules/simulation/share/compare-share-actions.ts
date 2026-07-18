@@ -35,7 +35,7 @@ export function downloadCompareResults(filename?: string): void {
       exportedAt: new Date().toISOString(),
       meta: {
         seed: race.seed,
-        compareMode: 'contested',
+        compareMode: race.compareMode,
         fieldSize: race.fieldSize,
         courseId: useSettingsStore.getState().courseId,
         samples: race.results.length
@@ -60,7 +60,7 @@ export function downloadCompareResults(filename?: string): void {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename ?? `umalator-results-contested-${race.seed ?? 'noseed'}.json`;
+    a.download = filename ?? `umalator-results-${race.compareMode}-${race.seed ?? 'noseed'}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Simulation results downloaded');
@@ -114,6 +114,7 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
       leadCompetitionStats: s.leadCompetitionStats,
       staminaStats: s.staminaStats,
       seed: s.seed,
+      compareMode: s.compareMode,
       fieldSize: s.fieldSize
     }))
   );
@@ -160,7 +161,10 @@ export function useCompareShareCardProps(): CompareShareCardProps | null {
     const imageUrl = getUmaImageUrl(runner.outfitId, runner.randomMobId);
     const skills = getSkillsForShareCard(runner.skills);
 
-    const compareSummary = `Same race · field of ${race.fieldSize}`;
+    const compareSummary =
+      race.compareMode === 'contested'
+        ? `Same race · field of ${race.fieldSize}`
+        : 'Vacuum · isolated runners';
     const raceSummary = `${getRaceSettingsSummaryLine(courseId, racedef)} · ${compareSummary}`;
 
     const statRows: CompareShareStatRow[] = [
