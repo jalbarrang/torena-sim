@@ -27,7 +27,7 @@ use uma_sim_primitives::runner::physics::{
 use uma_sim_primitives::runner::skills::FieldView;
 use uma_sim_primitives::runner::Runner;
 use uma_sim_primitives::shared_kernel::ids::RunnerId;
-use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
+use uma_sim_primitives::shared_kernel::language::{strategy_matches, GroundCondition, Strategy};
 use uma_sim_primitives::shared_kernel::params::RaceParameters;
 use uma_sim_primitives::shared_kernel::region::{Region, RegionList};
 use uma_sim_primitives::shared_kernel::rng::{Prng, Xoshiro256StarStar};
@@ -276,10 +276,12 @@ impl Race {
             let ctx = PrepareContext {
                 course: &self.course,
                 base_speed,
-                // Contested engine: live dynamic predicates + the ×3
-                // position-keep window (ADR-0005, no paradigm branch).
+                // Contested engine: live dynamic predicates + the ×10
+                // position-keep window (mechanics § Position Keeping: sections
+                // 1–10). ADR-0005 previously inherited ×3 from the retired TS
+                // reference; both engines now match canon.
                 condition_resolution: ConditionResolution::Dynamic,
-                pos_keep_end_multiplier: 3.0,
+                pos_keep_end_multiplier: 10.0,
                 race_params: &self.race_params,
                 whole_course: &self.whole_course,
                 parser: &parser,
@@ -345,6 +347,12 @@ impl Race {
                 entry.position > runner.position
                     && entry.strategy.order_rank() > runner.position_keep_strategy.order_rank()
             });
+            let only_front_runner = snapshot
+                .entries
+                .iter()
+                .filter(|entry| strategy_matches(entry.strategy, Strategy::FrontRunner))
+                .count()
+                == 1;
             let position_keep = PositionKeepContext {
                 position_keep_mode: self.settings.position_keep_mode,
                 num_runners: snapshot.num_active as usize,
@@ -354,6 +362,7 @@ impl Race {
                 pacer_is_self: snapshot.pacer == Some(runner.id),
                 second_place_position: snapshot.second_place_position,
                 backward_strategy_runner_ahead,
+                only_front_runner,
             };
             // The aggregate is the *producer*: it resolves every field-presence
             // input from the **live field** (ADR-0005 contested producer) and

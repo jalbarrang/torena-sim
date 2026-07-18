@@ -18,6 +18,8 @@ This document is a quick reference for the race mechanics that are available cur
 - ✅ Section randomness (Wit-based)
 - ✅ Minimum speed (Guts-based)
 - ✅ Starting speed (`3 m/s`)
+- ✅ Target speed hard cap (`30 m/s`)
+- ✅ Force-in modifier (`Random(0.1) + StrategyModifier`, early-race, lane > `0.12 × courseWidth`, inside open)
 
 ### Last Spurt ✅
 
@@ -216,7 +218,6 @@ Real-data amendments from [hakuraku.moe/notes/dueling](https://hakuraku.moe/note
 ### Global 7/1 Update (Deferred / Research Needed)
 
 - ❌ Post-1.5 pacemaker selection algorithm (`Range=10.0`, `Count=2.0` hints only)
-- ❌ Speed-up "12.5m only-front-runner" tweak
 
 ### JP 2.5th Anniversary Update - Not in Global
 
@@ -262,4 +263,4 @@ Real-data amendments from [hakuraku.moe/notes/dueling](https://hakuraku.moe/note
 - ✅ Display time: `actualTime * 1.18`
 - ✅ Position recording: `1s` intervals (or every frame `<1s` or `<25m` from goal)
 - ✅ Skills activate in ID order
-- ✅ Target speed cap: `30 m/s` (theoretical)
+- ✅ Target speed cap: `30 m/s`

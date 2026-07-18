@@ -99,8 +99,9 @@ pub struct PrepareContext<'a> {
     /// The contested engine resolves live dynamic predicates; the synthetic
     /// engine resolves static approximate regions.
     pub condition_resolution: ConditionResolution,
-    /// Engine-supplied position-keep window multiplier (×3 contested, ×10
-    /// synthetic) applied to the section length to derive `pos_keep_end`.
+    /// Engine-supplied position-keep window multiplier (×10 = sections 1–10 per
+    /// mechanics § Position Keeping) applied to the section length to derive
+    /// `pos_keep_end`.
     pub pos_keep_end_multiplier: f64,
     /// Race-wide parameters read by static skill conditions.
     pub race_params: &'a RaceParameters,

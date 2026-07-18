@@ -73,11 +73,11 @@ the contention coordinator) differs.
     engines from drifting.
 - **`uma-sim-race`** — the contested engine. Builds the field snapshot, runs the
   contention (proximity dueling / spot-struggle) coordinator passes, resolves
-  conditions live (`ConditionResolution::Dynamic`, ×3 position-keep window),
-  **produces `FieldInputs` from the real field**, calls the shared step, and
-  drives the 9-field + distribution orchestration (`run_race_sim`) plus the
-  streaming `WasmRaceSimulator`. Read-models: `RaceSimDataCollector`,
-  `RaceEventLogCollector`.
+  conditions live (`ConditionResolution::Dynamic`, ×10 position-keep window —
+  mechanics § Position Keeping sections 1–10), **produces `FieldInputs` from the
+  real field**, calls the shared step, and drives the 9-field + distribution
+  orchestration (`run_race_sim`) plus the streaming `WasmRaceSimulator`.
+  Read-models: `RaceSimDataCollector`, `RaceEventLogCollector`.
 - **`uma-sim-vacuum`** — the solo engine. Single-/small-field loop with **no
   contention coordinator and no field-composition folding**, synthetic dueling
   from `DuelingRates`, approximate conditions
@@ -85,6 +85,10 @@ the contention coordinator) differs.
   `FieldInputs` from approximate condition values + synthetic rates**, calls the
   same shared step, and drives the paired-delta orchestration (`run_compare`).
   Read-model: `CompareDataCollector`.
+
+> **Amendment (pacing fidelity):** Contested originally shipped with a ×3
+> position-keep window inherited from the retired TS reference. Both engines now
+> use ×10 so the contested bench matches canon sections 1–10.
 
 ### The seam is **data, not a switch**: `FieldInputs`
 

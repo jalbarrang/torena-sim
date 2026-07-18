@@ -42,6 +42,9 @@ pub struct PositionKeepContext {
     pub second_place_position: Option<f64>,
     /// Whether any more-backward strategy is physically ahead of this runner.
     pub backward_strategy_runner_ahead: bool,
+    /// Whether this runner is the only Front Runner / Runaway in the field
+    /// (post-1.5 SpeedUp threshold uses 12.5m instead of 4.5m).
+    pub only_front_runner: bool,
 }
 
 /// Wit check gating speed-up / overtake entry (always passes while rushed).
@@ -82,7 +85,7 @@ pub fn update_position_keep_coefficient(runner: &mut Runner) {
 }
 
 /// The position past which position keeping stops. The engine supplies the
-/// window `multiplier` (×3 contested, ×10 synthetic) applied to the section
+/// window `multiplier` (canon ×10 for sections 1–10) applied to the section
 /// length — the domain service no longer knows the simulation paradigm.
 pub fn calculate_pos_keep_end(section_length: f64, multiplier: f64) -> f64 {
     section_length * multiplier
@@ -161,19 +164,27 @@ fn lead_over_second(runner: &Runner, ctx: &PositionKeepContext) -> Option<f64> {
         .map(|second| runner.position - second)
 }
 
+/// SpeedUp lead threshold for a front-runner pacer (mechanics § Speed up mode).
+///
+/// Runaway keeps 17.5m. Post-1.5 anniversary: a solo Front Runner uses 12.5m;
+/// otherwise 4.5m.
+fn speed_up_lead_threshold(runner: &Runner, ctx: &PositionKeepContext) -> f64 {
+    if runner.position_keep_strategy == Strategy::Runaway {
+        17.5
+    } else if ctx.only_front_runner {
+        12.5
+    } else {
+        4.5
+    }
+}
+
 /// Run the front-runner branch of the `None` state.
 fn enter_from_none_front_runner(runner: &mut Runner, ctx: &PositionKeepContext) {
-    let my_strategy = runner.position_keep_strategy;
-
     if ctx.pacer_is_self {
         let Some(distance_ahead) = lead_over_second(runner, ctx) else {
             return;
         };
-        let threshold = if my_strategy == Strategy::Runaway {
-            17.5
-        } else {
-            4.5
-        };
+        let threshold = speed_up_lead_threshold(runner, ctx);
         if distance_ahead < threshold && speed_up_overtake_wit_check(runner) {
             begin_state(runner, PositionKeepState::SpeedUp);
             runner.pos_keep_exit_position = keep_exit_position(runner);
@@ -268,11 +279,7 @@ fn handle_speed_up(runner: &mut Runner, ctx: &PositionKeepContext) {
         let Some(distance_ahead) = lead_over_second(runner, ctx) else {
             return;
         };
-        let threshold = if runner.position_keep_strategy == Strategy::Runaway {
-            17.5
-        } else {
-            4.5
-        };
+        let threshold = speed_up_lead_threshold(runner, ctx);
         if distance_ahead >= threshold {
             exit_position_keep(runner, Some(-3.0));
         }
@@ -374,6 +381,7 @@ mod tests {
             pacer_is_self,
             second_place_position: second,
             backward_strategy_runner_ahead: false,
+            only_front_runner: false,
         }
     }
 
@@ -487,6 +495,26 @@ mod tests {
         let c = ctx(Some(200.0), true, Some(197.0));
         apply_virtual_position_keep(&mut r, &c);
         assert_eq!(r.position_keep_state, PositionKeepState::SpeedUp);
+    }
+
+    #[test]
+    fn solo_front_runner_uses_12_5m_speed_up_threshold() {
+        // 10m lead: above 4.5 (multi-FR) but below 12.5 (solo) → SpeedUp only when solo.
+        let mut multi_r = runner(Strategy::FrontRunner, 200.0);
+        multi_r.is_rushed = true;
+        initialize_position_keep(&mut multi_r, 2400.0, 3.0);
+        let mut multi = ctx(Some(200.0), true, Some(190.0));
+        multi.only_front_runner = false;
+        apply_virtual_position_keep(&mut multi_r, &multi);
+        assert_eq!(multi_r.position_keep_state, PositionKeepState::None);
+
+        let mut solo_r = runner(Strategy::FrontRunner, 200.0);
+        solo_r.is_rushed = true;
+        initialize_position_keep(&mut solo_r, 2400.0, 3.0);
+        let mut solo = ctx(Some(200.0), true, Some(190.0));
+        solo.only_front_runner = true;
+        apply_virtual_position_keep(&mut solo_r, &solo);
+        assert_eq!(solo_r.position_keep_state, PositionKeepState::SpeedUp);
     }
 
     #[test]

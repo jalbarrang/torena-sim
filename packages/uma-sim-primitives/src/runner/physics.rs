@@ -12,7 +12,8 @@
 //! `skills.rs` / `mechanics.rs`; they are fleshed out by their owning tasks.
 
 use crate::course::coefficients::{
-    acceleration, speed, strategy_module, BASE_ACCEL, PHASE_DECELERATION, UPHILL_BASE_ACCEL,
+    acceleration, speed, strategy_module, BASE_ACCEL, FORCE_IN_LANE_THRESHOLD_FRACTION,
+    PHASE_DECELERATION, TARGET_SPEED_CAP, UPHILL_BASE_ACCEL,
 };
 use crate::course::model::CourseData;
 use crate::course::phase::phase_start;
@@ -193,7 +194,7 @@ impl Runner {
         self.update_spot_struggle(ctx); // t-016
         self.update_power_conservation();
         self.update_last_spurt_state(); // t-016
-        self.update_target_speed();
+        self.update_target_speed(field_inputs.side_blocked, ctx.course.course_width);
         self.apply_forces();
         self.apply_lane_movement(field_inputs, ctx);
 
@@ -289,6 +290,11 @@ impl Runner {
     }
 
     /// Advance every registered approximate condition one tick.
+    ///
+    /// Iteration is sorted by condition name so RNG draws inside
+    /// `ApproximateCondition::update` are independent of `HashMap` random
+    /// state (otherwise two same-seed races can diverge once anything —
+    /// e.g. force-in — reads `condition_values`).
     fn tick_conditions(&mut self, horse_lane: f64) {
         let state = ApproximateConditionState {
             phase: self.phase.index() as i64,
@@ -299,14 +305,17 @@ impl Runner {
             strategy: self.strategy,
         };
         let conditions = std::mem::take(&mut self.conditions);
-        for (name, condition) in &conditions {
+        let mut names: Vec<&str> = conditions.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        for name in names {
+            let condition = conditions.get(name).expect("key from map");
             let current = self
                 .condition_values
                 .get(name)
                 .copied()
                 .unwrap_or_else(|| condition.value_on_start());
             let new_value = condition.update(&state, current, &mut *self.rng);
-            self.condition_values.insert(name.clone(), new_value);
+            self.condition_values.insert(name.to_owned(), new_value);
         }
         self.conditions = conditions;
     }
@@ -361,7 +370,11 @@ impl Runner {
     // ---- speed / forces ----
 
     /// Recompute the runner's target speed for this tick.
-    fn update_target_speed(&mut self) {
+    ///
+    /// `side_blocked` / `course_width` gate the early-race force-in modifier
+    /// (mechanics § Target Speed): applied when the runner is more than
+    /// `0.12 * course_width` from the inner fence and the inside is open.
+    fn update_target_speed(&mut self, side_blocked: bool, course_width: f64) {
         if !self.health_policy.has_remaining_health() {
             self.target_speed = self.min_speed;
         } else if self.is_last_spurt {
@@ -393,6 +406,17 @@ impl Runner {
         if self.lane_change_speed > 0.0 && !self.lane_movement_skills_active.is_empty() {
             self.target_speed += (0.0002 * self.adjusted_stats.power).sqrt();
         }
+
+        // Force-in: early-race only, outer-lane + inside open. Roll is once at
+        // prepare (`force_in_speed`); value is Random(0.1)+StrategyModifier.
+        if self.phase == Phase::EarlyRace
+            && !side_blocked
+            && self.current_lane > FORCE_IN_LANE_THRESHOLD_FRACTION * course_width
+        {
+            self.target_speed += self.force_in_speed;
+        }
+
+        self.target_speed = self.target_speed.min(TARGET_SPEED_CAP);
     }
 
     /// Recompute acceleration for this tick.
@@ -615,8 +639,12 @@ impl Runner {
         section_modifiers.push(0.0);
         self.section_modifiers = section_modifiers;
 
+        // Mechanics § Target Speed: ForceInModifier = Random(0.1) + StrategyModifier.
+        // Consumes one `random()` draw (same stream class as most other rolls);
+        // the previous `uniform(100) * strategy_modifier` form was both unused
+        // and an order-of-magnitude too large versus the documented formula.
         let strategy_modifier = strategy_module::force_in_speed_modifier(self.strategy);
-        self.force_in_speed = f64::from(self.rng.uniform(100)) * strategy_modifier;
+        self.force_in_speed = self.rng.random() * 0.1 + strategy_modifier;
     }
 
     /// Cache per-phase base accelerations and per-slope HP penalties.
@@ -809,6 +837,7 @@ mod tests {
                 pacer_is_self: false,
                 second_place_position: None,
                 backward_strategy_runner_ahead: false,
+                only_front_runner: true,
             },
             skill_triggers: SkillTriggerInputs { field },
         }

@@ -202,6 +202,13 @@ pub const BASE_ACCEL: f64 = 0.0006;
 /// Baseline uphill acceleration constant (`UphillBaseAccel`).
 pub const UPHILL_BASE_ACCEL: f64 = 0.0004;
 
+/// Hard ceiling on target speed (mechanics § Target Speed).
+pub const TARGET_SPEED_CAP: f64 = 30.0;
+
+/// Fraction of course width beyond which force-in may apply (mechanics § Target
+/// Speed / Force-in).
+pub const FORCE_IN_LANE_THRESHOLD_FRACTION: f64 = 0.12;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +276,12 @@ mod tests {
             strategy_module::force_in_speed_modifier(Strategy::Runaway),
             strategy_module::force_in_speed_modifier(Strategy::FrontRunner)
         );
+    }
+
+    #[test]
+    fn target_speed_cap_is_thirty() {
+        assert_eq!(TARGET_SPEED_CAP, 30.0);
+        assert_eq!(FORCE_IN_LANE_THRESHOLD_FRACTION, 0.12);
     }
 
     #[test]
