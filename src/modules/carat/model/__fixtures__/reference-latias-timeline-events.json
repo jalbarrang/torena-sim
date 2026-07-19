@@ -1,0 +1,267 @@
+{
+  "source": "results/reference-sheet/timeline-live.json (cached uma.moe payload; no network access during tests)",
+  "window": {
+    "from": "2026-07-18T22:00:00.000Z",
+    "to": "2027-07-19T22:00:00.000Z"
+  },
+  "events": [
+    {
+      "id": "campaign-218",
+      "type": "campaign",
+      "global_release_date": "2026-07-22T22:00:00Z",
+      "jp_release_date": "2022-08-24T03:00:00Z"
+    },
+    {
+      "id": "story-event-08_wings_of_iron_banner",
+      "type": "story_event",
+      "global_release_date": "2026-07-27T22:00:00Z",
+      "jp_release_date": "2022-08-29T03:00:00Z"
+    },
+    {
+      "id": "legend-race-13",
+      "type": "legend_race",
+      "global_release_date": "2026-08-18T22:00:00Z",
+      "jp_release_date": "2022-09-23T03:00:00Z"
+    },
+    {
+      "id": "campaign-194",
+      "type": "campaign",
+      "global_release_date": "2026-08-19T22:00:00Z",
+      "jp_release_date": "2022-09-26T03:00:00Z"
+    },
+    {
+      "id": "story-event-09_days_in_a_flash_banner",
+      "type": "story_event",
+      "global_release_date": "2026-08-21T22:00:00Z",
+      "jp_release_date": "2022-09-29T03:00:00Z"
+    },
+    {
+      "id": "campaign-195",
+      "type": "campaign",
+      "global_release_date": "2026-08-24T22:00:00Z",
+      "jp_release_date": "2022-10-03T20:00:00Z"
+    },
+    {
+      "id": "campaign-198",
+      "type": "campaign",
+      "global_release_date": "2026-09-09T22:00:00Z",
+      "jp_release_date": "2022-10-24T03:00:00Z"
+    },
+    {
+      "id": "legend-race-14",
+      "type": "legend_race",
+      "global_release_date": "2026-09-10T22:00:00Z",
+      "jp_release_date": "2022-10-22T03:00:00Z"
+    },
+    {
+      "id": "story-event-10_intertwined_memories_banner",
+      "type": "story_event",
+      "global_release_date": "2026-09-12T22:00:00Z",
+      "jp_release_date": "2022-10-28T03:00:00Z"
+    },
+    {
+      "id": "story-event-11_illuminate_the_heart_banner",
+      "type": "story_event",
+      "global_release_date": "2026-10-07T22:00:00Z",
+      "jp_release_date": "2022-11-28T03:00:00Z"
+    },
+    {
+      "id": "campaign-204",
+      "type": "campaign",
+      "global_release_date": "2026-10-12T22:00:00Z",
+      "jp_release_date": "2022-12-05T03:00:00Z"
+    },
+    {
+      "id": "campaign-207",
+      "type": "campaign",
+      "global_release_date": "2026-10-23T22:00:00Z",
+      "jp_release_date": "2022-12-18T20:00:00Z"
+    },
+    {
+      "id": "legend-race-15",
+      "type": "legend_race",
+      "global_release_date": "2026-10-30T22:00:00Z",
+      "jp_release_date": "2022-12-25T03:00:00Z"
+    },
+    {
+      "id": "story-event-12_happy_new_future_banner",
+      "type": "story_event",
+      "global_release_date": "2026-10-31T22:00:00Z",
+      "jp_release_date": "2022-12-29T03:00:00Z"
+    },
+    {
+      "id": "campaign-277",
+      "type": "campaign",
+      "global_release_date": "2026-11-23T22:00:00Z",
+      "jp_release_date": "2023-01-26T03:00:00Z"
+    },
+    {
+      "id": "story-event-01_sweet_memories_banner",
+      "type": "story_event",
+      "global_release_date": "2026-11-26T22:00:00Z",
+      "jp_release_date": "2023-01-30T03:00:00Z"
+    },
+    {
+      "id": "campaign-301",
+      "type": "campaign",
+      "global_release_date": "2026-12-08T22:00:00Z",
+      "jp_release_date": "2023-02-14T03:00:00Z"
+    },
+    {
+      "id": "campaign-302",
+      "type": "campaign",
+      "global_release_date": "2026-12-16T22:00:00Z",
+      "jp_release_date": "2023-02-24T03:00:00Z"
+    },
+    {
+      "id": "story-event-02_leap_into_a_new_world_banner",
+      "type": "story_event",
+      "global_release_date": "2026-12-16T22:00:00Z",
+      "jp_release_date": "2023-02-24T03:00:00Z"
+    },
+    {
+      "id": "campaign-303",
+      "type": "campaign",
+      "global_release_date": "2026-12-27T22:00:00Z",
+      "jp_release_date": "2023-03-10T03:00:00Z"
+    },
+    {
+      "id": "campaign-304",
+      "type": "campaign",
+      "global_release_date": "2027-01-04T22:00:00Z",
+      "jp_release_date": "2023-03-20T03:00:00Z"
+    },
+    {
+      "id": "story-event-03_wherefore_i_adore_you_banner",
+      "type": "story_event",
+      "global_release_date": "2027-01-11T22:00:00Z",
+      "jp_release_date": "2023-03-29T03:00:00Z"
+    },
+    {
+      "id": "campaign-308",
+      "type": "campaign",
+      "global_release_date": "2027-01-31T22:00:00Z",
+      "jp_release_date": "2023-04-24T03:00:00Z"
+    },
+    {
+      "id": "legend-race-16",
+      "type": "legend_race",
+      "global_release_date": "2027-02-01T22:00:00Z",
+      "jp_release_date": "2023-04-22T03:00:00Z"
+    },
+    {
+      "id": "story-event-04_tagball_rumble_banner",
+      "type": "story_event",
+      "global_release_date": "2027-02-03T22:00:00Z",
+      "jp_release_date": "2023-04-28T03:00:00Z"
+    },
+    {
+      "id": "story-event-05_an_oath_to_my_dear_challengers_banner",
+      "type": "story_event",
+      "global_release_date": "2027-02-28T22:00:00Z",
+      "jp_release_date": "2023-05-29T03:00:00Z"
+    },
+    {
+      "id": "legend-race-17",
+      "type": "legend_race",
+      "global_release_date": "2027-03-07T22:00:00Z",
+      "jp_release_date": "2023-06-05T03:00:00Z"
+    },
+    {
+      "id": "campaign-360",
+      "type": "campaign",
+      "global_release_date": "2027-03-19T22:00:00Z",
+      "jp_release_date": "2023-06-22T03:00:00Z"
+    },
+    {
+      "id": "story-event-06_summer_besties_banner",
+      "type": "story_event",
+      "global_release_date": "2027-03-24T22:00:00Z",
+      "jp_release_date": "2023-06-29T03:00:00Z"
+    },
+    {
+      "id": "legend-race-18",
+      "type": "legend_race",
+      "global_release_date": "2027-04-01T22:00:00Z",
+      "jp_release_date": "2023-07-06T03:00:00Z"
+    },
+    {
+      "id": "story-event-07_summers_sunlight_fades_to_blue_banner",
+      "type": "story_event",
+      "global_release_date": "2027-04-19T22:00:00Z",
+      "jp_release_date": "2023-07-31T03:00:00Z"
+    },
+    {
+      "id": "legend-race-19",
+      "type": "legend_race",
+      "global_release_date": "2027-04-28T22:00:00Z",
+      "jp_release_date": "2023-08-09T03:00:00Z"
+    },
+    {
+      "id": "campaign-372",
+      "type": "campaign",
+      "global_release_date": "2027-04-30T22:00:00Z",
+      "jp_release_date": "2023-08-14T03:00:00Z"
+    },
+    {
+      "id": "campaign-373",
+      "type": "campaign",
+      "global_release_date": "2027-05-08T22:00:00Z",
+      "jp_release_date": "2023-08-24T03:00:00Z"
+    },
+    {
+      "id": "campaign-374",
+      "type": "campaign",
+      "global_release_date": "2027-05-16T22:00:00Z",
+      "jp_release_date": "2023-09-04T03:00:00Z"
+    },
+    {
+      "id": "legend-race-20",
+      "type": "legend_race",
+      "global_release_date": "2027-05-20T22:00:00Z",
+      "jp_release_date": "2023-09-06T03:00:00Z"
+    },
+    {
+      "id": "campaign-466",
+      "type": "campaign",
+      "global_release_date": "2027-06-02T22:00:00Z",
+      "jp_release_date": "2023-09-25T03:00:00Z"
+    },
+    {
+      "id": "story-event-09_patchworks_farewell_banner",
+      "type": "story_event",
+      "global_release_date": "2027-06-05T22:00:00Z",
+      "jp_release_date": "2023-09-29T03:00:00Z"
+    },
+    {
+      "id": "campaign-467",
+      "type": "campaign",
+      "global_release_date": "2027-06-07T22:00:00Z",
+      "jp_release_date": "2023-10-02T20:00:00Z"
+    },
+    {
+      "id": "legend-race-21",
+      "type": "legend_race",
+      "global_release_date": "2027-06-12T22:00:00Z",
+      "jp_release_date": "2023-10-05T03:00:00Z"
+    },
+    {
+      "id": "campaign-470",
+      "type": "campaign",
+      "global_release_date": "2027-06-24T22:00:00Z",
+      "jp_release_date": "2023-10-23T03:00:00Z"
+    },
+    {
+      "id": "story-event-10_as_the_leaves_rust_feelings_blossom_banner",
+      "type": "story_event",
+      "global_release_date": "2027-06-30T22:00:00Z",
+      "jp_release_date": "2023-10-30T03:00:00Z"
+    },
+    {
+      "id": "legend-race-22",
+      "type": "legend_race",
+      "global_release_date": "2027-07-07T22:00:00Z",
+      "jp_release_date": "2023-11-06T03:00:00Z"
+    }
+  ]
+}

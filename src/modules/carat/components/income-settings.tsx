@@ -13,10 +13,11 @@ import { Switch } from '@/components/ui/switch';
 import {
   CHAMPIONS_MEETING_REWARDS,
   CLUB_RANK_MONTHLY_CARATS,
-  DAILY_CARAT_PACK_MONTHLY_CARATS,
+  DAILY_CARAT_PACK_AVERAGE_MONTHLY_CARATS,
+  DAILY_CARAT_PACK_FREE_CARATS_PER_DAY,
   LEAGUE_OF_HEROES_REWARDS,
   TEAM_TRIALS_WEEKLY_CARATS,
-  TRAINING_PASS_MONTHLY_CARATS
+  TRAINING_PASS_MATURE_MONTHLY_CARATS
 } from '@/modules/carat/model/income-tables';
 import { InfoHint } from '@/modules/carat/components/info-hint';
 import { monthlyRecurringCarats } from '@/modules/carat/model/income';
@@ -167,7 +168,18 @@ function SwitchRow(props: {
 
 export function IncomeSettings() {
   const settings = useCaratStore((state) => getActivePlan(state).settings);
-  const monthly = monthlyRecurringCarats(settings);
+  const now = new Date();
+  const monthly = monthlyRecurringCarats(settings, now);
+  const withoutTrainingPass = monthlyRecurringCarats({ ...settings, trainingPass: 'none' }, now);
+  const trainingPassOptions = Object.keys(TRAINING_PASS_MATURE_MONTHLY_CARATS).map((value) => {
+    const trainingPass = value as CaratSettings['trainingPass'];
+    const withTrainingPass = monthlyRecurringCarats({ ...settings, trainingPass }, now);
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      suffix: `${Math.round(withTrainingPass.carats - withoutTrainingPass.carats).toLocaleString()}/mo`
+    };
+  });
 
   return (
     <aside
@@ -219,17 +231,13 @@ export function IncomeSettings() {
         <SwitchRow
           label="Daily Carat Pack"
           checked={settings.dailyCaratPack}
-          helper={`+${DAILY_CARAT_PACK_MONTHLY_CARATS.toLocaleString()}/mo`}
+          helper={`+${DAILY_CARAT_PACK_FREE_CARATS_PER_DAY}/day (≈${Math.round(DAILY_CARAT_PACK_AVERAGE_MONTHLY_CARATS).toLocaleString()}/mo)`}
           onCheckedChange={(checked) => setCaratSetting('dailyCaratPack', checked)}
         />
         <SelectField
           label="Training Pass"
           value={settings.trainingPass}
-          options={Object.entries(TRAINING_PASS_MONTHLY_CARATS).map(([value, carats]) => ({
-            value,
-            label: value.charAt(0).toUpperCase() + value.slice(1),
-            suffix: `${carats.toLocaleString()}/mo`
-          }))}
+          options={trainingPassOptions}
           onValueChange={(value) =>
             setCaratSetting('trainingPass', value as CaratSettings['trainingPass'])
           }

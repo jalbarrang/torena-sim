@@ -1,0 +1,894 @@
+{
+  "source": {
+    "file": "latias-pull-plan.xlsx",
+    "sheets": {
+      "caratCalculator": "Carat Calculator",
+      "timeline": "Timeline"
+    }
+  },
+  "anchors": {
+    "timelineNow": {
+      "serial": 46221.91401,
+      "date": "2026-07-18"
+    },
+    "incomeStart": {
+      "serial": 46221,
+      "date": "2026-07-18"
+    }
+  },
+  "banners": [
+    {
+      "name": "Light Hello + Agnes Tachyon",
+      "type": "Support",
+      "start": {
+        "serial": 46225,
+        "date": "2026-07-22"
+      },
+      "end": {
+        "serial": 46244,
+        "date": "2026-08-10"
+      },
+      "income": {
+        "timelineHandouts": 3080,
+        "dailyQuest": 2220,
+        "teamTrials": 1500,
+        "clubRank": 1800,
+        "trainingPass": null,
+        "dailyPack": 1150,
+        "championsMeeting": 1600,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 0,
+        "misc": null
+      }
+    },
+    {
+      "name": "Mr. C.B. + Super Creek",
+      "type": "Support",
+      "start": {
+        "serial": 46280,
+        "date": "2026-09-15"
+      },
+      "end": {
+        "serial": 46288,
+        "date": "2026-09-23"
+      },
+      "income": {
+        "timelineHandouts": 3630,
+        "dailyQuest": 6470,
+        "teamTrials": 3750,
+        "clubRank": 3600,
+        "trainingPass": null,
+        "dailyPack": 3350,
+        "championsMeeting": 4800,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 150,
+        "misc": 2220
+      }
+    },
+    {
+      "name": "Ines Fujin (Valentine) + Mejiro Ryan (Valentine)",
+      "type": "Uma",
+      "start": {
+        "serial": 46338,
+        "date": "2026-11-12"
+      },
+      "end": {
+        "serial": 46352,
+        "date": "2026-11-26"
+      },
+      "income": {
+        "timelineHandouts": 6950,
+        "dailyQuest": 12640,
+        "teamTrials": 7125,
+        "clubRank": 7200,
+        "trainingPass": null,
+        "dailyPack": 6550,
+        "championsMeeting": 9600,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 300,
+        "misc": 6060
+      }
+    },
+    {
+      "name": "Mr. C.B. + Twin Turbo",
+      "type": "Uma",
+      "start": {
+        "serial": 46355,
+        "date": "2026-11-29"
+      },
+      "end": {
+        "serial": 46379,
+        "date": "2026-12-23"
+      },
+      "income": {
+        "timelineHandouts": 10270,
+        "dailyQuest": 15240,
+        "teamTrials": 8625,
+        "clubRank": 9000,
+        "trainingPass": null,
+        "dailyPack": 7900,
+        "championsMeeting": 12800,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 450,
+        "misc": 7680
+      }
+    },
+    {
+      "name": "Mejiro Ramonu",
+      "type": "Support",
+      "start": {
+        "serial": 46355,
+        "date": "2026-11-29"
+      },
+      "end": {
+        "serial": 46379,
+        "date": "2026-12-23"
+      },
+      "income": {
+        "timelineHandouts": 10270,
+        "dailyQuest": 15240,
+        "teamTrials": 8625,
+        "clubRank": 9000,
+        "trainingPass": null,
+        "dailyPack": 7900,
+        "championsMeeting": 12800,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 450,
+        "misc": 7680
+      }
+    },
+    {
+      "name": "Ancestors & Guides",
+      "type": "Support",
+      "start": {
+        "serial": 46372,
+        "date": "2026-12-16"
+      },
+      "end": {
+        "serial": 46381,
+        "date": "2026-12-25"
+      },
+      "income": {
+        "timelineHandouts": 10270,
+        "dailyQuest": 15430,
+        "teamTrials": 8625,
+        "clubRank": 9000,
+        "trainingPass": null,
+        "dailyPack": 8000,
+        "championsMeeting": 12800,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 450,
+        "misc": 7800
+      }
+    },
+    {
+      "name": "Jungle Pocket",
+      "type": "Support",
+      "start": {
+        "serial": 46414,
+        "date": "2027-01-27"
+      },
+      "end": {
+        "serial": 46424,
+        "date": "2027-02-06"
+      },
+      "income": {
+        "timelineHandouts": 11590,
+        "dailyQuest": 19580,
+        "teamTrials": 10875,
+        "clubRank": 12600,
+        "trainingPass": null,
+        "dailyPack": 10150,
+        "championsMeeting": 14400,
+        "legendOfHeroes": 3300,
+        "fiftyDayLogin": 600,
+        "misc": 10380
+      }
+    },
+    {
+      "name": "Marvelous Sunday",
+      "type": "Uma",
+      "start": {
+        "serial": 46436,
+        "date": "2027-02-18"
+      },
+      "end": {
+        "serial": 46446,
+        "date": "2027-02-28"
+      },
+      "income": {
+        "timelineHandouts": 11670,
+        "dailyQuest": 21700,
+        "teamTrials": 12000,
+        "clubRank": 12600,
+        "trainingPass": null,
+        "dailyPack": 11250,
+        "championsMeeting": 16000,
+        "legendOfHeroes": 3300,
+        "fiftyDayLogin": 1100,
+        "misc": 11700
+      }
+    },
+    {
+      "name": "Mei Satake + El Condor Pasa",
+      "type": "Support",
+      "start": {
+        "serial": 46482,
+        "date": "2027-04-05"
+      },
+      "end": {
+        "serial": 46500,
+        "date": "2027-04-23"
+      },
+      "income": {
+        "timelineHandouts": 14910,
+        "dailyQuest": 26910,
+        "teamTrials": 15000,
+        "clubRank": 16200,
+        "trainingPass": null,
+        "dailyPack": 13950,
+        "championsMeeting": 17600,
+        "legendOfHeroes": 6600,
+        "fiftyDayLogin": 1750,
+        "misc": 14940
+      }
+    },
+    {
+      "name": "Satono Diamond (Project L'Arc)",
+      "type": "Uma",
+      "start": {
+        "serial": 46495,
+        "date": "2027-04-18"
+      },
+      "end": {
+        "serial": 46504,
+        "date": "2027-04-27"
+      },
+      "income": {
+        "timelineHandouts": 15990,
+        "dailyQuest": 27290,
+        "teamTrials": 15375,
+        "clubRank": 16200,
+        "trainingPass": null,
+        "dailyPack": 14150,
+        "championsMeeting": 17600,
+        "legendOfHeroes": 9900,
+        "fiftyDayLogin": 1750,
+        "misc": 15180
+      }
+    },
+    {
+      "name": "Mejiro Ramonu",
+      "type": "Uma",
+      "start": {
+        "serial": 46521,
+        "date": "2027-05-14"
+      },
+      "end": {
+        "serial": 46532,
+        "date": "2027-05-25"
+      },
+      "income": {
+        "timelineHandouts": 16070,
+        "dailyQuest": 29990,
+        "teamTrials": 16875,
+        "clubRank": 18000,
+        "trainingPass": null,
+        "dailyPack": 15550,
+        "championsMeeting": 19200,
+        "legendOfHeroes": 9900,
+        "fiftyDayLogin": 1900,
+        "misc": 16860
+      }
+    },
+    {
+      "name": "Duramente + Satono Diamond",
+      "type": "Support",
+      "start": {
+        "serial": 46570,
+        "date": "2027-07-02"
+      },
+      "end": {
+        "serial": 46582,
+        "date": "2027-07-14"
+      },
+      "income": {
+        "timelineHandouts": 19310,
+        "dailyQuest": 34820,
+        "teamTrials": 19500,
+        "clubRank": 21600,
+        "trainingPass": null,
+        "dailyPack": 18050,
+        "championsMeeting": 20800,
+        "legendOfHeroes": 13200,
+        "fiftyDayLogin": 2050,
+        "misc": 19860
+      }
+    },
+    {
+      "name": "Orfevre + Ryoka Tsurugi",
+      "type": "Support",
+      "start": {
+        "serial": 46611,
+        "date": "2027-08-12"
+      },
+      "end": {
+        "serial": 46637,
+        "date": "2027-09-07"
+      },
+      "income": {
+        "timelineHandouts": 23290,
+        "dailyQuest": 40120,
+        "teamTrials": 22500,
+        "clubRank": 25200,
+        "trainingPass": 0,
+        "dailyPack": 20800,
+        "championsMeeting": 22400,
+        "legendOfHeroes": 16500,
+        "fiftyDayLogin": 2200,
+        "misc": 23160
+      }
+    },
+    {
+      "name": "El Condor Pasa + Sounds of Earth + Tanino Gimlet + Hishi Amazon + Nice Nature + Duramente + Gold City + Mejiro McQueen + Mihono Bourbon + Manhattan Cafe",
+      "type": "Support",
+      "start": {
+        "serial": 46623,
+        "date": "2027-08-24"
+      },
+      "end": {
+        "serial": 46632,
+        "date": "2027-09-02"
+      },
+      "income": {
+        "timelineHandouts": 22790,
+        "dailyQuest": 39640,
+        "teamTrials": 22125,
+        "clubRank": 25200,
+        "trainingPass": 0,
+        "dailyPack": 20550,
+        "championsMeeting": 22400,
+        "legendOfHeroes": 16500,
+        "fiftyDayLogin": 2200,
+        "misc": 22860
+      }
+    },
+    {
+      "name": "Eishin Flash (Summer Trip) + Hokko Tarumae (Summer Trip)",
+      "type": "Uma",
+      "start": {
+        "serial": 46720,
+        "date": "2027-11-29"
+      },
+      "end": {
+        "serial": 46736,
+        "date": "2027-12-15"
+      },
+      "income": {
+        "timelineHandouts": 25190,
+        "dailyQuest": 49670,
+        "teamTrials": 27750,
+        "clubRank": 30600,
+        "trainingPass": 7400,
+        "dailyPack": 25750,
+        "championsMeeting": 25600,
+        "legendOfHeroes": 23100,
+        "fiftyDayLogin": 2500,
+        "misc": 29100
+      }
+    },
+    {
+      "name": "Gentildonna",
+      "type": "Uma",
+      "start": {
+        "serial": 46738,
+        "date": "2027-12-17"
+      },
+      "end": {
+        "serial": 46755,
+        "date": "2028-01-03"
+      },
+      "income": {
+        "timelineHandouts": 28350,
+        "dailyQuest": 51500,
+        "teamTrials": 28875,
+        "clubRank": 32400,
+        "trainingPass": 7400,
+        "dailyPack": 26700,
+        "championsMeeting": 27200,
+        "legendOfHeroes": 23100,
+        "fiftyDayLogin": 2500,
+        "misc": 30240
+      }
+    },
+    {
+      "name": "Still in Love",
+      "type": "Support",
+      "start": {
+        "serial": 46738,
+        "date": "2027-12-17"
+      },
+      "end": {
+        "serial": 46755,
+        "date": "2028-01-03"
+      },
+      "income": {
+        "timelineHandouts": 28350,
+        "dailyQuest": 51500,
+        "teamTrials": 28875,
+        "clubRank": 32400,
+        "trainingPass": 7400,
+        "dailyPack": 26700,
+        "championsMeeting": 27200,
+        "legendOfHeroes": 23100,
+        "fiftyDayLogin": 2500,
+        "misc": 30240
+      }
+    },
+    {
+      "name": "Biwa Hayahide (Mecha)",
+      "type": "Uma",
+      "start": {
+        "serial": 46784,
+        "date": "2028-02-01"
+      },
+      "end": {
+        "serial": 46804,
+        "date": "2028-02-21"
+      },
+      "income": {
+        "timelineHandouts": 29590,
+        "dailyQuest": 56220,
+        "teamTrials": 31500,
+        "clubRank": 34200,
+        "trainingPass": 11100,
+        "dailyPack": 29150,
+        "championsMeeting": 28800,
+        "legendOfHeroes": 26400,
+        "fiftyDayLogin": 3150,
+        "misc": 33180
+      }
+    },
+    {
+      "name": "Daiwa Scarlet + Air Shakur",
+      "type": "Support",
+      "start": {
+        "serial": 46784,
+        "date": "2028-02-01"
+      },
+      "end": {
+        "serial": 46804,
+        "date": "2028-02-21"
+      },
+      "income": {
+        "timelineHandouts": 29590,
+        "dailyQuest": 56220,
+        "teamTrials": 31500,
+        "clubRank": 34200,
+        "trainingPass": 11100,
+        "dailyPack": 29150,
+        "championsMeeting": 28800,
+        "legendOfHeroes": 26400,
+        "fiftyDayLogin": 3150,
+        "misc": 33180
+      }
+    },
+    {
+      "name": "Symboli Kris S Power",
+      "type": "Support",
+      "start": {
+        "serial": 46791,
+        "date": "2028-02-08"
+      },
+      "end": {
+        "serial": 46801,
+        "date": "2028-02-18"
+      },
+      "income": {
+        "timelineHandouts": 29590,
+        "dailyQuest": 55930,
+        "teamTrials": 31125,
+        "clubRank": 34200,
+        "trainingPass": 11100,
+        "dailyPack": 29000,
+        "championsMeeting": 28800,
+        "legendOfHeroes": 26400,
+        "fiftyDayLogin": 3150,
+        "misc": 33000
+      }
+    },
+    {
+      "name": "Symboli Rudolf + Mejiro Ardan",
+      "type": "Support",
+      "start": {
+        "serial": 46826,
+        "date": "2028-03-14"
+      },
+      "end": {
+        "serial": 46840,
+        "date": "2028-03-28"
+      },
+      "income": {
+        "timelineHandouts": 31670,
+        "dailyQuest": 59690,
+        "teamTrials": 33375,
+        "clubRank": 36000,
+        "trainingPass": 12950,
+        "dailyPack": 30950,
+        "championsMeeting": 30400,
+        "legendOfHeroes": 29700,
+        "fiftyDayLogin": 3800,
+        "misc": 35340
+      }
+    },
+    {
+      "name": "Orfevre",
+      "type": "Uma",
+      "start": {
+        "serial": 46867,
+        "date": "2028-04-24"
+      },
+      "end": {
+        "serial": 46892,
+        "date": "2028-05-19"
+      },
+      "income": {
+        "timelineHandouts": 35070,
+        "dailyQuest": 64710,
+        "teamTrials": 36000,
+        "clubRank": 39600,
+        "trainingPass": 16650,
+        "dailyPack": 33550,
+        "championsMeeting": 32000,
+        "legendOfHeroes": 33000,
+        "fiftyDayLogin": 3950,
+        "misc": 38460
+      }
+    },
+    {
+      "name": "Almond Eye + Embodiment of Legends",
+      "type": "Support",
+      "start": {
+        "serial": 46867,
+        "date": "2028-04-24"
+      },
+      "end": {
+        "serial": 46892,
+        "date": "2028-05-19"
+      },
+      "income": {
+        "timelineHandouts": 35070,
+        "dailyQuest": 64710,
+        "teamTrials": 36000,
+        "clubRank": 39600,
+        "trainingPass": 16650,
+        "dailyPack": 33550,
+        "championsMeeting": 32000,
+        "legendOfHeroes": 33000,
+        "fiftyDayLogin": 3950,
+        "misc": 38460
+      }
+    },
+    {
+      "name": "Daring Tact",
+      "type": "Support",
+      "start": {
+        "serial": 46899,
+        "date": "2028-05-26"
+      },
+      "end": {
+        "serial": 46910,
+        "date": "2028-06-06"
+      },
+      "income": {
+        "timelineHandouts": 35650,
+        "dailyQuest": 66440,
+        "teamTrials": 37125,
+        "clubRank": 41400,
+        "trainingPass": 16650,
+        "dailyPack": 34450,
+        "championsMeeting": 33600,
+        "legendOfHeroes": 33000,
+        "fiftyDayLogin": 3950,
+        "misc": 39540
+      }
+    },
+    {
+      "name": "Cesario (Wedding) + Mejiro Ramonu (Wedding)",
+      "type": "Uma",
+      "start": {
+        "serial": 46934,
+        "date": "2028-06-30"
+      },
+      "end": {
+        "serial": 46948,
+        "date": "2028-07-14"
+      },
+      "income": {
+        "timelineHandouts": 35890,
+        "dailyQuest": 70110,
+        "teamTrials": 39000,
+        "clubRank": 43200,
+        "trainingPass": 20350,
+        "dailyPack": 36350,
+        "championsMeeting": 35200,
+        "legendOfHeroes": 36300,
+        "fiftyDayLogin": 4100,
+        "misc": 41820
+      }
+    },
+    {
+      "name": "Tucker Bryne + Tamamo Cross",
+      "type": "Support",
+      "start": {
+        "serial": 46953,
+        "date": "2028-07-19"
+      },
+      "end": {
+        "serial": 46978,
+        "date": "2028-08-13"
+      },
+      "income": {
+        "timelineHandouts": 35970,
+        "dailyQuest": 73000,
+        "teamTrials": 40500,
+        "clubRank": 45000,
+        "trainingPass": 22200,
+        "dailyPack": 37850,
+        "championsMeeting": 36800,
+        "legendOfHeroes": 36300,
+        "fiftyDayLogin": 4250,
+        "misc": 43620
+      }
+    },
+    {
+      "name": "Stay Gold + Admire Groove",
+      "type": "Support",
+      "start": {
+        "serial": 46994,
+        "date": "2028-08-29"
+      },
+      "end": {
+        "serial": 47020,
+        "date": "2028-09-24"
+      },
+      "income": {
+        "timelineHandouts": 39210,
+        "dailyQuest": 77050,
+        "teamTrials": 42750,
+        "clubRank": 46800,
+        "trainingPass": 24050,
+        "dailyPack": 39950,
+        "championsMeeting": 40000,
+        "legendOfHeroes": 39600,
+        "fiftyDayLogin": 4250,
+        "misc": 46140
+      }
+    },
+    {
+      "name": "Still in Love",
+      "type": "Uma",
+      "start": {
+        "serial": 46994,
+        "date": "2028-08-29"
+      },
+      "end": {
+        "serial": 47020,
+        "date": "2028-09-24"
+      },
+      "income": {
+        "timelineHandouts": 39210,
+        "dailyQuest": 77050,
+        "teamTrials": 42750,
+        "clubRank": 46800,
+        "trainingPass": 24050,
+        "dailyPack": 39950,
+        "championsMeeting": 40000,
+        "legendOfHeroes": 39600,
+        "fiftyDayLogin": 4250,
+        "misc": 46140
+      }
+    },
+    {
+      "name": "Kiyoko Hoshina + Tokai Teio",
+      "type": "Support",
+      "start": {
+        "serial": 47040,
+        "date": "2028-10-14"
+      },
+      "end": {
+        "serial": 47061,
+        "date": "2028-11-04"
+      },
+      "income": {
+        "timelineHandouts": 39370,
+        "dailyQuest": 81000,
+        "teamTrials": 45000,
+        "clubRank": 50400,
+        "trainingPass": 25900,
+        "dailyPack": 42000,
+        "championsMeeting": 41600,
+        "legendOfHeroes": 39600,
+        "fiftyDayLogin": 4400,
+        "misc": 48600
+      }
+    },
+    {
+      "name": "Stay Gold",
+      "type": "Uma",
+      "start": {
+        "serial": 47077,
+        "date": "2028-11-20"
+      },
+      "end": {
+        "serial": 47106,
+        "date": "2028-12-19"
+      },
+      "income": {
+        "timelineHandouts": 41530,
+        "dailyQuest": 85340,
+        "teamTrials": 47625,
+        "clubRank": 52200,
+        "trainingPass": 29600,
+        "dailyPack": 44250,
+        "championsMeeting": 43200,
+        "legendOfHeroes": 42900,
+        "fiftyDayLogin": 4550,
+        "misc": 51300
+      }
+    },
+    {
+      "name": "Fine Motion + Air Groove",
+      "type": "Support",
+      "start": {
+        "serial": 47081,
+        "date": "2028-11-24"
+      },
+      "end": {
+        "serial": 47094,
+        "date": "2028-12-07"
+      },
+      "income": {
+        "timelineHandouts": 41450,
+        "dailyQuest": 84190,
+        "teamTrials": 46875,
+        "clubRank": 52200,
+        "trainingPass": 27750,
+        "dailyPack": 43650,
+        "championsMeeting": 43200,
+        "legendOfHeroes": 42900,
+        "fiftyDayLogin": 4550,
+        "misc": 50580
+      }
+    },
+    {
+      "name": "Almond Eye",
+      "type": "Uma",
+      "start": {
+        "serial": 47123,
+        "date": "2029-01-05"
+      },
+      "end": {
+        "serial": 47157,
+        "date": "2029-02-08"
+      },
+      "income": {
+        "timelineHandouts": 44850,
+        "dailyQuest": 90260,
+        "teamTrials": 50250,
+        "clubRank": 55800,
+        "trainingPass": 31450,
+        "dailyPack": 46800,
+        "championsMeeting": 44800,
+        "legendOfHeroes": 46200,
+        "fiftyDayLogin": 4700,
+        "misc": 54360
+      }
+    },
+    {
+      "name": "Forever Young + Casino Drive",
+      "type": "Support",
+      "start": {
+        "serial": 47123,
+        "date": "2029-01-05"
+      },
+      "end": {
+        "serial": 47157,
+        "date": "2029-02-08"
+      },
+      "income": {
+        "timelineHandouts": 44850,
+        "dailyQuest": 90260,
+        "teamTrials": 50250,
+        "clubRank": 55800,
+        "trainingPass": 31450,
+        "dailyPack": 46800,
+        "championsMeeting": 44800,
+        "legendOfHeroes": 46200,
+        "fiftyDayLogin": 4700,
+        "misc": 54360
+      }
+    },
+    {
+      "name": "Daring Tact + Daring Heart",
+      "type": "Support",
+      "start": {
+        "serial": 47146,
+        "date": "2029-01-28"
+      },
+      "end": {
+        "serial": 47157,
+        "date": "2029-02-08"
+      },
+      "income": {
+        "timelineHandouts": 44850,
+        "dailyQuest": 90260,
+        "teamTrials": 50250,
+        "clubRank": 55800,
+        "trainingPass": 31450,
+        "dailyPack": 46800,
+        "championsMeeting": 44800,
+        "legendOfHeroes": 46200,
+        "fiftyDayLogin": 4700,
+        "misc": 54360
+      }
+    },
+    {
+      "name": "Light Hello + Mayano Top Gun",
+      "type": "Support",
+      "start": {
+        "serial": 46304,
+        "date": "2026-10-09"
+      },
+      "end": {
+        "serial": 46312,
+        "date": "2026-10-17"
+      },
+      "income": {
+        "timelineHandouts": 4210,
+        "dailyQuest": 8780,
+        "teamTrials": 4875,
+        "clubRank": 5400,
+        "trainingPass": null,
+        "dailyPack": 4550,
+        "championsMeeting": 8000,
+        "legendOfHeroes": 0,
+        "fiftyDayLogin": 150,
+        "misc": 3660
+      }
+    },
+    {
+      "name": "Maruzensky + Nakayama Festa",
+      "type": "Support",
+      "start": {
+        "serial": null,
+        "date": null
+      },
+      "end": {
+        "serial": null,
+        "date": null
+      },
+      "income": {
+        "timelineHandouts": null,
+        "dailyQuest": null,
+        "teamTrials": null,
+        "clubRank": null,
+        "trainingPass": null,
+        "dailyPack": null,
+        "championsMeeting": null,
+        "legendOfHeroes": null,
+        "fiftyDayLogin": null,
+        "misc": null
+      }
+    }
+  ],
+  "summary": {
+    "sixtyDayCarats": 38495,
+    "sixtyDayDays": 62,
+    "yearCarats": 243595,
+    "yearDays": 366,
+    "averageMonthlyCarats": 19700,
+    "averageMonthlyTickets": 29,
+    "shards": null
+  }
+}
