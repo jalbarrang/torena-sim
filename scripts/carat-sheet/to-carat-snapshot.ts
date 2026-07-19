@@ -123,7 +123,7 @@ type CliOptions = {
 };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const DEFAULT_INPUT_PATH = path.join(ROOT, 'results', 'henry-sheet', 'latias-pull-plan.json');
+const DEFAULT_INPUT_PATH = path.join(ROOT, 'results', 'reference-sheet', 'latias-pull-plan.json');
 const SUPPORT_CARD_CATALOG_PATH = path.join(
   ROOT,
   'src',
@@ -205,10 +205,11 @@ function parseCli(argv: string[]): CliOptions {
     timelinePath: options.timelinePath ?? positional[1],
     timelineUrl: options.timelineUrl ?? process.env.TIMELINE_PROXY_URL ?? DEFAULT_TIMELINE_URL,
     outputPath: path.resolve(
-      options.outputPath ?? path.join(ROOT, 'results', 'henry-sheet', 'latias-snapshot.json')
+      options.outputPath ?? path.join(ROOT, 'results', 'reference-sheet', 'latias-snapshot.json')
     ),
     reportPath: path.resolve(
-      options.reportPath ?? path.join(ROOT, 'results', 'henry-sheet', 'latias-snapshot-report.json')
+      options.reportPath ??
+        path.join(ROOT, 'results', 'reference-sheet', 'latias-snapshot-report.json')
     )
   };
 }
@@ -666,7 +667,7 @@ async function main(): Promise<void> {
   const snapshot: Snapshot = {
     version: 1,
     timestamp: Date.now(),
-    name: 'Latias4Ever pull plan (Henry sheet import)',
+    name: 'Latias4Ever pull plan (reference sheet import)',
     settings: buildSettings(source),
     plannedBanners,
     paidPurchases: {},

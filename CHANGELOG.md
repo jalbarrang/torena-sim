@@ -4,7 +4,7 @@
 
 ### Features
 
-* **carat:** correct event, login, Training Pass, daily-pack, and League of Heroes income; show all-in monthly income; add Henry reference differential coverage
+* **carat:** correct event, login, Training Pass, daily-pack, and League of Heroes income; show all-in monthly income; add reference spreadsheet differential coverage
 
 ## [0.32.0](https://github.com/jalbarrang/torena-sim/compare/v0.31.3...v0.32.0) (2026-07-18)
 

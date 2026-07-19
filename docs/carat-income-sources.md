@@ -2,13 +2,13 @@
 
 Pinned average carat/ticket handouts per timeline event type, for modeling the "timeline handouts" income component that `projectIncome` currently omits (taskman plan `carat-income-model-gaps`, t-004; consumed by t-005/t-006).
 
-**Primary source:** Henry's reference spreadsheet (`latias-pull-plan.xlsx`, Google Sheets export frozen 2026-07-18), compiled into `src/modules/carat/model/__fixtures__/henry-latias.json` (t-001). This document derives per-event-type values from the sheet's own itemized handout ledger and cross-checks them against public sources. All dates below are Global-server dates from the sheet's uma.moe-style catch-up projection.
+**Primary source:** the reference spreadsheet (`latias-pull-plan.xlsx`, Google Sheets export frozen 2026-07-18), compiled into `src/modules/carat/model/__fixtures__/reference-latias.json` (t-001). This document derives per-event-type values from the sheet's own itemized handout ledger and cross-checks them against public sources. All dates below are Global-server dates from the sheet's uma.moe-style catch-up projection.
 
 **Scope caveat — catch-up compression.** The sheet's Global schedule runs events faster than the JP calendar while Global catches up (16 story events, 13 Champions Meetings, and 3 anniversary cycles land in the 366-day reference window). Per-event values are the stable unit; per-month and per-year aggregates below are only valid for the catch-up period and will decay toward JP cadence once Global syncs. Our timeline payload (uma.moe via `workers/timeline-proxy`) encodes the same compressed schedule, so accruing per event from the timeline automatically tracks this.
 
 ## 1. How the sheet computes "Timeline handouts" (column AL)
 
-Henry's Timeline sheet (sheet2) contains an itemized handout ledger. Each event block has three reward streams, each credited on a specific serial date:
+The reference workbook's Timeline sheet (sheet2) contains an itemized handout ledger. Each event block has three reward streams, each credited on a specific serial date:
 
 | Stream | Ledger columns | Credited | Marker |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Item-level classification of every ledger entry credited in the sheet's 1-year s
 
 ## 3. Pinned values per timeline event type
 
-Our timeline payload types: `story_event`, `legend_race`, `campaign`, `champions_meeting` (already modeled), plus the `anniversaries` array. Counts below are uma.moe events with `global_release_date` in the same 1-year window, from the cached payload (`results/henry-sheet/timeline-live.json`).
+Our timeline payload types: `story_event`, `legend_race`, `campaign`, `champions_meeting` (already modeled), plus the `anniversaries` array. Counts below are uma.moe events with `global_release_date` in the same 1-year window, from the cached payload (`results/reference-sheet/timeline-live.json`).
 
 | Component | Pinned value (Global) | Sheet derivation | External source | Agreement |
 |---|---|---|---|---|
@@ -90,13 +90,13 @@ Our timeline payload types: `story_event`, `legend_race`, `campaign`, `champions
 
 ## 4. t-006 verdict: training pass and League of Heroes
 
-**Paid training pass:** `TRAINING_PASS_MATURE_MONTHLY_CARATS.paid` is **1,850/month**, not 2,200. Henry's `AQ42` formula and the frozen cumulative `AQ` ledger use the mature-tier total of **1,350 paid-pass rewards + 500 standard-pass rewards**. The [Training Pass reward list](https://wikiwiki.jp/vip_umamusu/%E3%83%88%E3%83%AC%E3%83%BC%E3%83%8B%E3%83%B3%E3%82%B0%E3%83%91%E3%82%B9) independently lists 500 jewels for the standard pass and 1,350 for premium rewards. The model therefore retains `free: 500` and changes the paid setting to the combined 1,850; paid-pass tickets remain 4 per pool per month.
+**Paid training pass:** `TRAINING_PASS_MATURE_MONTHLY_CARATS.paid` is **1,850/month**, not 2,200. The reference workbook's `AQ42` formula and frozen cumulative `AQ` ledger use the mature-tier total of **1,350 paid-pass rewards + 500 standard-pass rewards**. The [Training Pass reward list](https://wikiwiki.jp/vip_umamusu/%E3%83%88%E3%83%AC%E3%83%BC%E3%83%8B%E3%83%B3%E3%82%B0%E3%83%91%E3%82%B9) independently lists 500 jewels for the standard pass and 1,350 for premium rewards. The model therefore retains `free: 500` and changes the paid setting to the combined 1,850; paid-pass tickets remain 4 per pool per month.
 
 **Release/tier timing:** Global projections use the workbook's dated tiers: no pass carats or tickets before 2027-08-12; an introductory **400/month free** or **1,300/month paid (900+400)** from 2027-08-12 through 2027-12-16; and the mature **500/month free** or **1,850/month paid (1,350+500)** from 2027-12-17. Pass tickets begin at the Global release and remain 2 per pool per month for free or 4 per pool per month for paid. Projections crossing either boundary integrate each tier over its active fraction of the window; JP retains the mature tier throughout because this Global release schedule does not establish a JP cutoff.
 
 **League of Heroes cadence:** the 366-day reference window contains **five** Platinum 4 rewards, not twelve. The frozen `AT` cumulative ledger rises by exactly 3,300 five times, from 0 to 16,500; the lookup ledger dates are 2027-01-26, 03-11, 04-23, 06-04, and 07-17. The nearest succeeding banner rows independently show cumulative `AT` values of 3,300 (2027-01-27), 6,600 (2027-04-05), 9,900 (2027-04-18), 13,200 (2027-07-02), and 16,500 (2027-08-12). The payload supports only `campaign`, `story_event`, `champions_meeting`, and `legend_race`, with no distinct LoH event type, so `projectIncome` uses the documented expectation **5 / 12 events per month** rather than fabricating event dates. It preserves each selected-rank reward; Platinum 4 remains **3,300 carats + 4 combined tickets per event**, yielding an expected 1,375 carats and 1⅔ combined tickets per month.
 
-## 5. Ticket sources (Henry's ~29/month combined)
+## 5. Ticket sources (~29/month combined in the reference workbook)
 
 From the sheet's 1-year ticket summary (BD345:BH345 per pool, doubled for uma+support; frozen values):
 
@@ -127,5 +127,5 @@ No component fails the >2x gate between sheet-derived and external values. Resid
 
 1. **`campaign` per-event value is an attribution artifact.** The 66,150/yr residual is real money, but spreading it uniformly over uma.moe `campaign` events (≈3,500 each) is a modeling choice, not an observation. Anniversary cycles (≈9,100 each, 3 in the window — an artifact of catch-up compression; steady-state is 2/yr) dominate the residual and have their own payload signal (`anniversaries` array). t-005 should prefer anniversaries + flat monthly residual over a per-campaign constant.
 2. **Story event value steps over time** (2,160 now, 2,910 from ~Sep 2027 per the sheet's JP-sourced ledger). A single constant will drift; per-event-id overrides or a dated step is worth it if we care past mid-2027.
-3. **Aggregates assume catch-up cadence, and ledger/payload counts differ slightly.** Event counts (16 story events, 13 CM, 5 LoH, ~12 legend races per year) come from the compressed schedule; per-event constants remain valid afterwards but monthly expectations do not. The uma.moe payload shows 14 `story_event` and 10 `legend_race` entries in the same window vs the sheet's 16 and 12 — accruing the pinned per-event values over the payload will land ~10–15% below Henry's handout totals for those two categories.
-4. **Sheet ledger is manually curated** by Henry from JP history; individual item dates/labels are his mapping of JP events onto the projected Global calendar and are frozen as of 2026-07-18.
+3. **Aggregates assume catch-up cadence, and ledger/payload counts differ slightly.** Event counts (16 story events, 13 CM, 5 LoH, ~12 legend races per year) come from the compressed schedule; per-event constants remain valid afterwards but monthly expectations do not. The uma.moe payload shows 14 `story_event` and 10 `legend_race` entries in the same window vs the sheet's 16 and 12 — accruing the pinned per-event values over the payload will land ~10–15% below the reference workbook's handout totals for those two categories.
+4. **Sheet ledger is manually curated** from JP history; its individual item dates and labels map JP events onto the projected Global calendar and are frozen as of 2026-07-18.

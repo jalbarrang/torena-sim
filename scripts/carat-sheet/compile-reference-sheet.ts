@@ -410,7 +410,7 @@ async function main(): Promise<void> {
 
   validate(result);
 
-  const resultDirectory = path.join(ROOT, 'results', 'henry-sheet');
+  const resultDirectory = path.join(ROOT, 'results', 'reference-sheet');
   const fixturePath = path.join(
     ROOT,
     'src',
@@ -418,7 +418,7 @@ async function main(): Promise<void> {
     'carat',
     'model',
     '__fixtures__',
-    'henry-latias.json'
+    'reference-latias.json'
   );
   await mkdir(resultDirectory, { recursive: true });
   await mkdir(path.dirname(fixturePath), { recursive: true });

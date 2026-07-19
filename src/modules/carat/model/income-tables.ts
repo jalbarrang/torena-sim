@@ -49,7 +49,7 @@ export const LEAGUE_OF_HEROES_REWARDS = {
   'silver-4': { carats: 400, tickets: 0 }
 } as const;
 
-// The Global timeline payload has no distinct LoH event type; this expected cadence comes from Henry's five events in the 366-day reference window.
+// The Global timeline payload has no distinct LoH event type; this expected cadence comes from the reference workbook's five events in the 366-day reference window.
 export const LEAGUE_OF_HEROES_EXPECTED_EVENTS_PER_MONTH = 5 / 12;
 
 export const DAYS_PER_MONTH = 365.25 / 12;

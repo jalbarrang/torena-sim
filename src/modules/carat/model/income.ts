@@ -247,7 +247,7 @@ export function projectIncome(
     carats += calendarLoginBonusCarats(fromTime, toTime);
   }
 
-  // The timeline payload has no distinct LoH event type, so use the five-events-per-year expectation derived from Henry's AT ledger instead of inventing event dates. LoH ticket totals are split evenly between the two pools (sheet AT37 = value / 2).
+  // The timeline payload has no distinct LoH event type, so use the five-events-per-year expectation derived from the reference workbook's AT ledger instead of inventing event dates. LoH ticket totals are split evenly between the two pools (sheet AT37 = value / 2).
   const lohReward = safeRecordValue(LEAGUE_OF_HEROES_REWARDS, settings.lohRank, {
     carats: 0,
     tickets: 0
