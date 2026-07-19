@@ -453,7 +453,7 @@ export const PresetsPanel = () => {
       <Panel>
         <PanelHeader>
           <div className="flex items-center justify-between">
-            <PanelTitle>Presets</PanelTitle>
+            <PanelTitle>Race Presets</PanelTitle>
             {presetList.length > 0 && (
               <div className="flex items-center gap-1">
                 {panel.selectionMode ? (

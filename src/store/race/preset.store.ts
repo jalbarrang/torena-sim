@@ -16,13 +16,10 @@ export type IPresetStore = {
   presetOrder: string[];
 };
 
-function mergePresetsWithBundled(
-  persisted: IPresetStore | undefined,
-  current: IPresetStore
-): IPresetStore {
-  if (!persisted?.presets) {
-    return current;
-  }
+function migratePresetsPersisted(persistedState: unknown, version: number): IPresetStore {
+  const persisted = persistedState as IPresetStore | null | undefined;
+  const current = { presets: defaultPresets, presetOrder: defaultPresetOrder };
+  if (!persisted || version >= 1) return persisted ?? current;
 
   const mergedPresets: Record<string, RacePreset> = { ...defaultPresets };
   for (const [id, preset] of Object.entries(persisted.presets)) {
@@ -57,12 +54,9 @@ export const usePresetStore = create<IPresetStore>()(
     }),
     {
       name: PRESET_STORE_NAME,
+      version: 1,
       storage: createJSONStorage(() => localStorage),
-      merge: (persisted, current) => {
-        const state = persisted as IPresetStore | null | undefined;
-        if (!state) return current;
-        return mergePresetsWithBundled(state, current);
-      }
+      migrate: migratePresetsPersisted
     }
   )
 );

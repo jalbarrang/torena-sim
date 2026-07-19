@@ -59,7 +59,7 @@ export const LeftSidebar = () => {
       },
       {
         id: 'presets',
-        label: 'Presets',
+        label: 'Race Presets',
         icon: BookmarkIcon,
         content: <PresetsPanel />,
         hasBadge: false
