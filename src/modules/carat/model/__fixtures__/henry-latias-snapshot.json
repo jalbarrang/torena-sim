@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "timestamp": 1784412000000,
+  "name": "Latias4Ever pull plan (Henry sheet import)",
+  "settings": {
+    "server": "global",
+    "startingFreeCarats": 103191,
+    "startingPaidCarats": 13601,
+    "umaTickets": 56,
+    "supportTickets": 18,
+    "monthlyCarats": 15000,
+    "monthlyTickets": 27,
+    "teamTrialsClass": "class-6",
+    "clubRank": "b+",
+    "cmPlacement": "third",
+    "lohRank": "platinum-4",
+    "dailyCaratPack": true,
+    "trainingPass": "paid",
+    "trackPaidCarats": true
+  },
+  "plannedBanners": [
+    {
+      "id": "support-banner-2022_30111",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 0
+    },
+    {
+      "id": "support-banner-2022_30127",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 1
+    },
+    {
+      "id": "banner-2023_30146",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 2
+    },
+    {
+      "id": "banner-2023_30150",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 3
+    },
+    {
+      "id": "support-banner-2023_30151",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 4
+    },
+    {
+      "id": "support-banner-2023_30155",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 5
+    },
+    {
+      "id": "support-banner-2023_30169",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 6
+    },
+    {
+      "id": "banner-2023_30174",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 7
+    },
+    {
+      "id": "support-banner-2023_30187",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 8
+    },
+    {
+      "id": "banner-2023_30190",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 9
+    },
+    {
+      "id": "banner-2023_30198",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 10
+    },
+    {
+      "id": "support-banner-2023_30213",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 11
+    },
+    {
+      "id": "support-banner-2024_30223",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 12
+    },
+    {
+      "id": "paid-banner-50067",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 13
+    },
+    {
+      "id": "banner-2024_30260",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 14
+    },
+    {
+      "id": "banner-2024_30268",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 15
+    },
+    {
+      "id": "support-banner-2024_30269",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 16
+    },
+    {
+      "id": "banner-2024_30284",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 17
+    },
+    {
+      "id": "support-banner-2024_30285",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 18
+    },
+    {
+      "id": "support-banner-2024_30289",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 19
+    },
+    {
+      "id": "support-banner-2024_30301",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 20
+    },
+    {
+      "id": "banner-2025_30314",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 21
+    },
+    {
+      "id": "support-banner-2025_30315",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 22
+    },
+    {
+      "id": "support-banner-2025_30327",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 23
+    },
+    {
+      "id": "banner-2025_30342",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 24
+    },
+    {
+      "id": "support-banner-2025_30349",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 25
+    },
+    {
+      "id": "support-banner-2025_30363",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 26
+    },
+    {
+      "id": "banner-2025_30362",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 27
+    },
+    {
+      "id": "support-banner-2025_30383",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 28
+    },
+    {
+      "id": "banner-2025_30396",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 29
+    },
+    {
+      "id": "support-banner-2025_30399",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 30
+    },
+    {
+      "id": "banner-2026_30416",
+      "plannedPulls": 200,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 31
+    },
+    {
+      "id": "support-banner-2026_30417",
+      "plannedPulls": 400,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 32
+    },
+    {
+      "id": "support-banner-2025_30327",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 33
+    },
+    {
+      "id": "support-banner-2022_30135",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 34
+    },
+    {
+      "id": "support-banner-2022_30105",
+      "plannedPulls": 0,
+      "startingDupes": 0,
+      "copyGoals": {},
+      "ownedCopies": {},
+      "order": 35
+    }
+  ],
+  "paidPurchases": {},
+  "selectorChoices": {}
+}

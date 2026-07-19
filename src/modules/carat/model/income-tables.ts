@@ -49,12 +49,37 @@ export const LEAGUE_OF_HEROES_REWARDS = {
   'silver-4': { carats: 400, tickets: 0 }
 } as const;
 
-export const DAILY_CARAT_PACK_MONTHLY_CARATS = 2000;
+// The Global timeline payload has no distinct LoH event type; this expected cadence comes from Henry's five events in the 366-day reference window.
+export const LEAGUE_OF_HEROES_EXPECTED_EVENTS_PER_MONTH = 5 / 12;
 
-export const TRAINING_PASS_MONTHLY_CARATS = {
+export const DAYS_PER_MONTH = 365.25 / 12;
+
+// The daily pack's 500 paid carats per month are deliberately excluded: only its 50 free carats per day are income.
+export const DAILY_CARAT_PACK_FREE_CARATS_PER_DAY = 50;
+export const DAILY_CARAT_PACK_AVERAGE_MONTHLY_CARATS =
+  DAILY_CARAT_PACK_FREE_CARATS_PER_DAY * DAYS_PER_MONTH;
+
+export const TRAINING_PASS_MATURE_MONTHLY_CARATS = {
   none: 0,
   free: 500,
-  paid: 2200
+  paid: 1850
 } as const;
+
+export const GLOBAL_TRAINING_PASS_INTRO_MONTHLY_CARATS = {
+  none: 0,
+  free: 400,
+  paid: 1300
+} as const;
+
+export const TRAINING_PASS_MONTHLY_TICKETS_PER_TYPE = {
+  none: 0,
+  free: 2,
+  paid: 4
+} as const;
+
+export const GLOBAL_TRAINING_PASS_INTRO_START = '2027-08-12T22:00:00.000Z';
+export const GLOBAL_TRAINING_PASS_MATURE_START = '2027-12-17T22:00:00.000Z';
+
+export const LOGIN_BONUS_CARATS_PER_50_DAYS = 150;
 
 export const WEEKS_PER_MONTH = 4.345;

@@ -44,8 +44,13 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
     description: (
       <div className="flex flex-col gap-2 text-muted-foreground">
         <div>
-          These cards summarize your current stash, estimated monthly income, planned spend, and
-          final balance after the last banner in your plan.
+          These cards summarize your current stash, all-in monthly income, planned spend, and final
+          balance after the last banner in your plan.
+        </div>
+        <div>
+          Monthly Income averages a full year of projected income — recurring rewards plus Champions
+          Meeting, League of Heroes, and timeline events — per 30 days. Open its breakdown to
+          reconcile against other calculators.
         </div>
         <div>
           If the last card says <strong className="text-foreground">Affordable ✓</strong>, your full
