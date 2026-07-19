@@ -1,3 +1,5 @@
+## [0.32.3](https://github.com/jalbarrang/torena-sim/compare/v0.32.2...v0.32.3) (2026-07-19)
+
 ## [0.32.2](https://github.com/jalbarrang/torena-sim/compare/v0.32.1...v0.32.2) (2026-07-18)
 
 ## [0.32.1](https://github.com/jalbarrang/torena-sim/compare/v0.32.0...v0.32.1) (2026-07-18)
