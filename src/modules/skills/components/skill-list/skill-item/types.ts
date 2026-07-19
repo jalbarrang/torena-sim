@@ -1,4 +1,5 @@
 import type { ComponentProps, HTMLAttributes, ReactNode } from 'react';
+import type { ValueScalingDisplayContext } from '@/lib/uma-domain/skills/value-scaling/descriptor.types';
 import type { SkillEntry } from '@/modules/data/services/SkillService';
 import type { SkillCostSummary } from '@/modules/skills/skill-cost-summary';
 import type { SkillMeta } from './context';
@@ -38,6 +39,7 @@ export type SkillItemRailProps = ComponentProps<'div'> & {
 
 export type SkillItemContextProps = {
   skillId: string;
+  valueScalingContext?: ValueScalingDisplayContext;
   distanceFactor?: number;
   spCost?: number;
   costSummary?: SkillCostSummary;

@@ -67,7 +67,7 @@ function SkillCostDetailsPopover(props: Readonly<SkillCostDetailsPopoverProps>) 
 
 export function SkillItemDetailsActions(props: Readonly<SkillItemDetailsActionsProps>) {
   const { dismissable = false, onDismiss } = props;
-  const { skill, skillId, distanceFactor, onRemove } = useSkillItem();
+  const { skill, skillId, distanceFactor, valueScalingContext, onRemove } = useSkillItem();
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
@@ -88,7 +88,12 @@ export function SkillItemDetailsActions(props: Readonly<SkillItemDetailsActionsP
 
         {detailsOpen && (
           <PopoverContent align="start" side="right" className="w-[300px] p-0">
-            <ExpandedSkillDetails id={skillId} skill={skill} distanceFactor={distanceFactor} />
+            <ExpandedSkillDetails
+              id={skillId}
+              skill={skill}
+              distanceFactor={distanceFactor}
+              valueScalingContext={valueScalingContext}
+            />
           </PopoverContent>
         )}
       </Popover>

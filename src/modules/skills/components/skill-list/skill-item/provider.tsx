@@ -12,19 +12,21 @@ import type { SkillItemContextProps } from './types';
 
 export type SkillItemProviderProps = React.PropsWithChildren<SkillItemContextProps>;
 
-export function SkillItemProvider({
-  children,
-  skillId,
-  hasFastLearner,
-  spCost,
-  runnerId,
-  distanceFactor,
-  costSummary,
-  onHintLevelChange,
-  onBoughtChange,
-  onRemove,
-  getSkillMeta
-}: Readonly<SkillItemProviderProps>) {
+export function SkillItemProvider(props: Readonly<SkillItemProviderProps>) {
+  const {
+    children,
+    skillId,
+    valueScalingContext,
+    hasFastLearner,
+    spCost,
+    runnerId,
+    distanceFactor,
+    costSummary,
+    onHintLevelChange,
+    onBoughtChange,
+    onRemove,
+    getSkillMeta
+  } = props;
   const normalizedSkillId = useMemo(() => normalizeSkillIdForCostSummary(skillId), [skillId]);
 
   const skill = useMemo(() => {
@@ -73,6 +75,7 @@ export function SkillItemProvider({
       skill,
       skillId,
       normalizedSkillId,
+      valueScalingContext,
       hasFastLearner: hasFastLearner ?? false,
       hasCost,
       runnerId,
@@ -88,6 +91,7 @@ export function SkillItemProvider({
     skill,
     skillId,
     normalizedSkillId,
+    valueScalingContext,
     hasFastLearner,
     hasCost,
     runnerId,

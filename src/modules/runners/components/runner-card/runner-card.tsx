@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 import { PlusIcon } from 'lucide-react';
+import type { ValueScalingDisplayContext } from '@/lib/uma-domain/skills/value-scaling/descriptor.types';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { StatsTable } from './stats-table';
 import { AptitudeBucketsField } from '@/modules/runners/components/aptitude-buckets-field';
@@ -30,6 +31,7 @@ type RunnerCardProps = {
   value: IRunnerState;
   courseDistance?: number;
   runnerId: string;
+  valueScalingContext?: ValueScalingDisplayContext;
 
   // Events
   onChange: (value: IRunnerState) => void;
@@ -60,7 +62,8 @@ export const RunnerCard = (props: RunnerCardProps) => {
     showShareButton = true,
     courseId,
     showStrategyMood = true,
-    skillHotkey
+    skillHotkey,
+    valueScalingContext
   } = props;
 
   const isMobile = useIsMobile();
@@ -265,6 +268,7 @@ export const RunnerCard = (props: RunnerCardProps) => {
           <SkillItem
             key={skillId}
             skillId={skillId}
+            valueScalingContext={valueScalingContext}
             distanceFactor={props.courseDistance}
             costSummary={isSkillSpCostEnabled ? costSummaryBySkillId[skillId] : undefined}
             runnerId={isSkillSpCostEnabled ? props.runnerId : undefined}

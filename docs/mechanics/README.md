@@ -751,7 +751,9 @@ The effectiveness of aoharu skills scales with your team’s total [base stats](
 | 2600 \<= Total \< 3600 | 1.1x          |
 | 3600 \<= Total         | 1.2x          |
 
-Outside the Aoharu scenario (Team Trials, Champions Meetings), these skills apply their base value with no team-stats bonus (1.0x), as verified by in-game observation on Global with **Ignited Spirit** (210031/210032).
+This scaling also applies outside the Aoharu scenario: in Team Trials and Champions Meetings the multiplier is computed at race time from the racing team's combined base stat matching the skill (mood-adjusted; green skills excluded), as verified by in-game observation on Global (2026-07) and corroborated by uma.guide ("Ignited Spirit SPD ... 0.15 at base, 0.18 in Champions Meeting with a full 3600 team") and GameTora's skill tooltips. An earlier note here claimed the base value applies unchanged (1.0x) outside the scenario; that observation was made with a team in the 1800-2599 window, where the 1.0x tier is indistinguishable from "no scaling", and is superseded.
+
+The data extract pre-applies the best tier (1.2x) to these skills' stored modifiers (`patchModifier` in `scripts/data-extract/extract-skills.ts`, inherited from the original umalator), so the simulator always runs the >= 3600-total assumption. A racing team below that threshold receives a smaller effect in-game than the simulator models.
 
 ### Multiply Random (8, 9\) {#multiply-random-(8,-9)}
 
