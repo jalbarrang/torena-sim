@@ -1,23 +1,35 @@
 import type { SkillEntry } from '@/modules/data/services/SkillService';
 import type { SkillAlternative } from '@/lib/uma-domain/skills/skill.types';
+import type { ValueScalingDisplayContext } from '@/lib/uma-domain/skills/value-scaling/descriptor.types';
 import { FormatParser, formatEffect } from '@/modules/skills/components/formatters';
 import { HumanReadableParser } from '@/modules/skills/components/human-readable-formatter';
-import { describeValueScaling } from '@/lib/uma-domain/skills/value-scaling/registry';
+import {
+  buildValueScalingDisplay,
+  describeValueScaling
+} from '@/lib/uma-domain/skills/value-scaling/registry';
 import { cn } from '@/lib/utils';
 import i18n from '@/i18n';
 import { Code } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { SkillIcon } from './skill-list/skill-item/SkillIcon';
+import { SkillScalingBlock } from './skill-scaling-block';
 
 type IAlternativeDetailsProps = {
   alternative: SkillAlternative;
   distanceFactor?: number;
+  valueScalingContext?: ValueScalingDisplayContext;
 };
 
 function AlternativeDetails(props: Readonly<IAlternativeDetailsProps>) {
-  const { alternative, distanceFactor } = props;
+  const { alternative, distanceFactor, valueScalingContext } = props;
   const precondition = alternative.precondition ?? '';
+  const effects = alternative.effects.map((effect) => ({
+    ...effect,
+    modifier: effect.modifier / 10000
+  }));
+  const scalingModels = buildValueScalingDisplay(effects, valueScalingContext ?? {});
+  const structuredScalingUsages = new Set(scalingModels.map((model) => model.usage));
 
   return (
     <div className="flex flex-col text-xs gap-2">
@@ -66,27 +78,39 @@ function AlternativeDetails(props: Readonly<IAlternativeDetailsProps>) {
         {i18n.t('skilldetails.effects')}
 
         <div>
-          {alternative.effects.map((ef, effectIndex) => {
+          {effects.map((ef, effectIndex) => {
             const type = ef.type;
-            const modifier = ef.modifier / 10000;
+            const modifier = ef.modifier;
             const effectType = formatEffect[type as keyof typeof formatEffect];
+            const hasStructuredScaling = structuredScalingUsages.has(ef.valueUsage ?? 1);
             const effectValue =
-              describeValueScaling({ ...ef, modifier }) ??
+              (hasStructuredScaling ? null : describeValueScaling(ef)) ??
               (effectType ? effectType(modifier) : modifier);
             const effectLabel =
               type === 9 && modifier < 0 ? 'HP Drain' : i18n.t(`skilleffecttypes.${type}`);
             const effectKey = `${effectIndex}-${ef.type}-${ef.target}-${ef.modifier}`;
 
             return (
-              <div key={effectKey} className="flex items-center gap-1 py-px">
-                <span className="shrink-0 size-1 rounded-full bg-foreground/40"></span>
-                <span>
-                  {effectLabel}: {effectValue}
-                </span>
+              <div key={effectKey}>
+                <div className="flex items-center gap-1 py-px">
+                  <span className="shrink-0 size-1 rounded-full bg-foreground/40"></span>
+                  <span>
+                    {effectLabel}: {effectValue}
+                  </span>
+                  {hasStructuredScaling && (
+                    <span className="rounded-full border border-border px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                      scaled
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
+
+        {scalingModels.map((model) => (
+          <SkillScalingBlock key={model.usage} model={model} />
+        ))}
       </div>
 
       {alternative.baseDuration > 0 && (
@@ -127,11 +151,12 @@ type ExpandedSkillDetailsProps = {
   id: string;
   skill: SkillEntry;
   distanceFactor?: number;
+  valueScalingContext?: ValueScalingDisplayContext;
   className?: string;
 };
 
 export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
-  const { skill: skillData } = props;
+  const { skill: skillData, valueScalingContext } = props;
 
   return (
     <div className={cn('bg-background border-2 rounded-b-sm flex flex-col')}>
@@ -170,6 +195,7 @@ export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
                   <AlternativeDetails
                     alternative={alternative}
                     distanceFactor={props.distanceFactor}
+                    valueScalingContext={valueScalingContext}
                   />
                 </TabsContent>
               );
@@ -179,6 +205,7 @@ export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
           <AlternativeDetails
             alternative={skillData.alternatives[0]}
             distanceFactor={props.distanceFactor}
+            valueScalingContext={valueScalingContext}
           />
         )}
       </div>

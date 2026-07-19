@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { activatedTaggedMultiplier, resolveActivatedTagCountDisplay } from './activated-tag-count';
-import { describeValueScaling, supportedSimulatableValueUsages } from './registry';
+import { activatedTaggedMultiplier } from './activated-tag-count';
+import {
+  buildValueScalingDisplay,
+  describeValueScaling,
+  supportedSimulatableValueUsages
+} from './registry';
 
 describe('value-scaling descriptor registry', () => {
   it('keeps Direct effects on the numeric display fallback', () => {
@@ -16,7 +20,7 @@ describe('value-scaling descriptor registry', () => {
 
   it('describes Aoharu team-stats scaling (Ignited Spirit, usage 5)', () => {
     expect(describeValueScaling({ type: 31, modifier: 0.2, valueUsage: 5 })).toBe(
-      'Scales with Aoharu team stats in-scenario; base value (1.0×) in normal races'
+      'Scales with racing-team stats (0.8–1.2×); best tier (1.2×) already applied'
     );
   });
 
@@ -47,9 +51,81 @@ describe('value-scaling descriptor registry', () => {
     expect(activatedTaggedMultiplier(greens)).toBe(multiplier);
   });
 
-  it('resolves a known green count into the scaled display value', () => {
+  it.each([
+    [0, 0, 0],
+    [2, 0, 0],
+    [3, 1, 1],
+    [5, 2, 2],
+    [6, 3, 3]
+  ])(
+    'builds the usage-14 display at %i active greens',
+    (activatedGreenCount, multiplier, activeTierIndex) => {
+      const [model] = buildValueScalingDisplay(
+        [
+          { type: 27, modifier: 0.05, valueUsage: 14 },
+          { type: 31, modifier: 0.05, valueUsage: 14 }
+        ],
+        { activatedGreenCount }
+      );
+
+      expect(model).toMatchObject({
+        usage: 14,
+        resolution: 'resolved',
+        activeTierIndex,
+        trailing: `${activatedGreenCount} active → ${multiplier}×`
+      });
+      expect(model.rows).toEqual(
+        multiplier === 0
+          ? undefined
+          : [
+              { effectType: 27, base: 0.05, multiplier, result: 0.05 * multiplier },
+              { effectType: 31, base: 0.05, multiplier, result: 0.05 * multiplier }
+            ]
+      );
+    }
+  );
+
+  it('builds the Aoharu best-tier display from pre-fudged values', () => {
+    const [model] = buildValueScalingDisplay([{ type: 31, modifier: 0.24, valueUsage: 5 }], {});
+
+    expect(model).toMatchObject({
+      usage: 5,
+      header: 'Scales with racing-team stats',
+      resolution: 'fixed',
+      activeTierIndex: 4,
+      trailing: 'best tier pre-applied → 1.2×'
+    });
+    expect(model.rows?.[0]).toMatchObject({
+      effectType: 31,
+      multiplier: 1.2,
+      result: 0.24
+    });
+    expect(model.rows?.[0].base).toBeCloseTo(0.2);
+  });
+
+  it('builds an unsupported Climax display without marking usage 10 simulatable', () => {
+    const [model] = buildValueScalingDisplay([{ type: 27, modifier: 0.06, valueUsage: 10 }], {});
+
+    expect(model).toMatchObject({
+      usage: 10,
+      header: 'Scales with training races won',
+      resolution: 'unsupported',
+      activeTierIndex: 4,
+      trailing: 'best tier pre-applied → 1.2×'
+    });
+    expect(model.rows?.[0].base).toBeCloseTo(0.05);
+    expect(supportedSimulatableValueUsages.has(10)).toBe(false);
+  });
+
+  it('does not build blocks for direct and multiply-random effects', () => {
     expect(
-      resolveActivatedTagCountDisplay({ type: 27, modifier: 0.05 }, { activatedGreenCount: 6 })
-    ).toBe('6 activated greens → 3× → +0.15');
+      buildValueScalingDisplay(
+        [
+          { type: 27, modifier: 0.25, valueUsage: 1 },
+          { type: 9, modifier: 1, valueUsage: 8 }
+        ],
+        {}
+      )
+    ).toEqual([]);
   });
 });

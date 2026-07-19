@@ -90,7 +90,7 @@ This document is a quick reference for the race mechanics that are available cur
 
 - ✅ `Direct` (1)
 - ❌ `MultiplySkillNum` (2)
-- ❌ `Aoharu` skills (3-7)
+- ✅ `Aoharu` skills (3-7) — team-stat tiers apply in TT/CM; extract pre-applies the best tier (1.2×), so the sim assumes a ≥3600-total team
 - ✅ `MultiplyRandom` (8, 9)
 - ❌ `Climax` skills (10)
 - ❌ `MultiplyMaximumRawStatus` (13)

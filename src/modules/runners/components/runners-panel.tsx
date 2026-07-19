@@ -24,6 +24,7 @@ import {
   type FieldRunner
 } from '@/store/runners.store';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
+import { useActivatedGreenCount } from '@/modules/runners/hooks/use-activated-green-count';
 import { useCompareSettings } from '@/modules/simulation/stores/compare.store';
 import { useSettingsStore } from '@/store/settings.store';
 
@@ -122,6 +123,11 @@ export const RunnersPanel = () => {
   } = useRunnerLibraryStore();
 
   const course = useMemo(() => coursesService.getSimCourse(courseId), [courseId]);
+  const activatedGreenCount = useActivatedGreenCount({
+    skillIds: runner.skills,
+    strategy: runner.strategy,
+    courseId
+  });
 
   const isLinked = !!runner.linkedRunnerId;
   const linkedRunner = isLinked ? getLibraryRunner(runner.linkedRunnerId!) : null;
@@ -283,6 +289,7 @@ export const RunnersPanel = () => {
             courseDistance={course.distance}
             courseId={courseId}
             runnerId={runnerId}
+            valueScalingContext={{ activatedGreenCount }}
             onChange={updateRunner}
             onReset={resetRunner}
             onCopy={handleCopyRunner}

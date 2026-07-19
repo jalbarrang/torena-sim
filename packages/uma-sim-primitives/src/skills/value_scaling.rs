@@ -16,11 +16,12 @@ pub enum ValueScalingPolicy {
     Direct,
     /// The effect is multiplied by one random 0×/0.02×/0.04× roll.
     MultiplyRandom,
-    /// Aoharu-scenario team-stats scaling (usages 3–7). The multiplier tier is
-    /// driven by the training team's total base stats, a datum that only exists
-    /// inside the Aoharu scenario. Outside the scenario (CM / Team Trials — the
-    /// races this simulator models) the game applies the base value unchanged
-    /// (1.0×), so this policy resolves to the direct modifier. See
+    /// Aoharu team-stats scaling (usages 3–7). The multiplier tier (0.8×–1.2×)
+    /// is computed at race time from the racing team's combined base stat and
+    /// applies in TT/CM as well as in-scenario. The data extract pre-applies
+    /// the best tier (1.2×) to the stored modifier (`patchModifier` in
+    /// extract-skills.ts), so this policy resolves to the direct modifier —
+    /// the ≥3600-total-team assumption is baked into the data. See
     /// docs/mechanics/README.md § "Aoharu Skills (3-7)".
     MultiplyAoharuTeamStats,
     /// Reserved for usage 14, enabled once activated-tag state exists.
@@ -62,8 +63,8 @@ impl ValueScalingPolicy {
     pub fn supports_effect_type(self, effect_type: SkillType) -> bool {
         match self {
             Self::Direct => true,
-            // Resolves as the direct value outside the Aoharu scenario; no
-            // type restriction (Ignited Spirit scales Acceleration).
+            // Resolves as the direct (pre-fudged best-tier) value; no type
+            // restriction (Ignited Spirit scales Acceleration).
             Self::MultiplyAoharuTeamStats => true,
             Self::MultiplyRandom => effect_type == SkillType::Recovery,
             // Usage 14 is a generic count-based value multiplier (Copano Rickey
@@ -161,7 +162,7 @@ pub fn resolve_modifier(
 ) -> Result<f64, ResolveError> {
     match effect.value_scaling {
         ValueScalingPolicy::Direct => Ok(effect.modifier),
-        // 1.0× outside the Aoharu scenario; see the variant doc comment.
+        // Best tier (1.2×) is pre-applied at extraction; see the variant doc comment.
         ValueScalingPolicy::MultiplyAoharuTeamStats => Ok(effect.modifier),
         ValueScalingPolicy::MultiplyRandom => {
             if effect.effect_type != SkillType::Recovery {
@@ -271,9 +272,11 @@ mod tests {
     }
 
     #[test]
-    fn aoharu_team_stats_resolves_to_base_modifier_outside_scenario() {
-        // Ignited Spirit (210031/210032): Acceleration with usage 5. Outside
-        // the Aoharu scenario the game applies no team-stats bonus.
+    fn aoharu_team_stats_resolves_stored_modifier_as_direct() {
+        // Ignited Spirit (210031/210032): Acceleration with usage 5. The tier
+        // scaling applies in TT/CM, but the extract already multiplied the
+        // stored modifier by the best tier (1.2×), so the engine passes it
+        // through unchanged.
         let effect = spec(
             SkillType::Accel,
             0.2,

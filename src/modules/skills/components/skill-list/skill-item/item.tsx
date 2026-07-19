@@ -6,6 +6,7 @@ export const SkillItem = React.memo((props: Readonly<SkillItemProps>) => {
   const {
     children,
     skillId,
+    valueScalingContext,
     hasFastLearner,
     distanceFactor,
     spCost,
@@ -20,6 +21,7 @@ export const SkillItem = React.memo((props: Readonly<SkillItemProps>) => {
   return (
     <SkillItemProvider
       skillId={skillId}
+      valueScalingContext={valueScalingContext}
       hasFastLearner={hasFastLearner}
       distanceFactor={distanceFactor}
       spCost={spCost}

@@ -173,9 +173,10 @@ describe('SkillService.isSimulatable', () => {
     }
   });
 
-  it('treats the Aoharu family (usages 3–7) as simulatable at base value', () => {
-    // Fervor / Ignited Spirit lines: team-stats scaling only applies inside
-    // the Aoharu scenario; normal races use the base value (1.0x).
+  it('treats the Aoharu family (usages 3–7) as simulatable at the pre-fudged best tier', () => {
+    // Fervor / Ignited Spirit lines: team-stats scaling applies in TT/CM, but
+    // the extract pre-applies the best tier (1.2x), so the sim runs the stored
+    // value as Direct. See docs/mechanics/README.md § "Aoharu Skills (3-7)".
     const aoharu = [
       '210011',
       '210012',

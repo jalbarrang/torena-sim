@@ -219,6 +219,7 @@ function parseCliArgs(argv: Array<string>): ExtractSkillsOptions {
   };
 }
 
+// Scenario skills (Aoharu usages 3–7 and kin) scale at race time with the racing team's combined stats, including in TT/CM. We can't know the team here, so pre-apply the best tier (1.2×) — the sim then treats the value as Direct. See docs/mechanics/README.md § "Aoharu Skills (3-7)".
 function patchModifier(id: number, value: number): number {
   if (SCENARIO_SKILLS.has(id)) {
     return value * 1.2;

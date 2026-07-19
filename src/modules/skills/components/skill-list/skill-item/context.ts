@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { ValueScalingDisplayContext } from '@/lib/uma-domain/skills/value-scaling/descriptor.types';
 import type { SkillEntry } from '@/modules/data/services/SkillService';
 import type { SkillCostSummary } from '@/modules/skills/skill-cost-summary';
 
@@ -15,6 +16,7 @@ export type SkillItemContextValue = {
   skill: SkillEntry;
   skillId: string;
   normalizedSkillId: string;
+  valueScalingContext?: ValueScalingDisplayContext;
   hasFastLearner: boolean;
   hasCost: boolean;
   runnerId?: string;
