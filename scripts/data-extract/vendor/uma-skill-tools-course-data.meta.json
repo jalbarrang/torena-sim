@@ -1,0 +1,9 @@
+{
+  "description": "Vendored parsed course geometry used to fill courseeventparams/*.json. Refresh with: pnpm run extract:geometry --refresh",
+  "sourceRepo": "alpha123/uma-skill-tools",
+  "sourcePath": "data/course_data.json",
+  "ref": "master",
+  "commit": "8b3f5e27e939e77431679876403d3fb2f0709e2a",
+  "url": "https://raw.githubusercontent.com/alpha123/uma-skill-tools/8b3f5e27e939e77431679876403d3fb2f0709e2a/data/course_data.json",
+  "fetchedAt": "2026-07-19T22:08:39.919Z"
+}

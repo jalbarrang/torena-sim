@@ -18,6 +18,7 @@
     "version:current": "tsx scripts/master-data/get-current-resource-version.ts",
     "db:fetch": "tsx ./scripts/master-data/fetch-master-db.ts",
     "extract:all": "tsx scripts/data-extract/extract-all.ts",
+    "extract:geometry": "tsx scripts/data-extract/extract-geometry.ts",
     "extract:course-data": "tsx scripts/data-extract/extract-course-data.ts",
     "extract:skills": "tsx scripts/data-extract/extract-skills.ts",
     "extract:support-cards": "tsx scripts/data-extract/extract-support-cards.ts",
