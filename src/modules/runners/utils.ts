@@ -9,6 +9,7 @@ export type UmaSearchEntry = {
   name: string;
   outfit: string;
   aptitudes: UmaAptitudes;
+  rarity: number;
 };
 
 type Uma = {
@@ -64,7 +65,8 @@ function buildUmaSearchData(includeUpcoming = false): UmaSearchData {
         id,
         name: uma.name[1],
         outfit: uma.outfits[id],
-        aptitudes: uma.aptitudes[id]
+        aptitudes: uma.aptitudes[id],
+        rarity: uma.rarities[id] ?? 1
       };
     })
     .filter((entry): entry is UmaSearchEntry => entry !== null);
@@ -174,13 +176,16 @@ const getUmaOutfitName = (outfitId: string): string | null => {
 /**
  * Get Uma display info (name + outfit) by outfit ID
  */
-export const getUmaDisplayInfo = (outfitId: string): { name: string; outfit: string } | null => {
+export const getUmaDisplayInfo = (
+  outfitId: string
+): { name: string; outfit: string; rarity: number } | null => {
   try {
     const uma = getUmaById(outfitId);
 
     return {
       name: uma.name[1],
-      outfit: uma.outfits[outfitId]
+      outfit: uma.outfits[outfitId],
+      rarity: uma.rarities[outfitId] ?? 1
     };
   } catch {
     return null;

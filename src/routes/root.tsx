@@ -52,6 +52,7 @@ import { SkillsPage } from './_tools/skills';
 import { SkillVisualizerPage } from './_tools/skill-visualizer';
 import { SparkOddsPage } from './_tools/spark-odds';
 import { CaratCalculatorPage } from './_tools/carat-calculator';
+import { TraineeListPage } from './_tools/trainee-list';
 
 import { SupportCardsPage } from './_tools/support-cards';
 import PrivacyPolicy from './privacy';
@@ -220,6 +221,18 @@ export function RootComponent() {
                   description="Plan your gacha pulls against the live banner timeline"
                 >
                   <CaratCalculatorPage />
+                </RoutePage>
+              }
+            />
+
+            <Route
+              path="/trainee-list"
+              element={
+                <RoutePage
+                  title="Trainee List"
+                  description="Track which trainees you own, with star unlock and potential levels"
+                >
+                  <TraineeListPage />
                 </RoutePage>
               }
             />

@@ -21,6 +21,7 @@ export type UmaEntry = {
   name: Array<string>; // [Japanese name, English name]
   outfits: Record<string, string>; // { outfitId: "epithet" }
   aptitudes: Record<string, UmaAptitudes>; // { outfitId: innate aptitudes }
+  rarities: Record<string, number>; // { outfitId: base rarity (1-3) }
 };
 
 export type UmasMap = Record<string, UmaEntry>;

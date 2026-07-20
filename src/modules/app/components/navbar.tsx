@@ -32,7 +32,8 @@ const toolNavItems: NavItem[] = [
   { value: 'skills', label: 'Skills', to: '/skills' },
   { value: 'skill-visualizer', label: 'Skill Visualizer', to: '/skill-visualizer' },
   { value: 'support-cards', label: 'Support Cards', to: '/support-cards' },
-  { value: 'carat-calculator', label: 'Carat Calculator', to: '/carat-calculator' }
+  { value: 'carat-calculator', label: 'Carat Calculator', to: '/carat-calculator' },
+  { value: 'trainee-list', label: 'Trainee List', to: '/trainee-list' }
 ];
 
 export function Navbar() {
@@ -47,6 +48,7 @@ export function Navbar() {
     if (pathname === '/skill-visualizer') return 'skill-visualizer';
     if (pathname === '/support-cards') return 'support-cards';
     if (pathname === '/carat-calculator') return 'carat-calculator';
+    if (pathname === '/trainee-list') return 'trainee-list';
     if (pathname.startsWith('/race-sim')) return 'race-sim';
     return 'simulation';
   }, [pathname]);
@@ -87,8 +89,7 @@ const MobileNavbar = (props: MobileNavbarProps) => {
       onClick={handleNavClick}
       className={cn('rounded-md px-3 py-2 text-sm font-medium text-left transition-colors', {
         'bg-accent text-accent-foreground': currentTab === item.value,
-        'text-muted-foreground hover:bg-accent/50 hover:text-foreground':
-          currentTab !== item.value
+        'text-muted-foreground hover:bg-accent/50 hover:text-foreground': currentTab !== item.value
       })}
     >
       {item.label}

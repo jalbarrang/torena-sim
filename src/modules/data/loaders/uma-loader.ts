@@ -8,9 +8,12 @@ type CharacterCardSnapshot = {
   char_id: number;
   name_en?: string | null;
   name_jp?: string | null;
+  rarity?: number;
   title_en_gl?: string | null;
   title_jp?: string | null;
 };
+
+const DEFAULT_RARITY = 1;
 
 export type LoadUmasResult = {
   umas: UmasMap;
@@ -42,6 +45,7 @@ export function loadUmas(
     const baseUmaId = String(characterCard.char_id);
     const outfitId = String(characterCard.card_id);
     const aptitudes = normalizeAptitudes(characterCard.aptitude);
+    const rarity = characterCard.rarity ?? DEFAULT_RARITY;
     const existingEntry = umas[baseUmaId];
 
     if (!existingEntry) {
@@ -52,6 +56,9 @@ export function loadUmas(
         },
         aptitudes: {
           [outfitId]: aptitudes
+        },
+        rarities: {
+          [outfitId]: rarity
         }
       };
     } else {
@@ -65,6 +72,7 @@ export function loadUmas(
 
       existingEntry.outfits[outfitId] = characterCard.title_en_gl || characterCard.title_jp || '';
       existingEntry.aptitudes[outfitId] = aptitudes;
+      existingEntry.rarities[outfitId] = rarity;
     }
   }
 
