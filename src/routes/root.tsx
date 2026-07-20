@@ -53,6 +53,7 @@ import { SkillVisualizerPage } from './_tools/skill-visualizer';
 import { SparkOddsPage } from './_tools/spark-odds';
 import { CaratCalculatorPage } from './_tools/carat-calculator';
 import { TraineeListPage } from './_tools/trainee-list';
+import { TeamTrialsPage } from './_tools/team-trials';
 
 import { SupportCardsPage } from './_tools/support-cards';
 import PrivacyPolicy from './privacy';
@@ -233,6 +234,18 @@ export function RootComponent() {
                   description="Track which trainees you own, with star unlock and potential levels"
                 >
                   <TraineeListPage />
+                </RoutePage>
+              }
+            />
+
+            <Route
+              path="/team-trials"
+              element={
+                <RoutePage
+                  title="Team Trials"
+                  description="Optimize your Team Trials roster and project run points"
+                >
+                  <TeamTrialsPage />
                 </RoutePage>
               }
             />
