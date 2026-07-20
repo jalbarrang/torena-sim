@@ -2,7 +2,7 @@
 //
 // The collapse this prevents: an agent "unifying" the two field regimes
 // (race-sim's exact-9 and contested-compare's 2..=12) into one constant,
-// silently making vacuum the default compare mode or allowing vacuum at field > 2,
+// silently making vacuum the default compare mode,
 // or reordering the compare pair in engine params so the trace split silently swaps A and B.
 //
 // RaceSimField and ContestedField are deliberately DISTINCT sorts: a law
@@ -38,15 +38,16 @@ law mob_fill_valid(r) {
 }
 
 // Compare mode encoding (store/UI): 0 = contested (default), 1 = vacuum (opt-in).
-// Vacuum compare is a distinct sort so duo-only can be stated without disjunction;
-// contested field size stays on ContestedField (2..=12). Hiker has no `or`, so the
-// "contested default" half of the preferred disjunction is documentation + store
-// DEFAULT_COMPARE_MODE, not a law over CompareRun.mode.
+// Vacuum compare accepts any real field (1 primary + 0..=11 context runners per
+// isolated race, no mob fill); the invariant that survives is insertion order:
+// the primary is inserted first (engine id 0) in each vacuum race, and the TS
+// reducer reads only the primary's telemetry. Contested-default lives in store
+// DEFAULT_COMPARE_MODE (Hiker has no `or` for a mode disjunction law).
 // Batch vacuum engine paths also remain for planner/basin sims outside this intent.
-sort VacuumRun { fieldSize: Int }
-relation vacuum_run_is_duo(r: VacuumRun)
-law vacuum_run_is_duo(r) {
-  r.fieldSize == 2
+sort VacuumRace { primaryIndex: Int }
+relation vacuum_primary_first(r: VacuumRace)
+law vacuum_primary_first(r) {
+  r.primaryIndex == 0
 }
 
 // Engine param ordering: Compare A is inserted first (index 0), B second

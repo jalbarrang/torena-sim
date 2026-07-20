@@ -95,7 +95,7 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(state.compareB).toBe('r-1');
   });
 
-  it('hides the vacuum mode control at 3+ runners', () => {
+  it('shows the compare mode control at any field size', () => {
     seedField(2);
     const { unmount } = render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
     expect(screen.getByRole('radiogroup', { name: /compare mode/i })).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('FieldManagerContent (manage mode)', () => {
 
     seedField(3);
     render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
-    expect(screen.queryByRole('radiogroup', { name: /compare mode/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /compare mode/i })).toBeInTheDocument();
   });
 
   it('clicking Vacuum sets compare mode', () => {
@@ -115,6 +115,16 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(useRaceStore.getState().compareMode).toBe('vacuum');
   });
 
+  it('clicking Vacuum sets compare mode with a 3+ field', () => {
+    seedField(4);
+    render(<FieldManagerContent pickRole={null} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole('radio', { name: /^vacuum$/i }));
+
+    expect(useRaceStore.getState().compareMode).toBe('vacuum');
+    expect(screen.getByText(/each race the rest of the field separately/i)).toBeInTheDocument();
+  });
+
   it('disables field-size controls in vacuum mode', () => {
     seedField(2);
     useRaceStore.setState({ compareMode: 'vacuum', fieldSize: DEFAULT_FIELD_SIZE });
@@ -123,6 +133,7 @@ describe('FieldManagerContent (manage mode)', () => {
     expect(screen.getByRole('button', { name: /decrease field size/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /increase field size/i })).toBeDisabled();
     expect(screen.getByRole('spinbutton')).toBeDisabled();
+    expect(screen.getByText(/vacuum ignores field size/i)).toBeInTheDocument();
   });
 
   it('steps the field size with the +/- controls and clamps at bounds', () => {

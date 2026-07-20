@@ -9,6 +9,7 @@ use crate::race::{Race, SimulationSettings};
 use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
 use uma_sim_primitives::runner::mechanics::DuelingRates;
+use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::GroundCondition;
 use uma_sim_primitives::shared_kernel::params::RaceParameters;
 
@@ -52,7 +53,8 @@ pub struct CompareSimParams {
     pub settings: SimulationSettings,
     /// Per-strategy dueling rates (compare-mode artificial dueling).
     pub dueling_rates: DuelingRates,
-    /// The contestants to race (typically 1; the collector handles more).
+    /// The field: the primary contestant first, then any context runners
+    /// (e.g. a dedicated pacer). Only the primary's telemetry is collected.
     pub runners: Vec<CreateRunner>,
     /// Number of rounds to simulate.
     pub nsamples: usize,
@@ -63,10 +65,11 @@ pub struct CompareSimParams {
 /// Run a compare simulation over `nsamples` rounds.
 ///
 /// Constructs the [`Race`] aggregate with the given dueling rates, adds the
-/// contestants, attaches the [`CompareDataCollector`], and runs `nsamples`
-/// rounds with seeds `master_seed + i`. Returns the accumulated [`CompareData`]
-/// projection (per-round, per-runner telemetry); the bashin-delta + summary
-/// statistics are computed by the caller (TS side).
+/// contestants (primary first, then context runners), attaches the
+/// [`CompareDataCollector`] focused on the primary (runner id 0), and runs
+/// `nsamples` rounds with seeds `master_seed + i`. Returns the accumulated
+/// [`CompareData`] projection (per-round primary telemetry); the bashin-delta +
+/// summary statistics are computed by the caller (TS side).
 pub fn run_compare(params: CompareSimParams) -> Result<CompareData, SimError> {
     if params.nsamples == 0 {
         return Err(SimError::InvalidSamples);
@@ -86,7 +89,10 @@ pub fn run_compare(params: CompareSimParams) -> Result<CompareData, SimError> {
         race.add_runner(runner);
     }
 
-    let collector = CompareDataCollector::new();
+    // Focus on the first-added runner only: context runners (e.g. a dedicated
+    // pacer) shape the race but their per-frame telemetry is never read on the
+    // TS side, so collecting it would only multiply the WASM payload.
+    let collector = CompareDataCollector::for_runner_ids([RunnerId(0)]);
     race.subscribe(collector.handle());
 
     for i in 0..params.nsamples {
@@ -145,6 +151,19 @@ mod tests {
         for round in &data.rounds {
             assert_eq!(round.runners.len(), 1);
             assert_eq!(round.primary_runner_id, Some(round.runners[0].runner_id));
+            assert!(round.runners[0].finished);
+            assert!(!round.runners[0].position.is_empty());
+        }
+    }
+
+    #[test]
+    fn compare_with_context_runners_collects_primary_only() {
+        let data = run_compare(compare_params(3, 3)).expect("compare runs");
+        assert_eq!(data.rounds.len(), 3);
+        for round in &data.rounds {
+            assert_eq!(round.primary_runner_id, Some(0));
+            assert_eq!(round.runners.len(), 1);
+            assert_eq!(round.runners[0].runner_id, 0);
             assert!(round.runners[0].finished);
             assert!(!round.runners[0].position.is_empty());
         }

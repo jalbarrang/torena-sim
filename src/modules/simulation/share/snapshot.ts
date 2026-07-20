@@ -202,17 +202,16 @@ function parseV2(parsed: Record<string, unknown>): SimulationSnapshot | null {
   const compareMode: CompareMode = isCompareMode(parsed.compareMode)
     ? parsed.compareMode
     : 'contested';
-  if (compareMode === 'vacuum' && runners.length !== MIN_FIELD_SIZE) return null;
-  const fieldSize =
-    compareMode === 'vacuum' || coercedFromVacuum
-      ? MIN_FIELD_SIZE
-      : typeof parsed.fieldSize === 'number'
-        ? clampFieldSize(parsed.fieldSize)
-        : typeof parsed.fillWithMobs === 'boolean'
-          ? parsed.fillWithMobs
-            ? DEFAULT_FIELD_SIZE
-            : MIN_FIELD_SIZE
-          : DEFAULT_FIELD_SIZE;
+  // Vacuum ignores field size (no mob fill), so the shared value passes through untouched.
+  const fieldSize = coercedFromVacuum
+    ? MIN_FIELD_SIZE
+    : typeof parsed.fieldSize === 'number'
+      ? clampFieldSize(parsed.fieldSize)
+      : typeof parsed.fillWithMobs === 'boolean'
+        ? parsed.fillWithMobs
+          ? DEFAULT_FIELD_SIZE
+          : MIN_FIELD_SIZE
+        : DEFAULT_FIELD_SIZE;
 
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
@@ -242,9 +241,7 @@ function parseLegacyPair(parsed: Record<string, unknown>): SimulationSnapshot | 
     ? parsed.compareMode
     : 'contested';
   const fieldSize =
-    compareMode === 'vacuum' || coercedFromVacuum || parsed.fieldComposition === 'duo'
-      ? MIN_FIELD_SIZE
-      : DEFAULT_FIELD_SIZE;
+    coercedFromVacuum || parsed.fieldComposition === 'duo' ? MIN_FIELD_SIZE : DEFAULT_FIELD_SIZE;
 
   return {
     version: SIMULATION_SNAPSHOT_VERSION,
@@ -311,7 +308,7 @@ export function importSnapshot(data: SimulationSnapshot): void {
     seed: data.seed,
     injectedDebuffs: cloneDeep(data.injectedDebuffs)
   });
-  setFieldSize(data.compareMode === 'vacuum' ? MIN_FIELD_SIZE : data.fieldSize);
+  setFieldSize(data.fieldSize);
   setCompareMode(data.compareMode);
 
   resetResults();

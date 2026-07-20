@@ -16,7 +16,8 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    build_field_snapshot, build_field_view, condition_value, FieldOrderTracker,
+    build_field_snapshot, build_field_view, condition_value, resolve_debuff_targets,
+    FieldOrderTracker,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
 use uma_sim_primitives::runner::mechanics::DuelingRates;
@@ -355,19 +356,86 @@ impl Race {
         }
         self.runners = runners;
 
-        // No cross-runner contention coordinator in the vacuum engine: there is
-        // no live field, so proximity dueling / spot-struggle never emerge, and
-        // opponent-facing debuffs have no target. A runner may still *emit* an
-        // external debuff (e.g. its own Hesitant skill activating), so drop the
-        // per-frame outbox here rather than let it accumulate — being debuffed in
-        // a vacuum is modelled via manual debuff injection, not self-casts.
-        for runner in &mut self.runners {
-            runner.emitted_debuffs.clear();
-        }
+        // Route opponent-facing debuffs emitted this frame onto their targets.
+        // With context runners in the vacuum race (e.g. a dedicated pacer) there
+        // IS a field to hit: the pacer's Hesitant-family / Speed Eater casts land
+        // on the compared uma exactly as in the contested engine. In a solo
+        // vacuum the resolver finds no targets and this reduces to draining the
+        // outbox (the old behavior). Proximity dueling / spot-struggle stay
+        // synthetic — those contention coordinators remain contested-only.
+        self.coordinate_external_debuffs(&snapshot);
 
         update_first_position_in_late_race(&mut self.runners, self.course.distance);
 
         self.emit_runner_ticks_and_finishes(dt);
+    }
+
+    /// **External-debuff routing** coordinator (port of the contested engine's
+    /// pass). Drains every runner's per-frame emitted-debuff outbox and applies
+    /// each effect onto the resolved target runners through the existing
+    /// targeted-effect path ([`Runner::receive_targeted_effect`]). The caster
+    /// never receives its own external effect; finished runners (absent from
+    /// the snapshot) are not hit.
+    ///
+    /// Determinism: outboxes are drained in ascending `RunnerId` order and
+    /// targets are resolved from the frozen frame snapshot. Effect modifiers
+    /// add commutatively, so multiple sources debuffing one target in a frame
+    /// yield an order-independent result.
+    fn coordinate_external_debuffs(
+        &mut self,
+        snapshot: &uma_sim_primitives::race_support::FieldSnapshot,
+    ) {
+        let course_distance = self.course.distance;
+
+        // Phase 1: drain outboxes (RunnerId order) and resolve target ids.
+        struct Route {
+            target: RunnerId,
+            source: RunnerId,
+            source_team: Option<i32>,
+            skill_id: uma_sim_primitives::shared_kernel::ids::SkillId,
+            effect: uma_sim_primitives::skills::model::ResolvedSkillEffect,
+        }
+        let mut routes: Vec<Route> = Vec::new();
+        for runner in &mut self.runners {
+            if runner.emitted_debuffs.is_empty() {
+                continue;
+            }
+            let source = runner.id;
+            let source_team = runner.team;
+            let emitted = std::mem::take(&mut runner.emitted_debuffs);
+            for debuff in emitted {
+                let targets =
+                    resolve_debuff_targets(snapshot, source, debuff.target, debuff.target_strategy);
+                for target in targets {
+                    routes.push(Route {
+                        target,
+                        source,
+                        source_team,
+                        skill_id: debuff.skill_id.clone(),
+                        effect: debuff.effect,
+                    });
+                }
+            }
+        }
+
+        // Phase 2: apply onto each target via the targeted-effect path.
+        // Teammates stay valid *targets* (they count toward a skill's maximum
+        // target in-game) but are excluded from the debuff *effect*
+        // (docs/mechanics/README.md § Skill Target), so the exclusion happens
+        // here at application, after target resolution.
+        for route in routes {
+            if let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) {
+                if route.source_team.is_some() && route.source_team == target.team {
+                    continue;
+                }
+                target.receive_targeted_effect(
+                    route.skill_id,
+                    vec![route.effect],
+                    route.source,
+                    course_distance,
+                );
+            }
+        }
     }
 
     fn emit_runner_ticks_and_finishes(&mut self, dt: f64) {
@@ -533,5 +601,156 @@ mod tests {
         gates.sort_unstable();
         gates.dedup();
         assert_eq!(gates.len(), 9);
+    }
+
+    #[test]
+    fn external_debuff_routes_to_matching_strategy_not_self() {
+        use uma_sim_primitives::race_support::build_field_snapshot;
+        use uma_sim_primitives::shared_kernel::ids::SkillId;
+        use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
+
+        // R0 primary (Front Runner, target), R1 context caster (Late Surger),
+        // R2 context Pace Chaser — a vacuum race with a debuffing pacer field.
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            SimulationSettings::default(),
+            test_race_params(),
+            None,
+        );
+        race.add_runner(props("primary", Strategy::FrontRunner));
+        race.add_runner(props("caster", Strategy::LateSurger));
+        race.add_runner(props("pace", Strategy::PaceChaser));
+        race.prepare_round(7);
+
+        let snapshot = build_field_snapshot(
+            &mut race.runners,
+            &race.finished_runners,
+            &mut race.order_tracker,
+        );
+
+        // The context caster emits a nige-targeting Current Speed debuff.
+        race.runners[1].emitted_debuffs.push(EmittedDebuff {
+            skill_id: SkillId::new("200851"),
+            effect: ResolvedSkillEffect {
+                target: SkillTarget::EnemyStrategy,
+                effect_type: SkillType::CurrentSpeed,
+                base_duration: 3.0,
+                modifier: -0.15,
+            },
+            target: SkillTarget::EnemyStrategy,
+            target_strategy: Some(Strategy::FrontRunner),
+        });
+
+        race.coordinate_external_debuffs(&snapshot);
+
+        // The primary front runner is debuffed; caster and pace chaser are not.
+        assert_eq!(race.runners[0].targeted_current_speed_active.len(), 1);
+        assert!(race.runners[0].modifiers.current_speed.total() < 0.0);
+        assert!(race.runners[1].targeted_current_speed_active.is_empty());
+        assert!(race.runners[2].targeted_current_speed_active.is_empty());
+        // The emitter's outbox is drained.
+        assert!(race.runners[1].emitted_debuffs.is_empty());
+        // The victim logged the received debuff.
+        assert_eq!(race.runners[0].used_targeted_skills.len(), 1);
+        assert_eq!(
+            race.runners[0].used_targeted_skills[0].skill_id.as_str(),
+            "200851"
+        );
+    }
+
+    #[test]
+    fn external_debuff_skips_same_team_targets() {
+        use uma_sim_primitives::race_support::build_field_snapshot;
+        use uma_sim_primitives::shared_kernel::ids::SkillId;
+        use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
+
+        // R0 caster (team 1), R1 Front Runner teammate (team 1), R2 Front
+        // Runner opponent (team 2).
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            SimulationSettings::default(),
+            test_race_params(),
+            None,
+        );
+        let mut caster = props("caster", Strategy::LateSurger);
+        caster.team = Some(1);
+        let mut teammate = props("teammate", Strategy::FrontRunner);
+        teammate.team = Some(1);
+        let mut opponent = props("opponent", Strategy::FrontRunner);
+        opponent.team = Some(2);
+        race.add_runner(caster);
+        race.add_runner(teammate);
+        race.add_runner(opponent);
+        race.prepare_round(7);
+
+        let snapshot = build_field_snapshot(
+            &mut race.runners,
+            &race.finished_runners,
+            &mut race.order_tracker,
+        );
+
+        race.runners[0].emitted_debuffs.push(EmittedDebuff {
+            skill_id: SkillId::new("200851"),
+            effect: ResolvedSkillEffect {
+                target: SkillTarget::EnemyStrategy,
+                effect_type: SkillType::CurrentSpeed,
+                base_duration: 3.0,
+                modifier: -0.15,
+            },
+            target: SkillTarget::EnemyStrategy,
+            target_strategy: Some(Strategy::FrontRunner),
+        });
+
+        race.coordinate_external_debuffs(&snapshot);
+
+        // The teammate is spared; the opponent is hit.
+        assert!(race.runners[1].targeted_current_speed_active.is_empty());
+        assert_eq!(race.runners[2].targeted_current_speed_active.len(), 1);
+    }
+
+    #[test]
+    fn solo_vacuum_drains_emitted_debuffs_without_targets() {
+        use uma_sim_primitives::race_support::build_field_snapshot;
+        use uma_sim_primitives::shared_kernel::ids::SkillId;
+        use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
+        use uma_sim_primitives::skills::model::{EmittedDebuff, ResolvedSkillEffect};
+
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            SimulationSettings::default(),
+            test_race_params(),
+            None,
+        );
+        race.add_runner(props("solo", Strategy::FrontRunner));
+        race.prepare_round(7);
+
+        let snapshot = build_field_snapshot(
+            &mut race.runners,
+            &race.finished_runners,
+            &mut race.order_tracker,
+        );
+
+        race.runners[0].emitted_debuffs.push(EmittedDebuff {
+            skill_id: SkillId::new("200851"),
+            effect: ResolvedSkillEffect {
+                target: SkillTarget::EnemyStrategy,
+                effect_type: SkillType::CurrentSpeed,
+                base_duration: 3.0,
+                modifier: -0.15,
+            },
+            target: SkillTarget::EnemyStrategy,
+            target_strategy: Some(Strategy::FrontRunner),
+        });
+
+        race.coordinate_external_debuffs(&snapshot);
+
+        // No field to hit: the outbox drains, the caster is never self-targeted.
+        assert!(race.runners[0].emitted_debuffs.is_empty());
+        assert!(race.runners[0].targeted_current_speed_active.is_empty());
     }
 }

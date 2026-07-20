@@ -1,13 +1,15 @@
 //! # uma-sim-vacuum
 //!
-//! The **synthetic / vacuum** race engine (ADR-0005). Typically one runner; the
-//! absent field is *synthesized* (artificial [`DuelingRates`]) and
-//! field-dependent skill conditions are *approximated*. This crate owns:
+//! The **synthetic / vacuum** race engine (ADR-0005). Typically one primary
+//! runner, optionally with context runners (e.g. a dedicated pacer); dueling is
+//! *synthesized* (artificial [`DuelingRates`]) and field-dependent skill
+//! conditions are *approximated*. This crate owns:
 //!
-//! - the [`Race`](race::Race) aggregate: a single-/small-field loop that
-//!   **produces `FieldInputs` from approximate condition values + synthetic
-//!   rates** (no live contention coordinator), then calls the shared pure step
-//!   in `uma-sim-primitives`;
+//! - the [`Race`](race::Race) aggregate: a small-field loop that **produces
+//!   `FieldInputs` from approximate condition values + synthetic rates** (no
+//!   live dueling/spot-struggle coordinators, but external debuffs DO route
+//!   across the field), then calls the shared pure step in
+//!   `uma-sim-primitives`;
 //! - the [`run_compare`](simulation::run_compare) use case + paired-delta
 //!   orchestration;
 //! - the [`CompareDataCollector`](collectors::CompareDataCollector) read-model.

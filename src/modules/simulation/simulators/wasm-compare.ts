@@ -282,7 +282,10 @@ function reduceCompareRounds(
 /** Extract the primary-runner round data from a WASM compare-round list. */
 function primaryRounds(rounds: WasmCompareData['rounds']): Array<CollectedRunnerRoundData> {
   return rounds.map((round) => {
-    const primary = round.runners[0];
+    const primary =
+      round.primaryRunnerId != null
+        ? round.runners.find((runner) => runner.runnerId === round.primaryRunnerId)
+        : round.runners[0];
     if (!primary) {
       throw new Error('Missing primary runner in WASM compare round');
     }

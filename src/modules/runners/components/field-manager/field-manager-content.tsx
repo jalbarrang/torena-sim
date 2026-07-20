@@ -13,7 +13,6 @@ import {
   type FieldRunner
 } from '@/store/runners.store';
 import {
-  canUseVacuum,
   clampFieldSize,
   setCompareMode,
   setFieldSize,
@@ -259,9 +258,11 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
                 Race field size
               </Label>
               <p className="text-xs text-muted-foreground">
-                {mobCount > 0
-                  ? `${runners.length} uma${runners.length === 1 ? '' : 's'} + ${mobCount} filler mob${mobCount === 1 ? '' : 's'} (600 stats, mixed strategies).`
-                  : 'No mob padding — only your umas race.'}
+                {compareMode === 'vacuum'
+                  ? 'Vacuum ignores field size — no mob padding, only your umas race.'
+                  : mobCount > 0
+                    ? `${runners.length} uma${runners.length === 1 ? '' : 's'} + ${mobCount} filler mob${mobCount === 1 ? '' : 's'} (600 stats, mixed strategies).`
+                    : 'No mob padding — only your umas race.'}
               </p>
             </div>
             <div
@@ -304,46 +305,46 @@ export function FieldManagerContent(props: FieldManagerContentProps) {
             </div>
           </div>
 
-          {canUseVacuum(runners.length) && (
-            <div className="flex items-center justify-between gap-3 px-1">
-              <div className="min-w-0">
-                <Label className="text-sm">Compare mode</Label>
-                <p className="text-xs text-muted-foreground">
-                  {compareMode === 'contested'
-                    ? 'Both umas race each other; contention emerges naturally.'
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div className="min-w-0">
+              <Label className="text-sm">Compare mode</Label>
+              <p className="text-xs text-muted-foreground">
+                {compareMode === 'contested'
+                  ? 'Both umas race each other; contention emerges naturally.'
+                  : runners.length > MIN_RUNNERS
+                    ? 'A and B each race the rest of the field separately; lowest-variance comparison.'
                     : 'Each uma runs isolated; lowest-variance build comparison.'}
-                </p>
-              </div>
-              <div
-                role="radiogroup"
-                aria-label="Compare mode"
-                className="flex shrink-0 overflow-hidden rounded-md border"
-              >
-                {(
-                  [
-                    ['contested', 'Same race'],
-                    ['vacuum', 'Vacuum']
-                  ] as Array<[CompareMode, string]>
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={compareMode === mode}
-                    onClick={() => setCompareMode(mode)}
-                    className={cn(
-                      'cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring',
-                      compareMode === mode
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background text-muted-foreground hover:bg-muted'
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              </p>
             </div>
-          )}
+            <div
+              role="radiogroup"
+              aria-label="Compare mode"
+              className="flex shrink-0 overflow-hidden rounded-md border"
+            >
+              {(
+                [
+                  ['contested', 'Same race'],
+                  ['vacuum', 'Vacuum']
+                ] as Array<[CompareMode, string]>
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={compareMode === mode}
+                  onClick={() => setCompareMode(mode)}
+                  className={cn(
+                    'cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring',
+                    compareMode === mode
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

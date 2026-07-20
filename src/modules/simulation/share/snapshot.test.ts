@@ -138,7 +138,7 @@ describe('parseSnapshotJson', () => {
     expect(parsed?.coercedFromVacuum).toBe(true);
   });
 
-  it('round-trips a vacuum snapshot and forces a duo field', () => {
+  it('round-trips a vacuum snapshot preserving the field size', () => {
     const parsed = parseSnapshotJson(
       JSON.stringify(
         snapshot({
@@ -149,8 +149,24 @@ describe('parseSnapshotJson', () => {
     );
 
     expect(parsed?.compareMode).toBe('vacuum');
-    expect(parsed?.fieldSize).toBe(2);
+    expect(parsed?.fieldSize).toBe(12);
     expect(parsed?.coercedFromVacuum).toBeUndefined();
+  });
+
+  it('round-trips a vacuum snapshot with more than two runners', () => {
+    const parsed = parseSnapshotJson(
+      JSON.stringify(
+        snapshot({
+          runners: [createRunnerState(), createRunnerState(), createRunnerState()],
+          compareA: 0,
+          compareB: 1,
+          compareMode: 'vacuum'
+        })
+      )
+    );
+
+    expect(parsed?.compareMode).toBe('vacuum');
+    expect(parsed?.runners).toHaveLength(3);
   });
 
   it('coerces a v2 snapshot without a mode to contested head-to-head', () => {

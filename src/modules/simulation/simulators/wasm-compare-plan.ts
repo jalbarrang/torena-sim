@@ -92,6 +92,18 @@ export function buildComparePlan(
     scenarioOverrides?.uma2
   );
 
+  // Context runners join each vacuum race (after the primary) or fill the
+  // contested field (after the compared pair). Insertion order is load-bearing:
+  // the primary/compared runners must keep the lowest ids (vacuum primary = id
+  // 0; contested A = id 0, B = id 1).
+  const contextCreateRunners = contextRunners.map((runner) =>
+    toCreateRunner(runner, runner.skills.toSorted(skillSorter))
+  );
+
+  // With context runners in the vacuum race there is a real field to pace off:
+  // enable virtual position keep (mode 2). A solo vacuum keeps mode 0 so
+  // existing solo results reproduce bit-for-bit.
+  const vacuumPositionKeepMode = contextRunners.length > 0 ? 2 : 0;
   const settingsA = createCompareSettings({
     healthSystem: true,
     spotStruggle: true,
@@ -100,6 +112,7 @@ export function buildComparePlan(
     downhill: options.allowDownhillUma1,
     conservePower: options.allowConservePowerUma1 ?? false,
     witChecks: options.skillCheckChanceUma1,
+    positionKeepMode: vacuumPositionKeepMode,
     staminaDrainOverrides: options.staminaDrainOverrides
   });
   const settingsB = createCompareSettings({
@@ -110,13 +123,15 @@ export function buildComparePlan(
     downhill: options.allowDownhillUma2,
     conservePower: options.allowConservePowerUma2 ?? false,
     witChecks: options.skillCheckChanceUma2,
+    positionKeepMode: vacuumPositionKeepMode,
     staminaDrainOverrides: options.staminaDrainOverrides
   });
 
   if (mode === 'vacuum') {
-    if (contextRunners.length > 0) {
-      throw new Error('Vacuum compare is duo-only and cannot include context runners');
-    }
+    const vacuumContext = contextCreateRunners.map((runner, index) => ({
+      runner,
+      name: resolveRunnerName(runner.outfitId, index + 2)
+    }));
 
     const wasmParamsA = compareParamsToWasm({
       course,
@@ -125,6 +140,7 @@ export function buildComparePlan(
       duelingRates: DEFAULT_DUELING_RATES,
       runner: runnerA,
       name: resolveRunnerName(runnerA.outfitId, 0),
+      contextRunners: vacuumContext,
       nsamples,
       masterSeed: baseSeed
     });
@@ -135,6 +151,7 @@ export function buildComparePlan(
       duelingRates: DEFAULT_DUELING_RATES,
       runner: runnerB,
       name: resolveRunnerName(runnerB.outfitId, 1),
+      contextRunners: vacuumContext,
       nsamples,
       masterSeed: baseSeed
     });
@@ -157,11 +174,6 @@ export function buildComparePlan(
     staminaDrainOverrides: options.staminaDrainOverrides
   });
 
-  // Context runners fill the field after the compared pair. Insertion order is
-  // load-bearing: the trace split in `wasm-compare.ts` assumes A=id0, B=id1.
-  const contextCreateRunners = contextRunners.map((runner) =>
-    toCreateRunner(runner, runner.skills.toSorted(skillSorter))
-  );
   const runnerCount = 2 + contextCreateRunners.length;
 
   return {

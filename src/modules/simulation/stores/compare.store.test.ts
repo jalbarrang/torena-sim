@@ -2,11 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createRunnerState } from '@/modules/runners/components/runner-card/types';
 import { useRunnersStore } from '@/store/runners.store';
 import {
-  canUseVacuum,
   clampFieldSize,
-  forceContestedForField,
   migrateComparePersisted,
-  reconcileCompareModeWithField,
   setCompareMode,
   useRaceStore,
   DEFAULT_COMPARE_MODE,
@@ -82,7 +79,7 @@ describe('clampFieldSize', () => {
   });
 });
 
-describe('compare mode guards', () => {
+describe('setCompareMode', () => {
   const seedRunners = (count: number) => {
     const runners = Array.from({ length: count }, (_, index) => ({
       ...createRunnerState(),
@@ -101,41 +98,15 @@ describe('compare mode guards', () => {
     useRaceStore.setState({ compareMode: DEFAULT_COMPARE_MODE });
   });
 
-  it('allows vacuum only for a duo field', () => {
-    expect(canUseVacuum(2)).toBe(true);
-    expect(canUseVacuum(3)).toBe(false);
-    expect(canUseVacuum(12)).toBe(false);
-  });
-
-  it('refuses vacuum when the runner field exceeds a duo', () => {
+  it('allows vacuum for any field size', () => {
     seedRunners(3);
-    setCompareMode('vacuum');
-    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
-  });
-
-  it('forces contested mode when the field grows past a duo', () => {
-    setCompareMode('vacuum');
-    forceContestedForField();
-    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
-  });
-
-  it('forces contested via subscription when the runners store grows past a duo', () => {
     setCompareMode('vacuum');
     expect(useRaceStore.getState().compareMode).toBe('vacuum');
-    seedRunners(3);
-    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
   });
 
-  it('reconciles a persisted vacuum mode against a >2 field at startup', () => {
-    seedRunners(3);
-    useRaceStore.setState({ compareMode: 'vacuum' });
-    reconcileCompareModeWithField();
-    expect(useRaceStore.getState().compareMode).toBe(DEFAULT_COMPARE_MODE);
-  });
-
-  it('leaves a persisted vacuum mode alone for a duo field', () => {
+  it('keeps vacuum when the field grows past a duo', () => {
     setCompareMode('vacuum');
-    reconcileCompareModeWithField();
+    seedRunners(3);
     expect(useRaceStore.getState().compareMode).toBe('vacuum');
   });
 });

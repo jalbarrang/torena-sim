@@ -34,6 +34,12 @@ function which(cmd: string, env: NodeJS.ProcessEnv): string | null {
 
 const env: NodeJS.ProcessEnv = { ...process.env };
 
+// The spread above loses Node's case-insensitive env magic: on Windows the
+// real key is often `Path`, so writing `env.PATH` would create a SECOND key
+// holding only the sysroot bin — and the child's effective PATH loses
+// System32 entirely. Mutate the existing key, whatever its casing.
+const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
+
 // Prefer the rustup `stable` toolchain (has wasm32 std) by prepending its bin
 // dir to PATH. `rustc --print sysroot` returns a native path on every platform,
 // so no Windows/git-bash `cygpath` dance is needed (this runs as a native
@@ -45,7 +51,7 @@ if (which('rustup', env)) {
   });
   const sysroot = res.status === 0 ? res.stdout.trim() : '';
   if (sysroot) {
-    env.PATH = `${join(sysroot, 'bin')}${delimiter}${env.PATH ?? ''}`;
+    env[pathKey] = `${join(sysroot, 'bin')}${delimiter}${env[pathKey] ?? ''}`;
   }
 }
 

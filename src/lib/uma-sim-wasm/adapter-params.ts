@@ -172,7 +172,7 @@ export function duelingRatesToWasm(rates: DuelingRates): WasmDuelingRates {
   };
 }
 
-/** Inputs to {@link compareParamsToWasm} — one vacuum runner over N rounds. */
+/** Inputs to {@link compareParamsToWasm} — one primary vacuum runner (plus optional context runners) over N rounds. */
 export type CompareParamsToWasmArgs = {
   course: CourseData;
   parameters: SundayRaceParameters;
@@ -180,18 +180,23 @@ export type CompareParamsToWasmArgs = {
   duelingRates: DuelingRates;
   runner: CreateRunner;
   name: string;
+  /** Extra field runners racing alongside the primary (e.g. a dedicated pacer). Appended after the primary, so the primary keeps runner id 0. */
+  contextRunners?: Array<{ runner: CreateRunner; name: string }>;
   nsamples: number;
   masterSeed: number;
 };
 
-/** Build the WASM compare params for a single vacuum runner. */
+/** Build the WASM compare params for a vacuum runner (plus optional context runners). */
 export function compareParamsToWasm(args: CompareParamsToWasmArgs): WasmCompareParams {
   return {
     course: courseDataToWasm(args.course),
     parameters: raceParametersToWasm(args.parameters),
     settings: compareSettingsToWasm(args.settings),
     duelingRates: duelingRatesToWasm(args.duelingRates),
-    runners: [sundayRunnerToWasm(args.runner, args.name)],
+    runners: [
+      sundayRunnerToWasm(args.runner, args.name),
+      ...(args.contextRunners ?? []).map(({ runner, name }) => sundayRunnerToWasm(runner, name))
+    ],
     nsamples: args.nsamples,
     masterSeed: args.masterSeed
   };

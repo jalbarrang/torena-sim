@@ -13,8 +13,6 @@ import type {
 import type { InjectedDebuffsMap } from '@/modules/simulation/types';
 import { generateSeed } from '@/utils/crypto';
 import { SpurtCandidate } from '@/lib/uma-domain/race/spurt-calculator';
-import { MIN_RUNNERS, useRunnersStore } from '@/store/runners.store';
-
 const COMPARE_DEBUFFS_STORE_NAME = 'umalator-compare-debuffs';
 
 export type CompareMode = 'contested' | 'vacuum';
@@ -39,9 +37,6 @@ export const clampFieldSize = (value: number): number => {
 const isCompareMode = (value: unknown): value is CompareMode => {
   return value === 'contested' || value === 'vacuum';
 };
-
-/** Vacuum mode compares two isolated runners; it is only valid for a duo field. */
-export const canUseVacuum = (fieldSize: number): boolean => fieldSize <= MIN_RUNNERS;
 
 type PersistedRaceStore = {
   injectedDebuffs?: InjectedDebuffsMap;
@@ -145,36 +140,8 @@ export const setCompareSeed = (seed: number | null) => {
 };
 
 export const setCompareMode = (compareMode: CompareMode) => {
-  if (compareMode === 'vacuum' && !canUseVacuum(useRunnersStore.getState().runners.length)) {
-    return;
-  }
-
   useRaceStore.setState({ compareMode });
 };
-
-export const forceContestedForField = () => {
-  useRaceStore.setState({ compareMode: DEFAULT_COMPARE_MODE });
-};
-
-/** Startup reconciliation: vacuum is duo-only, but `compareMode` and the runner list persist in separate stores. An interrupted write (or storage tampering) can leave a persisted vacuum mode alongside a >2 field; fall back to contested. Runs once at module load, after both stores rehydrate synchronously (the runners store rehydrates first because this module imports it). Exported for unit tests. */
-export const reconcileCompareModeWithField = () => {
-  if (
-    useRaceStore.getState().compareMode === 'vacuum' &&
-    !canUseVacuum(useRunnersStore.getState().runners.length)
-  ) {
-    forceContestedForField();
-  }
-};
-
-// Safe as a plain module-scope call: the store dependency is one-directional (this module imports runners.store; runners.store must never import back — that cycle once made this exact line a TDZ crash in the production bundle), so runners.store is fully initialized and rehydrated before this body runs.
-reconcileCompareModeWithField();
-
-// Field-growth enforcement: vacuum is duo-only, and runners.store cannot call forceContestedForField without recreating the module cycle above. React to any field change instead — this also covers every future growth path (addRunner, imports, whatever comes next) without per-callsite calls.
-useRunnersStore.subscribe((state, prevState) => {
-  if (state.runners.length !== prevState.runners.length) {
-    reconcileCompareModeWithField();
-  }
-});
 
 export const setFieldSize = (fieldSize: number) => {
   useRaceStore.setState({ fieldSize: clampFieldSize(fieldSize) });

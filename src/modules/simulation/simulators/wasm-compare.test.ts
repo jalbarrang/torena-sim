@@ -204,13 +204,40 @@ describe('buildComparePlan', () => {
     expect(plan.wasmParamsContested.fillTo).toBeUndefined();
   });
 
-  it('rejects vacuum plans with context runners', () => {
-    expect(() =>
-      buildComparePlan(compareParams(), {
-        mode: 'vacuum',
-        contextRunners: [createRunnerState()]
-      })
-    ).toThrow('Vacuum compare is duo-only and cannot include context runners');
+  it('keeps a solo vacuum free of position keep', () => {
+    const plan = buildComparePlan(compareParams(), { mode: 'vacuum' });
+
+    if (plan.mode !== 'vacuum') throw new Error('expected vacuum plan');
+    expect(plan.wasmParamsA.runners).toHaveLength(1);
+    expect(plan.wasmParamsB.runners).toHaveLength(1);
+    expect(plan.wasmParamsA.settings?.positionKeepMode).toBe(0);
+    expect(plan.wasmParamsB.settings?.positionKeepMode).toBe(0);
+  });
+
+  it('adds context runners to both vacuum races after the primary and enables position keep', () => {
+    const plan = buildComparePlan(compareParams(), {
+      mode: 'vacuum',
+      contextRunners: [createRunnerState({ speed: 900 }), createRunnerState({ speed: 950 })]
+    });
+
+    if (plan.mode !== 'vacuum') throw new Error('expected vacuum plan');
+    // Primary first (runner id 0), then the shared context runners.
+    expect(plan.wasmParamsA.runners).toHaveLength(3);
+    expect(plan.wasmParamsB.runners).toHaveLength(3);
+    expect(plan.wasmParamsA.runners[0]?.stats.speed).toBe(1200);
+    expect(plan.wasmParamsB.runners[0]?.stats.speed).toBe(1210);
+    expect(plan.wasmParamsA.runners.slice(1).map((runner) => runner.stats.speed)).toEqual([
+      900, 950
+    ]);
+    expect(plan.wasmParamsB.runners.slice(1).map((runner) => runner.stats.speed)).toEqual([
+      900, 950
+    ]);
+    // Both races share the master seed (CRN pairing).
+    expect(plan.wasmParamsA.masterSeed).toBe(42);
+    expect(plan.wasmParamsB.masterSeed).toBe(42);
+    // A real field to pace off: virtual position keep is on.
+    expect(plan.wasmParamsA.settings?.positionKeepMode).toBe(2);
+    expect(plan.wasmParamsB.settings?.positionKeepMode).toBe(2);
   });
 });
 
@@ -298,6 +325,37 @@ describe('runComparisonRoundsFromPlan', () => {
       2,
       expect.objectContaining({ masterSeed: 102, nsamples: 1 })
     );
+  });
+
+  it('selects the primary runner by primaryRunnerId when context runners are present', async () => {
+    const withPrimary = (
+      runners: WasmCompareRoundData[],
+      primaryRunnerId: number
+    ): WasmCompareData => ({
+      rounds: [{ seed: 0, primaryRunnerId, runners }]
+    });
+    mockedRunCompare
+      .mockResolvedValueOnce(
+        withPrimary([wasmRunner(1, { hp: [1000, 700] }), wasmRunner(0, { hp: [1000, 900] })], 0)
+      )
+      .mockResolvedValueOnce(
+        withPrimary([wasmRunner(1, { hp: [1000, 600] }), wasmRunner(0, { hp: [1000, 800] })], 0)
+      );
+
+    const plan: ComparePlan = {
+      mode: 'vacuum',
+      wasmParamsA: {} as WasmCompareParams,
+      wasmParamsB: {} as WasmCompareParams,
+      nsamples: 1,
+      baseSeed: 0
+    };
+
+    const rounds = await runComparisonRoundsFromPlan(plan, 1, 0);
+
+    expect(rounds.roundsA[0]?.runnerId).toBe(0);
+    expect(rounds.roundsA[0]?.hp).toEqual([1000, 900]);
+    expect(rounds.roundsB[0]?.runnerId).toBe(0);
+    expect(rounds.roundsB[0]?.hp).toEqual([1000, 800]);
   });
 
   it('keeps vacuum chunk seed inputs deterministic across split chunks', async () => {
