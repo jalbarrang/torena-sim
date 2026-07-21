@@ -1,5 +1,5 @@
 import { memo, useId } from 'react';
-import { DiamondIcon, StarIcon } from 'lucide-react';
+import { StarIcon } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { getUmaImageUrl } from '@/modules/runners/utils';
@@ -25,9 +25,15 @@ const renderStarIcon = (filled: boolean) => (
 );
 
 const renderPotentialIcon = (filled: boolean) => (
-  <DiamondIcon
-    className={cn('size-3.5', filled ? 'fill-rose-400 text-rose-400' : 'text-muted-foreground/40')}
-  />
+  <span
+    aria-hidden="true"
+    className={cn(
+      'text-sm leading-none',
+      filled ? 'text-sky-500 dark:text-sky-400' : 'text-border'
+    )}
+  >
+    ●
+  </span>
 );
 
 export const TraineeTile = memo((props: TraineeTileProps) => {

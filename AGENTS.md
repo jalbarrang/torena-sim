@@ -22,6 +22,7 @@
 
 - This project uses Base UI patterns, not older Radix-style composition.
 - Do not assume local wrapper components support `asChild`.
+- **`<SelectValue />` renders the raw value, not the item label.** Base UI's `SelectValue` does not echo the selected item's text like Radix does. When label ≠ value, pass the label as children (`<SelectValue>{label}</SelectValue>`) or a `render` function — see existing usages in `src/components/ui/select.tsx` consumers.
 - Before using common shadcn or Radix idioms, check the local wrapper API first.
 - Prefer the repo's existing `render={...}` composition patterns when working with triggers and buttons.
 - Destructure props inside the component body, not in the function signature.

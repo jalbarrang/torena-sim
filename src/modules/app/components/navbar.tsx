@@ -33,7 +33,8 @@ const toolNavItems: NavItem[] = [
   { value: 'skill-visualizer', label: 'Skill Visualizer', to: '/skill-visualizer' },
   { value: 'support-cards', label: 'Support Cards', to: '/support-cards' },
   { value: 'carat-calculator', label: 'Carat Calculator', to: '/carat-calculator' },
-  { value: 'trainee-list', label: 'Trainee List', to: '/trainee-list' }
+  { value: 'trainee-list', label: 'Trainee List', to: '/trainee-list' },
+  { value: 'team-trials', label: 'Team Trials', to: '/team-trials' }
 ];
 
 export function Navbar() {
@@ -49,6 +50,7 @@ export function Navbar() {
     if (pathname === '/support-cards') return 'support-cards';
     if (pathname === '/carat-calculator') return 'carat-calculator';
     if (pathname === '/trainee-list') return 'trainee-list';
+    if (pathname === '/team-trials') return 'team-trials';
     if (pathname.startsWith('/race-sim')) return 'race-sim';
     return 'simulation';
   }, [pathname]);
