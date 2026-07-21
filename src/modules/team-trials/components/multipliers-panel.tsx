@@ -59,7 +59,10 @@ export function MultipliersPanel(props: MultipliersPanelProps) {
   const afterOpponent = Math.round(afterBonus * result.opponentFactor);
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-xl border bg-card">
+    <section
+      data-tutorial="team-trials-multipliers"
+      className="flex flex-col overflow-hidden rounded-xl border bg-card"
+    >
       <h2 className="border-b px-3.5 py-2.5 text-[13px] font-semibold">Multipliers</h2>
 
       <div className="flex flex-col gap-2.5 px-3.5 py-3">

@@ -41,6 +41,7 @@ import { MultipliersPanel } from './multipliers-panel';
 import { ScoreSheet } from './score-sheet';
 import { getTeamTrialsOnboardingState, getTeamTrialsSummaryCopy } from './team-trials-page-state';
 import { TeamColumn } from './team-column';
+import { TeamTrialsTutorialNudge, useTeamTrialsTutorial } from './team-trials-tutorial';
 
 const TEAM_CLASSES = [6, 5, 4, 3, 2, 1] as const;
 
@@ -104,6 +105,11 @@ export function TeamTrialsPage() {
   const members = ROSTER_CATEGORIES.flatMap((category) => roster[category]);
   const rosteredCount = members.length;
   const onboardingState = getTeamTrialsOnboardingState({ ownedCount, rosteredCount });
+  const { dismissFirstVisitNudge, showFirstVisitNudge, startTour } = useTeamTrialsTutorial({
+    onboardingState,
+    rosteredCount
+  });
+
   const perfectFitCount = members.filter((member) => {
     const aptitudes = umasById.get(member.outfitId)?.aptitudes;
     if (!aptitudes) return false;
@@ -193,7 +199,6 @@ export function TeamTrialsPage() {
   return (
     <div className="w-full min-h-0 overflow-y-auto">
       <div className="flex w-full flex-col gap-4 px-4 py-4 pb-12">
-        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Team Trials</h1>
@@ -209,7 +214,11 @@ export function TeamTrialsPage() {
                 setTeamTrialsClass(Number(value) as typeof teamClass, roster)
               }
             >
-              <SelectTrigger size="sm" className="w-auto min-w-36 text-xs pointer-coarse:h-11">
+              <SelectTrigger
+                data-tutorial="team-trials-class"
+                size="sm"
+                className="w-auto min-w-36 text-xs pointer-coarse:h-11"
+              >
                 <SelectValue>
                   Class {teamClass} · {TEAM_SIZE_BY_CLASS[teamClass]} per team
                 </SelectValue>
@@ -222,7 +231,13 @@ export function TeamTrialsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" onClick={autoFill} className="pointer-coarse:h-11">
+            <Button
+              data-tutorial="team-trials-autofill"
+              size="sm"
+              variant="outline"
+              onClick={autoFill}
+              className="pointer-coarse:h-11"
+            >
               <WandSparklesIcon />
               Auto-fill
             </Button>
@@ -236,11 +251,20 @@ export function TeamTrialsPage() {
               <Trash2Icon />
               Clear
             </Button>
+            <Button size="sm" variant="outline" onClick={startTour} className="pointer-coarse:h-11">
+              Take a tour
+            </Button>
           </div>
         </div>
 
-        {/* Summary strip */}
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        {showFirstVisitNudge ? (
+          <TeamTrialsTutorialNudge onStart={startTour} onDismiss={dismissFirstVisitNudge} />
+        ) : null}
+
+        <div
+          data-tutorial="team-trials-summary"
+          className="grid grid-cols-2 gap-2.5 lg:grid-cols-4"
+        >
           <StatCard
             value={`${rosteredCount} / ${slotCount}`}
             caption={`slots filled · ${ownedCount} owned`}
@@ -257,8 +281,10 @@ export function TeamTrialsPage() {
           />
         </div>
 
-        {/* Roster grid */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+        <div
+          data-tutorial="team-trials-roster"
+          className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5"
+        >
           {ROSTER_CATEGORIES.map((category) => (
             <TeamColumn
               key={category}
@@ -271,7 +297,6 @@ export function TeamTrialsPage() {
           ))}
         </div>
 
-        {/* Score sheet + multipliers */}
         {rosteredCount > 0 && (
           <div className="grid items-start gap-3 min-[980px]:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]">
             <ScoreSheet roster={roster} sheets={sheets} result={result} umasById={umasById} />

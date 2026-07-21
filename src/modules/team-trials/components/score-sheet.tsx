@@ -66,7 +66,10 @@ export const ScoreSheet = memo((props: ScoreSheetProps) => {
   const wonCount = result.races.filter((race) => race.won).length;
 
   return (
-    <section className="overflow-hidden rounded-xl border bg-card">
+    <section
+      data-tutorial="team-trials-score-sheet"
+      className="overflow-hidden rounded-xl border bg-card"
+    >
       <div className="flex items-start justify-between gap-2 border-b px-3.5 py-2.5">
         <div>
           <h2 className="text-[13px] font-semibold">Score sheet</h2>
