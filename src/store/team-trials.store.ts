@@ -6,6 +6,7 @@ import {
   type RaceSheet,
   type SheetMultipliers
 } from '@/modules/team-trials/model/score-sheet';
+import { pruneRosterForTeamSize } from '@/modules/team-trials/model/roster-state';
 import {
   ROSTER_CATEGORIES,
   type Roster,
@@ -13,6 +14,7 @@ import {
 } from '@/modules/team-trials/model/types';
 import {
   GOOD_POSITIONING_MAX_PHASES,
+  TEAM_SIZE_BY_CLASS,
   WIN_MARGIN_POINTS
 } from '@/modules/team-trials/model/scoring-tables';
 
@@ -27,6 +29,11 @@ export type TeamTrialsState = {
   multipliers: SheetMultipliers;
   sheetOverrides: Partial<Record<RosterCategory, Array<MemberRaceRow>>>;
 };
+
+export type TeamTrialsRosterSnapshot = Pick<
+  TeamTrialsState,
+  'assignments' | 'aces' | 'sheetOverrides'
+>;
 
 export const defaultTeamTrialsState: TeamTrialsState = {
   teamClass: 1,
@@ -199,8 +206,19 @@ export const useTeamTrialsStore = create<TeamTrialsState>()(
   })
 );
 
-export function setTeamTrialsClass(teamClass: TeamTrialsState['teamClass']) {
-  useTeamTrialsStore.setState({ teamClass });
+/**
+ * Class downgrades keep buildRoster's materialized slot order and discard dropped-slot state.
+ */
+export function setTeamTrialsClass(teamClass: TeamTrialsState['teamClass'], roster: Roster) {
+  useTeamTrialsStore.setState((state) => {
+    const currentTeamSize = TEAM_SIZE_BY_CLASS[state.teamClass];
+    const nextTeamSize = TEAM_SIZE_BY_CLASS[teamClass];
+
+    if (nextTeamSize >= currentTeamSize) return { teamClass };
+
+    const pruned = pruneRosterForTeamSize(state, roster, nextTeamSize);
+    return { teamClass, ...pruned };
+  });
 }
 
 export function addTeamTrialsMember(category: RosterCategory, outfitId: string) {
@@ -244,6 +262,26 @@ export function setTeamTrialsAce(category: RosterCategory, outfitId: string | nu
 
 export function setTeamTrialsAssignments(assignments: TeamTrialsState['assignments']) {
   useTeamTrialsStore.setState({ assignments: normalizeAssignments(assignments), aces: {} });
+}
+
+/** Captures the complete roster slice before a destructive roster action. */
+export function getTeamTrialsRosterSnapshot(): TeamTrialsRosterSnapshot {
+  const state = useTeamTrialsStore.getState();
+
+  return {
+    assignments: normalizeAssignments(state.assignments),
+    aces: normalizeAces(state.aces),
+    sheetOverrides: normalizeSheetOverrides(state.sheetOverrides)
+  };
+}
+
+/** Restores a captured roster slice through the same normalization as persisted data. */
+export function restoreTeamTrialsRoster(snapshot: TeamTrialsRosterSnapshot) {
+  useTeamTrialsStore.setState({
+    assignments: normalizeAssignments(snapshot.assignments),
+    aces: normalizeAces(snapshot.aces),
+    sheetOverrides: normalizeSheetOverrides(snapshot.sheetOverrides)
+  });
 }
 
 export function clearTeamTrialsRoster() {

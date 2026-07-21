@@ -9,10 +9,16 @@ import {
 import type { SheetMultipliers, SheetResult } from '../model/score-sheet';
 import { WINSTREAK_BONUS_PCTS } from '../model/scoring-tables';
 import { setTeamTrialsMultipliers } from '@/store/team-trials.store';
+import { useCommittedNumberInput } from './committed-number-input';
 
 const CAMPAIGN_OPTIONS = [1, 1.5, 2, 3] as const;
 
-const inputClass = 'h-6 rounded-md px-1.5 text-right font-mono text-[11px] pointer-coarse:h-8';
+export function aceBonusExplanation(aceCount: number) {
+  return aceCount > 0 ? 'already included in ace rows' : 'no ace in roster';
+}
+
+const inputClass =
+  'h-7 rounded-md px-1.5 text-right font-mono text-[11px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none pointer-coarse:h-11';
 
 type RatingInputProps = {
   label: string;
@@ -20,8 +26,9 @@ type RatingInputProps = {
   onChange: (value: number) => void;
 };
 
-function RatingInput(props: RatingInputProps) {
+export function RatingInput(props: RatingInputProps) {
   const { label, value, onChange } = props;
+  const input = useCommittedNumberInput({ value, emptyWhenZero: true, onCommit: onChange });
 
   return (
     <Input
@@ -30,20 +37,20 @@ function RatingInput(props: RatingInputProps) {
       step={1000}
       aria-label={label}
       placeholder="—"
-      value={value === 0 ? '' : value}
-      onChange={(event) => onChange(Math.max(0, Math.floor(Number(event.target.value) || 0)))}
+      {...input}
       className={`${inputClass} w-24`}
     />
   );
 }
 
 type MultipliersPanelProps = {
+  aceCount: number;
   multipliers: SheetMultipliers;
   result: SheetResult;
 };
 
 export function MultipliersPanel(props: MultipliersPanelProps) {
-  const { multipliers, result } = props;
+  const { aceCount, multipliers, result } = props;
 
   const set = (patch: Partial<SheetMultipliers>) =>
     setTeamTrialsMultipliers({ ...multipliers, ...patch });
@@ -89,7 +96,7 @@ export function MultipliersPanel(props: MultipliersPanelProps) {
             <SelectTrigger
               size="sm"
               aria-label="Winstreak bonus"
-              className="h-6 w-18 px-1.5 text-[11px] pointer-coarse:h-8"
+              className="h-7 w-18 px-1.5 text-[11px] pointer-coarse:h-11"
             >
               <SelectValue>
                 {multipliers.winstreakBonusPct === 0 ? '0%' : `+${multipliers.winstreakBonusPct}%`}
@@ -136,7 +143,7 @@ export function MultipliersPanel(props: MultipliersPanelProps) {
             <SelectTrigger
               size="sm"
               aria-label="Score-up campaign multiplier"
-              className="h-6 w-18 px-1.5 text-[11px] pointer-coarse:h-8"
+              className="h-7 w-18 px-1.5 text-[11px] pointer-coarse:h-11"
             >
               <SelectValue>×{multipliers.campaignMultiplier}</SelectValue>
             </SelectTrigger>
@@ -160,7 +167,7 @@ export function MultipliersPanel(props: MultipliersPanelProps) {
         </div>
         <div className="flex justify-between text-muted-foreground">
           <span className="font-sans">
-            Ace +10% <span className="text-muted-foreground/70">(already in rows)</span>
+            Ace +10% <span>({aceBonusExplanation(aceCount)})</span>
           </span>
           <span>—</span>
         </div>
@@ -175,14 +182,12 @@ export function MultipliersPanel(props: MultipliersPanelProps) {
           <span className="font-semibold text-foreground">{afterOpponent.toLocaleString()}</span>
         </div>
         <div className="flex justify-between text-muted-foreground">
-          <span className="font-sans">× campaign ×{multipliers.campaignMultiplier}</span>
-          <span className="font-semibold text-foreground">{result.total.toLocaleString()}</span>
+          <span className="font-sans">× campaign</span>
+          <span>×{multipliers.campaignMultiplier}</span>
         </div>
         <div className="mt-1 flex justify-between border-t pt-2 text-sm font-semibold">
           <span className="font-sans">Projected run total</span>
-          <span className="text-emerald-600 dark:text-emerald-400">
-            {result.total.toLocaleString()}
-          </span>
+          <span className="text-success">{result.total.toLocaleString()}</span>
         </div>
       </div>
     </section>

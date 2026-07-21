@@ -18,9 +18,11 @@ import {
   subtotalNote
 } from './score-sheet-format';
 import { CATEGORY_LABELS, CATEGORY_RANGES } from './team-column';
+import { useCommittedNumberInput } from './committed-number-input';
+import { useTruncatedTitle } from './use-truncated-title';
 
 const numberCellClass =
-  'h-6 w-11 rounded-md border bg-muted/50 px-1.5 text-right font-mono text-[11px] tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 pointer-coarse:h-8';
+  'h-7 w-11 rounded-md border bg-muted/50 px-1.5 text-right font-mono text-[11px] tabular-nums outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none pointer-coarse:h-11';
 
 type NumberCellProps = {
   label: string;
@@ -30,22 +32,45 @@ type NumberCellProps = {
   onChange: (value: number) => void;
 };
 
-function NumberCell(props: NumberCellProps) {
+export function NumberCell(props: NumberCellProps) {
   const { label, value, max, wide = false, onChange } = props;
+  const input = useCommittedNumberInput({ value, max, onCommit: onChange });
 
   return (
     <input
       type="number"
       min={0}
       max={max}
+      step={1}
       aria-label={label}
-      value={value}
-      onChange={(event) => {
-        const parsed = Math.max(0, Math.floor(Number(event.target.value) || 0));
-        onChange(max === undefined ? parsed : Math.min(max, parsed));
-      }}
+      {...input}
       className={cn(numberCellClass, wide && 'w-14')}
     />
+  );
+}
+
+type StickyMemberCellProps = {
+  name: string;
+  isAce: boolean;
+};
+
+function StickyMemberCell(props: StickyMemberCellProps) {
+  const { name, isAce } = props;
+  const [setNameElement, nameTitle] = useTruncatedTitle<HTMLTableCellElement>(name);
+
+  return (
+    <td
+      ref={setNameElement}
+      title={nameTitle}
+      className="sticky left-0 z-10 max-w-32 truncate border-r bg-card py-1 pl-3.5 pr-2 font-medium sm:max-w-40"
+    >
+      {name}
+      {isAce && (
+        <span className="ml-1 text-[10px] font-semibold text-amber-950 dark:text-amber-200">
+          ▸ace
+        </span>
+      )}
+    </td>
   );
 }
 
@@ -66,7 +91,7 @@ export function RaceSection(props: RaceSectionProps) {
           colSpan={13}
           className="py-1 pl-3.5 pr-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
         >
-          <span className="sticky left-3.5 inline-block">
+          <span className="sticky left-0 inline-block border-r bg-muted/25 py-1 pl-3.5 pr-2">
             {CATEGORY_LABELS[sheet.category]} · {CATEGORY_RANGES[sheet.category]}
           </span>
         </td>
@@ -78,20 +103,16 @@ export function RaceSection(props: RaceSectionProps) {
 
         return (
           <tr key={row.outfitId} className="border-t border-border/45">
-            <td className="sticky left-0 z-10 max-w-32 truncate bg-card py-1 pl-3.5 pr-2 font-medium sm:max-w-40">
-              {name}
-              {isAce && (
-                <span className="ml-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                  ▸ace
-                </span>
-              )}
-            </td>
+            <StickyMemberCell name={name} isAce={isAce} />
             <td className="px-2 py-1">
               <Select
                 value={String(row.place)}
                 onValueChange={(value) => updateRow(sheet, row.outfitId, { place: Number(value) })}
               >
-                <SelectTrigger size="sm" className="h-6 w-16 px-1.5 text-[11px] pointer-coarse:h-8">
+                <SelectTrigger
+                  size="sm"
+                  className="h-7 w-16 px-1.5 text-[11px] pointer-coarse:h-11"
+                >
                   <SelectValue>{placeLabel(row.place)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent className="text-xs">
@@ -113,7 +134,7 @@ export function RaceSection(props: RaceSectionProps) {
                 >
                   <SelectTrigger
                     size="sm"
-                    className="h-6 w-16 px-1.5 text-[11px] pointer-coarse:h-8"
+                    className="h-7 w-16 px-1.5 text-[11px] pointer-coarse:h-11"
                   >
                     <SelectValue>{MARGIN_LABELS[row.marginTier ?? 'oneLength']}</SelectValue>
                   </SelectTrigger>
@@ -175,6 +196,7 @@ export function RaceSection(props: RaceSectionProps) {
             <td className="px-2 py-1">
               <Checkbox
                 aria-label={`fast start for ${name}`}
+                className="pointer-coarse:size-11"
                 checked={row.fastStart}
                 onCheckedChange={(checked) =>
                   updateRow(sheet, row.outfitId, { fastStart: checked === true })
@@ -184,6 +206,7 @@ export function RaceSection(props: RaceSectionProps) {
             <td className="px-2 py-1">
               <Checkbox
                 aria-label={`long shot win for ${name}`}
+                className="pointer-coarse:size-11"
                 checked={row.longShot && row.place === 1}
                 disabled={row.place !== 1}
                 onCheckedChange={(checked) =>
@@ -194,6 +217,7 @@ export function RaceSection(props: RaceSectionProps) {
             <td className="px-2 py-1">
               <Checkbox
                 aria-label={`rushed for ${name}`}
+                className="pointer-coarse:size-11"
                 checked={row.rushed}
                 onCheckedChange={(checked) =>
                   updateRow(sheet, row.outfitId, { rushed: checked === true })
@@ -208,7 +232,7 @@ export function RaceSection(props: RaceSectionProps) {
       })}
       <tr className="border-t bg-muted/40 font-semibold">
         <td colSpan={12} className="py-1.5 pl-3.5 pr-2">
-          <span className="sticky left-3.5 inline-block">
+          <span className="sticky left-0 inline-block border-r bg-muted/40 py-1.5 pl-3.5 pr-2">
             {CATEGORY_LABELS[sheet.category]} subtotal{' '}
             <span className="text-[11px] font-normal text-muted-foreground">
               {subtotalNote(race, sheet.rows)}

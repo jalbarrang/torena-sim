@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Trash2Icon, UsersIcon, WandSparklesIcon } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +24,8 @@ import { useTraineeListStore } from '@/store/trainee-list.store';
 import {
   applyTeamTrialsSheetOverrides,
   clearTeamTrialsRoster,
+  getTeamTrialsRosterSnapshot,
+  restoreTeamTrialsRoster,
   setTeamTrialsAssignments,
   setTeamTrialsClass,
   useTeamTrialsStore
@@ -36,6 +39,7 @@ import { TEAM_SIZE_BY_CLASS } from '../model/scoring-tables';
 import { AddMemberDialog } from './add-member-dialog';
 import { MultipliersPanel } from './multipliers-panel';
 import { ScoreSheet } from './score-sheet';
+import { getTeamTrialsOnboardingState, getTeamTrialsSummaryCopy } from './team-trials-page-state';
 import { TeamColumn } from './team-column';
 
 const TEAM_CLASSES = [6, 5, 4, 3, 2, 1] as const;
@@ -54,7 +58,7 @@ function StatCard(props: StatCardProps) {
       <div
         className={cn(
           'font-mono text-lg font-semibold tabular-nums leading-tight',
-          highlight && 'text-emerald-600 dark:text-emerald-400'
+          highlight && 'text-success'
         )}
       >
         {value}
@@ -74,6 +78,7 @@ export function TeamTrialsPage() {
   const umas = useUmasForSearch(false);
 
   const [addCategory, setAddCategory] = useState<RosterCategory | null>(null);
+  const undoToastId = useRef<string | number | null>(null);
 
   const ownedCount = Object.keys(owned).length;
   const teamSize = TEAM_SIZE_BY_CLASS[teamClass];
@@ -98,6 +103,7 @@ export function TeamTrialsPage() {
 
   const members = ROSTER_CATEGORIES.flatMap((category) => roster[category]);
   const rosteredCount = members.length;
+  const onboardingState = getTeamTrialsOnboardingState({ ownedCount, rosteredCount });
   const perfectFitCount = members.filter((member) => {
     const aptitudes = umasById.get(member.outfitId)?.aptitudes;
     if (!aptitudes) return false;
@@ -115,20 +121,49 @@ export function TeamTrialsPage() {
     return umas.filter((uma) => owned[uma.id] && !usedCharacters.has(uma.id.slice(0, 4)));
   }, [umas, owned, roster]);
 
-  const autoFill = () => {
-    const optimized = optimizeRoster({ umas, owned, teamSize, pinned: {}, excluded: [] });
+  const changeRosterWithUndo = (message: string, change: () => void) => {
+    const snapshot = getTeamTrialsRosterSnapshot();
 
-    setTeamTrialsAssignments(
-      Object.fromEntries(
-        ROSTER_CATEGORIES.map((category) => [
-          category,
-          optimized[category].map((member) => member.outfitId)
-        ])
-      )
-    );
+    if (undoToastId.current !== null) {
+      toast.dismiss(undoToastId.current);
+    }
+
+    change();
+
+    const toastId = toast.info(message, {
+      description: 'Previous roster available for 10 seconds.',
+      duration: 10_000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          restoreTeamTrialsRoster(snapshot);
+          if (undoToastId.current === toastId) {
+            undoToastId.current = null;
+          }
+          toast.success('Previous roster restored.');
+        }
+      }
+    });
+    undoToastId.current = toastId;
   };
 
-  if (ownedCount === 0) {
+  const autoFill = () => {
+    const optimized = optimizeRoster({ umas, owned, teamSize, pinned: {}, excluded: [] });
+    const assignments = Object.fromEntries(
+      ROSTER_CATEGORIES.map((category) => [
+        category,
+        optimized[category].map((member) => member.outfitId)
+      ])
+    );
+
+    changeRosterWithUndo('Roster auto-filled.', () => setTeamTrialsAssignments(assignments));
+  };
+
+  const clearRoster = () => {
+    changeRosterWithUndo('Roster cleared.', clearTeamTrialsRoster);
+  };
+
+  if (onboardingState === 'no-owned') {
     return (
       <div className="flex w-full items-center justify-center px-4 py-4">
         <Empty className="max-w-md border">
@@ -139,13 +174,21 @@ export function TeamTrialsPage() {
             <EmptyTitle>No owned trainees yet</EmptyTitle>
             <EmptyDescription>
               Team members are picked from the trainees you own. Mark them in the{' '}
-              <Link to="/trainee-list">Trainee List</Link> first.
+              <Link
+                to="/trainee-list"
+                className="rounded-sm font-medium text-foreground underline decoration-muted-foreground underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Trainee List
+              </Link>{' '}
+              first.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>
     );
   }
+
+  const summaryCopy = getTeamTrialsSummaryCopy({ rosteredCount, perfectFitCount });
 
   return (
     <div className="w-full min-h-0 overflow-y-auto">
@@ -162,9 +205,11 @@ export function TeamTrialsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={String(teamClass)}
-              onValueChange={(value) => setTeamTrialsClass(Number(value) as typeof teamClass)}
+              onValueChange={(value) =>
+                setTeamTrialsClass(Number(value) as typeof teamClass, roster)
+              }
             >
-              <SelectTrigger size="sm" className="w-auto min-w-36 text-xs pointer-coarse:h-8">
+              <SelectTrigger size="sm" className="w-auto min-w-36 text-xs pointer-coarse:h-11">
                 <SelectValue>
                   Class {teamClass} · {TEAM_SIZE_BY_CLASS[teamClass]} per team
                 </SelectValue>
@@ -177,15 +222,16 @@ export function TeamTrialsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" onClick={autoFill}>
+            <Button size="sm" variant="outline" onClick={autoFill} className="pointer-coarse:h-11">
               <WandSparklesIcon />
               Auto-fill
             </Button>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => clearTeamTrialsRoster()}
+              onClick={clearRoster}
               disabled={rosteredCount === 0}
+              className="pointer-coarse:h-11"
             >
               <Trash2Icon />
               Clear
@@ -199,23 +245,20 @@ export function TeamTrialsPage() {
             value={`${rosteredCount} / ${slotCount}`}
             caption={`slots filled · ${ownedCount} owned`}
           />
-          <StatCard
-            value={`${perfectFitCount} of ${rosteredCount || slotCount} A/A`}
-            caption="aptitude fit, no multiplier loss"
-          />
+          <StatCard value={summaryCopy.aptitudeFitValue} caption={summaryCopy.aptitudeFitCaption} />
           <StatCard
             value={result.totalBeforeGlobal.toLocaleString()}
-            caption="base score from the sheet below"
+            caption={summaryCopy.baseScoreCaption}
           />
           <StatCard
             value={result.total.toLocaleString()}
-            caption="projected run total after multipliers"
+            caption={summaryCopy.projectedScoreCaption}
             highlight
           />
         </div>
 
         {/* Roster grid */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 min-[980px]:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
           {ROSTER_CATEGORIES.map((category) => (
             <TeamColumn
               key={category}
@@ -232,7 +275,11 @@ export function TeamTrialsPage() {
         {rosteredCount > 0 && (
           <div className="grid items-start gap-3 min-[980px]:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]">
             <ScoreSheet roster={roster} sheets={sheets} result={result} umasById={umasById} />
-            <MultipliersPanel multipliers={multipliers} result={result} />
+            <MultipliersPanel
+              aceCount={members.filter((member) => member.isAce).length}
+              multipliers={multipliers}
+              result={result}
+            />
           </div>
         )}
 

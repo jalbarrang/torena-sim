@@ -57,7 +57,8 @@ export const TeamColumn = memo((props: TeamColumnProps) => {
           key={index}
           type="button"
           onClick={() => onAddMember(category)}
-          className="flex min-h-[68px] items-center justify-center gap-1 border-b text-xs text-muted-foreground transition-colors last:border-b-0 hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none"
+          aria-label={`Add trainee to ${CATEGORY_LABELS[category]}`}
+          className="flex min-h-[68px] items-center justify-center gap-1 border-b text-xs text-muted-foreground transition-colors last:border-b-0 hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <PlusIcon className="size-3.5" />
           Add trainee

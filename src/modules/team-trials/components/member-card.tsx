@@ -8,6 +8,7 @@ import { getUmaImageUrl } from '@/modules/runners/utils';
 import type { UmaSearchEntry } from '@/modules/runners/utils';
 import type { UmaAptitudes } from '@/modules/data/services/UmaService';
 import type { RosterMember } from '../model/types';
+import { useTruncatedTitle } from './use-truncated-title';
 
 const STYLE_LABELS: Record<string, string> = {
   frontRunner: 'Front Runner',
@@ -50,6 +51,9 @@ export const MemberCard = memo((props: MemberCardProps) => {
   const surfaceLetter = aptitudes?.[member.surface as keyof UmaAptitudes] ?? '?';
   const distanceLetter = aptitudes?.[member.distance as keyof UmaAptitudes] ?? '?';
   const name = uma?.name ?? 'Unknown';
+  const outfit = uma?.outfit ?? member.outfitId;
+  const [setNameElement, nameTitle] = useTruncatedTitle<HTMLDivElement>(name);
+  const [setOutfitElement, outfitTitle] = useTruncatedTitle<HTMLDivElement>(outfit);
 
   return (
     <div className="border-b px-3 py-2.5 last:border-b-0">
@@ -60,17 +64,27 @@ export const MemberCard = memo((props: MemberCardProps) => {
           loading="lazy"
           className={cn(
             'size-9 shrink-0 rounded-full border-2 object-cover',
-            member.isAce ? 'border-amber-400' : 'border-border'
+            member.isAce ? 'border-amber-700 dark:border-amber-400' : 'border-border'
           )}
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold leading-tight">{name}</div>
-          <div className="truncate text-[11px] leading-tight text-muted-foreground">
-            {uma?.outfit ?? member.outfitId}
+          <div
+            ref={setNameElement}
+            title={nameTitle}
+            className="truncate text-[13px] font-semibold leading-tight"
+          >
+            {name}
+          </div>
+          <div
+            ref={setOutfitElement}
+            title={outfitTitle}
+            className="truncate text-[11px] leading-tight text-muted-foreground"
+          >
+            {outfit}
           </div>
         </div>
         {member.isAce ? (
-          <span className="shrink-0 rounded-full border border-amber-400/45 bg-amber-400/15 px-1.5 py-px text-[10px] font-semibold tracking-wide text-amber-600 dark:text-amber-400">
+          <span className="shrink-0 rounded-full border border-amber-700 bg-amber-100 px-1.5 py-px text-[10px] font-semibold tracking-wide text-amber-950 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-200">
             ACE +10%
           </span>
         ) : (
@@ -82,7 +96,7 @@ export const MemberCard = memo((props: MemberCardProps) => {
                   variant="ghost"
                   aria-label={`Make ${name} the ace`}
                   onClick={onSetAce}
-                  className="shrink-0 text-muted-foreground"
+                  className="shrink-0 text-muted-foreground pointer-coarse:size-11"
                 />
               }
             >
@@ -96,7 +110,7 @@ export const MemberCard = memo((props: MemberCardProps) => {
           variant="ghost"
           aria-label={`Remove ${name}`}
           onClick={onRemove}
-          className="shrink-0 text-muted-foreground"
+          className="shrink-0 text-muted-foreground pointer-coarse:size-11"
         >
           <XIcon />
         </Button>
@@ -111,7 +125,7 @@ export const MemberCard = memo((props: MemberCardProps) => {
           onClassName="text-sky-500 dark:text-sky-400"
         />
         <span>{STYLE_LABELS[member.style] ?? member.style}</span>
-        <span className="font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">
+        <span className="font-semibold text-foreground tabular-nums">
           {surfaceLetter}/{distanceLetter}
         </span>
         <span className="text-sky-600 tabular-nums dark:text-sky-400">

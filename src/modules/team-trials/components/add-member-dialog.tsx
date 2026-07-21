@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react';
 import { SearchIcon } from 'lucide-react';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { getUmaImageUrl } from '@/modules/runners/utils';
 import type { UmaSearchEntry } from '@/modules/runners/utils';
@@ -62,6 +68,10 @@ export function AddMemberDialog(props: AddMemberDialogProps) {
       <DialogContent className="flex max-h-[70vh] flex-col gap-3 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add to {category ? CATEGORY_LABELS[category] : ''}</DialogTitle>
+          <DialogDescription>
+            Fit combines surface, distance, and best running-style aptitude for this trial; 1.00
+            means no aptitude loss.
+          </DialogDescription>
         </DialogHeader>
 
         <InputGroup>
@@ -89,7 +99,7 @@ export function AddMemberDialog(props: AddMemberDialogProps) {
                   <button
                     type="button"
                     onClick={() => handlePick(uma.id)}
-                    className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                    className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <img
                       src={getUmaImageUrl(uma.id)}
@@ -98,10 +108,12 @@ export function AddMemberDialog(props: AddMemberDialogProps) {
                       className="size-9 shrink-0 rounded"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[10px] font-bold leading-tight">
+                      <span className="block truncate text-[13px] font-semibold leading-tight">
+                        {uma.name}
+                      </span>
+                      <span className="block truncate text-[11px] leading-tight text-muted-foreground">
                         {uma.outfit}
                       </span>
-                      <span className="block truncate text-xs leading-tight">{uma.name}</span>
                     </span>
                     <span className="shrink-0 text-right font-mono text-[10px] text-muted-foreground">
                       <span className="block">
