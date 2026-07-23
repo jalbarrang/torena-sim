@@ -25,7 +25,11 @@ export function initializeObservability() {
     return;
   }
 
-  initializePostHog({ key: config.posthog.key, host: config.posthog.host });
+  initializePostHog({
+    key: config.posthog.key,
+    host: config.posthog.host,
+    uiHost: config.posthog.uiHost
+  });
 
   if (useObservabilityConsentStore.getState().consent === 'granted') {
     grantPostHogConsent(deploymentContext);

@@ -16,7 +16,11 @@ import {
 import { useObservabilityConsentStore } from './observability-consent.store';
 
 const testConfig = vi.hoisted(() => ({
-  posthog: { key: 'phc_test', host: 'https://us.i.posthog.com' }
+  posthog: {
+    key: 'phc_test',
+    host: 'https://us.i.posthog.com',
+    uiHost: 'https://us.posthog.com'
+  }
 }));
 
 vi.mock('@/config', () => ({ config: testConfig }));
@@ -43,7 +47,8 @@ describe('observability', () => {
 
     expect(initializePostHog).toHaveBeenCalledWith({
       key: 'phc_test',
-      host: 'https://us.i.posthog.com'
+      host: 'https://us.i.posthog.com',
+      uiHost: 'https://us.posthog.com'
     });
     expect(grantPostHogConsent).toHaveBeenCalledWith(
       expect.objectContaining({ appName: 'torena-sim' })

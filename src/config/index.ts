@@ -7,6 +7,7 @@ export type AppConfig = {
   posthog: {
     key?: string;
     host?: string;
+    uiHost?: string;
   };
   suggestions: {
     workerUrl?: string;
@@ -27,7 +28,8 @@ export const config: AppConfig = {
   enableGrab: envBoolean('VITE_ENABLE_GRAB', false),
   posthog: {
     key: envString('VITE_PUBLIC_POSTHOG_KEY'),
-    host: envString('VITE_PUBLIC_POSTHOG_HOST')
+    host: envString('VITE_PUBLIC_POSTHOG_HOST'),
+    uiHost: envString('VITE_PUBLIC_POSTHOG_UI_HOST', 'https://us.posthog.com')
   },
   suggestions: {
     workerUrl: envString('VITE_SUGGESTION_WORKER_URL'),

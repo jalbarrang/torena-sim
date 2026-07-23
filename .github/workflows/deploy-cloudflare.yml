@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
-      VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST }}
+      VITE_PUBLIC_POSTHOG_HOST: /ingest
       # Cloudflare Pages serves at the domain root, so no base path.
       VITE_BASE_PATH: /
       VITE_SITE_URL: https://torena-sim.pages.dev

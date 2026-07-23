@@ -4,6 +4,7 @@ import { sanitizePostHogEvent } from './posthog-event-sanitizer';
 type PostHogSetup = {
   key: string;
   host?: string;
+  uiHost?: string;
 };
 
 type DeploymentContext = {
@@ -15,6 +16,7 @@ type DeploymentContext = {
 export function initializePostHog(setup: PostHogSetup) {
   posthog.init(setup.key, {
     api_host: setup.host,
+    ui_host: setup.uiHost,
     defaults: '2026-01-30',
     capture_exceptions: {
       capture_unhandled_errors: true,

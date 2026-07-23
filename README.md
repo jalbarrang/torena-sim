@@ -95,7 +95,8 @@ Use `DATA_UPDATE_PAT` as `GITHUB_TOKEN` for local releases.
 | `POSTHOG_CLI_API_KEY`      | Secret   | PostHog personal API key with error tracking write scope and organization read scope                      |
 | `POSTHOG_CLI_HOST`         | Variable | Optional source-map API host; leave unset for US Cloud or use `https://eu.posthog.com` for EU Cloud       |
 | `VITE_PUBLIC_POSTHOG_KEY`  | Secret   | Build-time analytics key                                                                                  |
-| `VITE_PUBLIC_POSTHOG_HOST` | Variable | Build-time analytics host                                                                                 |
+| `VITE_PUBLIC_POSTHOG_HOST` | Variable | Analytics host; the Cloudflare deploy hardcodes `/ingest` (same-origin reverse proxy, `functions/ingest/`) to bypass ad blockers |
+| `VITE_PUBLIC_POSTHOG_UI_HOST` | Variable | Optional PostHog UI host for the proxied SDK (default `https://us.posthog.com`)                          |
 | `VITE_BASE_PATH`           | Variable | GitHub Pages base path                                                                                    |
 
 ## Useful Commands

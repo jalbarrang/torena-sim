@@ -25,12 +25,17 @@ afterEach(() => {
 
 describe('PostHog observability adapter', () => {
   it('configures privacy-safe exception capture', () => {
-    initializePostHog({ key: 'phc_test', host: 'https://us.i.posthog.com' });
+    initializePostHog({
+      key: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      uiHost: 'https://us.posthog.com'
+    });
 
     expect(posthog.init).toHaveBeenCalledWith(
       'phc_test',
       expect.objectContaining({
         api_host: 'https://us.i.posthog.com',
+        ui_host: 'https://us.posthog.com',
         capture_exceptions: {
           capture_unhandled_errors: true,
           capture_unhandled_rejections: true,
