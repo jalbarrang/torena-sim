@@ -91,6 +91,9 @@ Use `DATA_UPDATE_PAT` as `GITHUB_TOKEN` for local releases.
 | `DATA_UPDATE_PAT`          | Secret   | `versioning.yml` — PAT for semantic-release (push tags, releases) |
 | `CLOUDFLARE_API_TOKEN`     | Secret   | Cloudflare Pages deploy (scope: *Cloudflare Pages → Edit*)                                                |
 | `CLOUDFLARE_ACCOUNT_ID`    | Secret   | Cloudflare Pages deploy (also used by the suggestion-bot Worker)                                          |
+| `POSTHOG_PROJECT_ID`       | Secret   | PostHog project ID used to upload production source maps                                                  |
+| `POSTHOG_CLI_API_KEY`      | Secret   | PostHog personal API key with error tracking write scope and organization read scope                      |
+| `POSTHOG_CLI_HOST`         | Variable | Optional source-map API host; leave unset for US Cloud or use `https://eu.posthog.com` for EU Cloud       |
 | `VITE_PUBLIC_POSTHOG_KEY`  | Secret   | Build-time analytics key                                                                                  |
 | `VITE_PUBLIC_POSTHOG_HOST` | Variable | Build-time analytics host                                                                                 |
 | `VITE_BASE_PATH`           | Variable | GitHub Pages base path                                                                                    |

@@ -80,6 +80,18 @@ jobs:
       - name: Verify worker bundles stay data-free
         run: pnpm run check:worker-bundles
 
+      # This must run before deployment: the action injects chunk IDs into the JavaScript that PostHog uses to match stack frames to uploaded maps.
+      - name: Upload source maps to PostHog
+        uses: PostHog/upload-source-maps@v2
+        with:
+          directory: dist
+          project-id: ${{ secrets.POSTHOG_PROJECT_ID }}
+          api-key: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          host: ${{ vars.POSTHOG_CLI_HOST }}
+          release-name: torena-sim
+          release-version: ${{ github.sha }}
+          delete-after-upload: true
+
       - name: Add SPA fallback for client-side routing
         run: printf '/*    /index.html    200\n' > dist/_redirects
 

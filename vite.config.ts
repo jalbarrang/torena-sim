@@ -118,6 +118,10 @@ export default defineConfig({
     })
   ],
   assetsInclude: ['**/*.wasm'],
+  build: {
+    // PostHog injects a chunk ID and uploads these maps in the deploy workflow; `hidden` keeps sourceMappingURL comments out of the public JavaScript.
+    sourcemap: 'hidden'
+  },
   worker: {
     format: 'es'
   },

@@ -1,26 +1,13 @@
-import posthog from 'posthog-js';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
-import { config } from '@/config';
-import { setAnalyticsConsent, useAnalyticsConsentStore } from '@/store/analytics-consent.store';
+import { useObservabilityConsent } from '@/modules/observability/observability';
 
 export function AnalyticsConsentBanner() {
-  const consent = useAnalyticsConsentStore((state) => state.consent);
+  const { configured, consent, grantConsent, denyConsent } = useObservabilityConsent();
 
-  // Nothing to consent to when analytics isn't configured.
-  if (!config.posthog.key || consent !== null) {
+  if (!configured || consent !== null) {
     return null;
   }
-
-  const accept = () => {
-    setAnalyticsConsent('granted');
-    posthog.opt_in_capturing();
-  };
-
-  const decline = () => {
-    setAnalyticsConsent('denied');
-    posthog.opt_out_capturing();
-  };
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3 sm:p-4">
@@ -34,10 +21,10 @@ export function AnalyticsConsentBanner() {
           .
         </p>
         <div className="flex shrink-0 gap-2">
-          <Button variant="outline" size="sm" onClick={decline}>
+          <Button variant="outline" size="sm" onClick={denyConsent}>
             Decline
           </Button>
-          <Button size="sm" onClick={accept}>
+          <Button size="sm" onClick={grantConsent}>
             Accept
           </Button>
         </div>

@@ -6,6 +6,9 @@ if (config.enableGrab) {
 
 import './polyfills';
 import { DataBootGate } from '@/components/data-boot-gate';
+import { ObservabilityBoundary } from '@/modules/observability/observability-boundary';
+import { ObservabilityRouteTracker } from '@/modules/observability/observability-route-tracker';
+import { initializeObservability } from '@/modules/observability/observability';
 
 // Supports weights 100-900
 import '@fontsource-variable/inter/wght.css';
@@ -22,24 +25,7 @@ import { reconcileStoresAfterHydration } from '@/store/race/reconcile';
 import { ThemeStoreProvider } from './providers/theme/provider';
 import { RootComponent } from './routes/root';
 
-import posthog from 'posthog-js';
-import { PostHogErrorBoundary, PostHogProvider } from '@posthog/react';
-import { useAnalyticsConsentStore } from '@/store/analytics-consent.store';
-
-if (config.posthog.key) {
-  posthog.init(config.posthog.key, {
-    api_host: config.posthog.host,
-    defaults: '2026-01-30',
-    // No capturing until the visitor explicitly opts in (see ConsentBanner).
-    opt_out_capturing_by_default: true,
-    respect_dnt: true
-  });
-
-  // Re-apply a previously stored decision on load.
-  if (useAnalyticsConsentStore.getState().consent === 'granted') {
-    posthog.opt_in_capturing();
-  }
-}
+initializeObservability();
 
 enableMapSet();
 reconcileStoresAfterHydration();
@@ -57,17 +43,16 @@ const queryClient = new QueryClient();
 // splash while the data bootstrap runs, then renders the routes once the service
 // singletons are populated.
 root.render(
-  <PostHogProvider client={posthog}>
-    <PostHogErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter basename={config.basePath}>
-          <ThemeStoreProvider>
-            <DataBootGate>
-              <RootComponent />
-            </DataBootGate>
-          </ThemeStoreProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </PostHogErrorBoundary>
-  </PostHogProvider>
+  <ObservabilityBoundary>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter basename={config.basePath}>
+        <ObservabilityRouteTracker />
+        <ThemeStoreProvider>
+          <DataBootGate>
+            <RootComponent />
+          </DataBootGate>
+        </ThemeStoreProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  </ObservabilityBoundary>
 );
