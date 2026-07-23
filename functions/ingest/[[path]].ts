@@ -7,10 +7,19 @@ type PagesContext = {
   waitUntil(promise: Promise<unknown>): void;
 };
 
-export function onRequest(context: PagesContext) {
-  return proxyPostHogRequest(
-    context.request,
-    { api: 'https://us.i.posthog.com', assets: 'https://us-assets.i.posthog.com' },
-    { fetch, cache: caches.default, waitUntil: context.waitUntil.bind(context) }
-  );
+export async function onRequest(context: PagesContext) {
+  try {
+    return await proxyPostHogRequest(
+      context.request,
+      { api: 'https://us.i.posthog.com', assets: 'https://us-assets.i.posthog.com' },
+      {
+        fetch: (request) => fetch(request),
+        cache: caches.default,
+        waitUntil: (promise) => context.waitUntil(promise)
+      }
+    );
+  } catch (error) {
+    console.error('posthog-proxy failed', error);
+    return new Response('posthog proxy error', { status: 502 });
+  }
 }
