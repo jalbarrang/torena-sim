@@ -1,14 +1,25 @@
 import type { TimelineEvent, TimelinePayload } from '@/modules/carat/data/timeline-types';
-import { caratsAvailableAt, projectIncome } from '@/modules/carat/model/income';
+import {
+  bannerLifecycle,
+  bannerStartTime,
+  type BannerLifecycle
+} from '@/modules/carat/data/banner-lifecycle';
+import { projectIncome } from '@/modules/carat/model/income';
 import { CARAT_PER_PULL } from '@/modules/carat/model/income-tables';
 import { totalPaidCaratsFromPurchases, type PaidPackPurchases } from '@/modules/carat/model/paid';
 import type { CaratSettings, PlannedBanner } from '@/store/carat.store';
 
 type TicketType = 'uma' | 'support';
 
+type BannerPlanStatus = 'recorded' | 'provisional' | 'live' | 'future' | 'unknown';
+
+export type ComputePlanOptions = { now?: Date };
+
 export type BannerPlanRow = {
   event: TimelineEvent;
   plannedBanner: PlannedBanner;
+  status: BannerPlanStatus;
+  effectivePulls: number;
   caratsAvailable: number;
   paidCaratsAvailable: number;
   freeCaratsAvailable: number;
@@ -17,6 +28,7 @@ export type BannerPlanRow = {
   ticketsUsed: number;
   ticketsSaved: number;
   ticketsRemaining: number;
+  ticketDeficit: number;
   cost: number;
   paidCost: number;
   freeCost: number;
@@ -26,13 +38,17 @@ export type BannerPlanRow = {
   affordable: boolean;
 };
 
-function eventStartDate(event: TimelineEvent) {
-  return new Date(event.global_release_date ?? event.jp_release_date ?? 0);
-}
+type PlannedEvent = { event: TimelineEvent; plannedBanner: PlannedBanner };
+
+type RunningResources = {
+  freeCarats: number;
+  paidCarats: number;
+  umaTickets: number;
+  supportTickets: number;
+};
 
 function eventStartTime(event: TimelineEvent) {
-  const time = eventStartDate(event).getTime();
-  return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+  return bannerStartTime(event) ?? Number.POSITIVE_INFINITY;
 }
 
 function ticketTypeForEvent(event: TimelineEvent): TicketType {
@@ -48,7 +64,6 @@ function ticketAllocation(
   ticketsAvailable: number,
   plannedPulls: number
 ) {
-  // ticketsAvailable is clamped defensively; the running pools are already >= 0.
   const maxTicketsUsed = Math.min(Math.max(0, ticketsAvailable), plannedPulls);
 
   if (plannedBanner.ticketsUsed === undefined) {
@@ -58,85 +73,165 @@ function ticketAllocation(
   return Math.min(maxTicketsUsed, Math.max(0, Math.floor(plannedBanner.ticketsUsed || 0)));
 }
 
+function recordedPullsOf(plannedBanner: PlannedBanner) {
+  return Math.max(0, Math.floor(plannedBanner.pullResult?.pulls || 0));
+}
+
+function recordedTicketsOf(plannedBanner: PlannedBanner, pulls: number) {
+  return Math.min(pulls, Math.max(0, Math.floor(plannedBanner.pullResult?.ticketsUsed || 0)));
+}
+
+function statusForBanner(
+  lifecycle: BannerLifecycle,
+  plannedBanner: PlannedBanner
+): BannerPlanStatus {
+  if (lifecycle === 'past') {
+    return plannedBanner.pullResult ? 'recorded' : 'provisional';
+  }
+
+  return lifecycle;
+}
+
+function ticketPool(resources: RunningResources, ticketType: TicketType) {
+  return ticketType === 'uma' ? resources.umaTickets : resources.supportTickets;
+}
+
+function setTicketPool(resources: RunningResources, ticketType: TicketType, value: number) {
+  if (ticketType === 'uma') {
+    resources.umaTickets = value;
+  } else {
+    resources.supportTickets = value;
+  }
+}
+
+function settleBanner(
+  event: TimelineEvent,
+  plannedBanner: PlannedBanner,
+  status: BannerPlanStatus,
+  resources: RunningResources,
+  settings: CaratSettings
+): BannerPlanRow {
+  const ticketType = ticketTypeForEvent(event);
+  const effectivePulls =
+    status === 'recorded' ? recordedPullsOf(plannedBanner) : plannedPullsOf(plannedBanner);
+  const availableTicketPool = ticketPool(resources, ticketType);
+  const ticketsAvailable = Math.floor(Math.max(0, availableTicketPool));
+  const ticketsUsed =
+    status === 'recorded'
+      ? recordedTicketsOf(plannedBanner, effectivePulls)
+      : ticketAllocation(plannedBanner, ticketsAvailable, effectivePulls);
+  const nextTicketPool = availableTicketPool - ticketsUsed;
+  setTicketPool(resources, ticketType, nextTicketPool);
+
+  const caratsAvailable = resources.freeCarats + resources.paidCarats;
+  const paidCaratsAvailable = resources.paidCarats;
+  const freeCaratsAvailable = resources.freeCarats;
+  const ticketsSaved = ticketsUsed * CARAT_PER_PULL;
+  const cost = Math.max(0, effectivePulls - ticketsUsed) * CARAT_PER_PULL;
+  const paidCost = settings.trackPaidCarats ? Math.min(resources.paidCarats, cost) : 0;
+  const freeCost = cost - paidCost;
+  resources.paidCarats -= paidCost;
+  resources.freeCarats -= freeCost;
+  const balanceAfter = resources.freeCarats + resources.paidCarats;
+
+  return {
+    event,
+    plannedBanner,
+    status,
+    effectivePulls,
+    caratsAvailable,
+    paidCaratsAvailable,
+    freeCaratsAvailable,
+    ticketType,
+    ticketsAvailable,
+    ticketsUsed,
+    ticketsSaved,
+    ticketsRemaining: Math.floor(Math.max(0, nextTicketPool)),
+    ticketDeficit: Math.max(0, -nextTicketPool),
+    cost,
+    paidCost,
+    freeCost,
+    balanceAfter,
+    paidBalanceAfter: resources.paidCarats,
+    freeBalanceAfter: resources.freeCarats,
+    affordable: balanceAfter >= 0
+  };
+}
+
+function addIncome(resources: RunningResources, income: ReturnType<typeof projectIncome>) {
+  resources.freeCarats += income.carats;
+  resources.umaTickets += income.umaTickets;
+  resources.supportTickets += income.supportTickets;
+}
+
 export function computePlan(
   settings: CaratSettings,
   timeline: TimelinePayload,
   plannedBanners: PlannedBanner[],
-  paidPurchases: Record<string, Partial<PaidPackPurchases>> = {}
+  paidPurchases: Record<string, Partial<PaidPackPurchases>> = {},
+  options: ComputePlanOptions = {}
 ): BannerPlanRow[] {
+  const now = new Date(options.now ?? Date.now());
   const eventsById = new Map(timeline.events.map((event) => [event.id, event]));
   const rows = plannedBanners
     .map((plannedBanner) => {
       const event = eventsById.get(plannedBanner.id);
       return event ? { event, plannedBanner } : null;
     })
-    .filter((row): row is { event: TimelineEvent; plannedBanner: PlannedBanner } => row !== null)
+    .filter((row): row is PlannedEvent => row !== null)
     .sort((a, b) => eventStartTime(a.event) - eventStartTime(b.event));
+  const lifecycles = new Map(
+    rows.map((row) => [row.plannedBanner, bannerLifecycle(row.event, now)])
+  );
+  const historicalRows = rows.filter((row) => lifecycles.get(row.plannedBanner) === 'past');
+  const projectedRows = rows.filter((row) => lifecycles.get(row.plannedBanner) !== 'past');
+  const resources: RunningResources = {
+    freeCarats: settings.startingFreeCarats,
+    paidCarats: settings.trackPaidCarats
+      ? settings.startingPaidCarats +
+        totalPaidCaratsFromPurchases(paidPurchases, settings.server).paidCarats
+      : 0,
+    umaTickets: Math.max(0, Math.floor(settings.umaTickets || 0)),
+    supportTickets: Math.max(0, Math.floor(settings.supportTickets || 0))
+  };
+  const computedRows = new Map<PlannedBanner, BannerPlanRow>();
 
-  let previousDate = new Date();
-  let runningFreeBalance = settings.startingFreeCarats;
-  let runningPaidBalance = settings.trackPaidCarats
-    ? settings.startingPaidCarats +
-      totalPaidCaratsFromPurchases(paidPurchases, settings.server).paidCarats
-    : 0;
-  let runningUmaTickets = Math.max(0, Math.floor(settings.umaTickets || 0));
-  let runningSupportTickets = Math.max(0, Math.floor(settings.supportTickets || 0));
-
-  return rows.map(({ event, plannedBanner }) => {
-    const startDate = eventStartDate(event);
-    const income = projectIncome(settings, timeline, previousDate, startDate);
-    runningFreeBalance += income.carats;
-    // Income tickets are tracked per type. Pools may be fractional here (LoH and
-    // baseline tickets are amortized monthly); we floor when exposing/allocating
-    // below and carry the remainder forward.
-    runningUmaTickets += income.umaTickets;
-    runningSupportTickets += income.supportTickets;
-
-    const ticketType = ticketTypeForEvent(event);
-    const ticketsAvailable = Math.floor(
-      Math.max(0, ticketType === 'uma' ? runningUmaTickets : runningSupportTickets)
+  // Ended banners consume the configured starting pools in chronology, but do
+  // not advance the income boundary into the past.
+  for (const row of historicalRows) {
+    const lifecycle = lifecycles.get(row.plannedBanner)!;
+    computedRows.set(
+      row.plannedBanner,
+      settleBanner(
+        row.event,
+        row.plannedBanner,
+        statusForBanner(lifecycle, row.plannedBanner),
+        resources,
+        settings
+      )
     );
-    const plannedPulls = plannedPullsOf(plannedBanner);
-    const ticketsUsed = ticketAllocation(plannedBanner, ticketsAvailable, plannedPulls);
-    const ticketsSaved = ticketsUsed * CARAT_PER_PULL;
+  }
 
-    if (ticketType === 'uma') {
-      runningUmaTickets -= ticketsUsed;
-    } else {
-      runningSupportTickets -= ticketsUsed;
+  let incomeBoundary = now;
+  for (const row of projectedRows) {
+    const lifecycle = lifecycles.get(row.plannedBanner)!;
+    const startTime = eventStartTime(row.event);
+    const spendDate = lifecycle === 'future' ? new Date(startTime) : now;
+    if (spendDate.getTime() > incomeBoundary.getTime()) {
+      addIncome(resources, projectIncome(settings, timeline, incomeBoundary, spendDate));
+      incomeBoundary = spendDate;
     }
+    computedRows.set(
+      row.plannedBanner,
+      settleBanner(
+        row.event,
+        row.plannedBanner,
+        statusForBanner(lifecycle, row.plannedBanner),
+        resources,
+        settings
+      )
+    );
+  }
 
-    const ticketedPulls = Math.max(0, plannedPulls - ticketsUsed);
-    const cost = ticketedPulls * CARAT_PER_PULL;
-    const paidCost = settings.trackPaidCarats ? Math.min(runningPaidBalance, cost) : 0;
-    const freeCost = cost - paidCost;
-    runningPaidBalance -= paidCost;
-    runningFreeBalance -= freeCost;
-    previousDate = startDate;
-
-    const freeCaratsAvailable = caratsAvailableAt(settings, timeline, startDate);
-    const balanceAfter = runningFreeBalance + runningPaidBalance;
-
-    return {
-      event,
-      plannedBanner,
-      caratsAvailable: freeCaratsAvailable + runningPaidBalance,
-      paidCaratsAvailable: runningPaidBalance + paidCost,
-      freeCaratsAvailable,
-      ticketType,
-      ticketsAvailable,
-      ticketsUsed,
-      ticketsSaved,
-      ticketsRemaining: Math.floor(
-        Math.max(0, ticketType === 'uma' ? runningUmaTickets : runningSupportTickets)
-      ),
-      cost,
-      paidCost,
-      freeCost,
-      balanceAfter,
-      paidBalanceAfter: runningPaidBalance,
-      freeBalanceAfter: runningFreeBalance,
-      affordable: balanceAfter >= 0
-    };
-  });
+  return rows.map((row) => computedRows.get(row.plannedBanner)!);
 }

@@ -11,10 +11,11 @@ import {
 type RemovePlannedBannerButtonProps = {
   bannerId: string;
   bannerLabel: string;
+  label?: boolean;
 };
 
 export function RemovePlannedBannerButton(props: RemovePlannedBannerButtonProps) {
-  const { bannerId, bannerLabel } = props;
+  const { bannerId, bannerLabel, label = false } = props;
 
   const handleRemove = () => {
     const banner = getActivePlan(useCaratStore.getState()).plannedBanners.find(
@@ -34,12 +35,13 @@ export function RemovePlannedBannerButton(props: RemovePlannedBannerButtonProps)
 
   return (
     <Button
-      size="icon-sm"
-      variant="ghost"
+      type="button"
+      size={label ? 'sm' : 'icon-sm'}
+      variant={label ? 'destructive' : 'ghost'}
       onClick={handleRemove}
       aria-label={`Remove ${bannerLabel}`}
     >
-      <Trash2 />
+      {label ? 'Remove' : <Trash2 />}
     </Button>
   );
 }

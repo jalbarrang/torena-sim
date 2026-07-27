@@ -121,10 +121,11 @@ export function SummaryStats() {
     ? projectMonthlyIncomeBreakdown(settings, timelineQuery.data, now)
     : null;
   const plan = timelineQuery.data
-    ? computePlan(settings, timelineQuery.data, plannedBanners, paidPurchases)
+    ? computePlan(settings, timelineQuery.data, plannedBanners, paidPurchases, { now })
     : [];
-  const plannedSpend = plan.reduce((total, row) => total + row.cost, 0);
-  const plannedPulls = plan.reduce((total, row) => total + row.plannedBanner.plannedPulls, 0);
+  const totalSpend = plan.reduce((total, row) => total + row.cost, 0);
+  const totalPulls = plan.reduce((total, row) => total + row.effectivePulls, 0);
+  const provisionalCount = plan.filter((row) => row.status === 'provisional').length;
   const lastRow = plan.at(-1);
 
   const affordable = lastRow?.affordable === true;
@@ -203,9 +204,9 @@ export function SummaryStats() {
           labelAction={breakdown ? <IncomeBreakdownHint breakdown={breakdown} /> : null}
         />
         <SecondaryMetric
-          label="Planned Spend"
-          value={plannedSpend > 0 ? formatCarats(plannedSpend) : '0'}
-          sub={`${plannedPulls.toLocaleString()} pulls · ${plan.length.toLocaleString()} banner${plan.length === 1 ? '' : 's'}`}
+          label="Total Spend"
+          value={totalSpend > 0 ? formatCarats(totalSpend) : '0'}
+          sub={`${totalPulls.toLocaleString()} pulls · ${plan.length.toLocaleString()} banner${plan.length === 1 ? '' : 's'}${provisionalCount > 0 ? ` · ${provisionalCount} provisional` : ''}`}
         />
       </div>
     </section>

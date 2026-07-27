@@ -24,6 +24,7 @@ import {
   type BannerAptitudeKey
 } from '@/modules/carat/data/banner-aptitudes';
 import { bannerImageUrl } from '@/modules/carat/data/banner-image';
+import { bannerLifecycle } from '@/modules/carat/data/banner-lifecycle';
 import { resolveBannerLabel } from '@/modules/carat/data/card-names';
 import type {
   TimelineEvent,
@@ -42,6 +43,7 @@ type BannerTypeFilter = 'all' | 'character' | 'support';
 
 type AddBannerDialogProps = {
   timeline: TimelinePayload;
+  showFirstVisitNudge?: boolean;
 };
 
 type FilterOption<T extends string> = { value: T; label: string };
@@ -177,15 +179,24 @@ function AptitudeFilterGroup(props: {
 }
 
 export function AddBannerDialog(props: AddBannerDialogProps) {
-  const { timeline } = props;
+  const { timeline, showFirstVisitNudge = false } = props;
   const [open, setOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<BannerTypeFilter>('all');
   const [aptitudeFilter, setAptitudeFilter] = useState<ReadonlySet<BannerAptitudeKey>>(new Set());
   const [search, setSearch] = useState('');
-  const plannedBannerIds = useCaratStore(
-    useShallow((state) => getActivePlan(state).plannedBanners.map((banner) => banner.id))
+  const plannedBanners = useCaratStore(useShallow((state) => getActivePlan(state).plannedBanners));
+  const plannedIds = useMemo(
+    () => new Set(plannedBanners.map((banner) => banner.id)),
+    [plannedBanners]
   );
-  const plannedIds = useMemo(() => new Set(plannedBannerIds), [plannedBannerIds]);
+  const hasPastUnresolvedBanner = useMemo(() => {
+    const eventsById = new Map(timeline.events.map((event) => [event.id, event]));
+    const now = new Date();
+    return plannedBanners.some((banner) => {
+      const event = eventsById.get(banner.id);
+      return !banner.pullResult && event && bannerLifecycle(event, now) === 'past';
+    });
+  }, [plannedBanners, timeline.events]);
 
   const filtersActive = typeFilter !== 'all' || aptitudeFilter.size > 0 || search.trim() !== '';
   const clearFilters = () => {
@@ -207,16 +218,12 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
   };
 
   const banners = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
     const searchText = search.trim().toLowerCase();
 
     return timeline.events
       .filter((event) => event.type === 'character_banner' || event.type === 'support_card_banner')
-      .filter((event) => {
-        const date = event.global_release_date ? new Date(event.global_release_date) : null;
-        return date !== null && date.getTime() >= today.getTime();
-      })
+      .filter((event) => bannerLifecycle(event, now) !== 'past')
       .filter((event) => typeFilter === 'all' || event.card_type === typeFilter)
       .filter((event) => {
         if (aptitudeFilter.size === 0) return true;
@@ -244,7 +251,15 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button data-tutorial="carat-add-banner" />}>
+      <DialogTrigger
+        render={
+          <Button
+            data-tutorial="carat-add-banner"
+            type="button"
+            variant={showFirstVisitNudge || hasPastUnresolvedBanner ? 'secondary' : 'default'}
+          />
+        }
+      >
         + Add banner from timeline
       </DialogTrigger>
       <DialogContent
@@ -254,7 +269,7 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
         <DialogHeader className="px-4 pt-4">
           <DialogTitle>Add banners from timeline</DialogTitle>
           <DialogDescription>
-            Tap to add or remove future banners. The list stays open so you can build your whole
+            Tap to add or remove available banners. The list stays open so you can build your whole
             plan in one go.
           </DialogDescription>
         </DialogHeader>
@@ -271,7 +286,7 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
 
         <div className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-muted-foreground">
           <span>
-            {banners.length.toLocaleString()} upcoming banner{banners.length === 1 ? '' : 's'}
+            {banners.length.toLocaleString()} available banner{banners.length === 1 ? '' : 's'}
           </span>
           {filtersActive ? (
             <Button size="xs" variant="ghost" onClick={clearFilters}>
@@ -289,7 +304,7 @@ export function AddBannerDialog(props: AddBannerDialogProps) {
           <CommandList className="max-h-[56vh]">
             <CommandEmpty>
               <div className="flex flex-col items-center gap-3 py-2">
-                <span>No future banners match these filters.</span>
+                <span>No available banners match these filters.</span>
                 {filtersActive ? (
                   <Button size="sm" variant="outline" onClick={clearFilters}>
                     Clear filters

@@ -25,6 +25,12 @@ export type CaratSettings = {
   trackPaidCarats: boolean;
 };
 
+export type BannerPullResult = {
+  pulls: number;
+  ticketsUsed: number;
+  pickupCopies: Record<string, number>;
+};
+
 export type PlannedBanner = {
   id: string;
   plannedPulls: number;
@@ -38,6 +44,9 @@ export type PlannedBanner = {
   // Explicit per-banner ticket allocation. Undefined means auto-fill from the
   // matching typed ticket pool in chronological order.
   ticketsUsed?: number;
+  // Actual outcome for a resolved banner. This remains distinct from planning
+  // inputs so reopening a result preserves the original plan.
+  pullResult?: BannerPullResult;
   order: number;
 };
 
@@ -125,15 +134,38 @@ export function getActivePlan(state: CaratState): CaratPlan {
   return state.plans.find((plan) => plan.id === state.activePlanId) ?? state.plans[0];
 }
 
+function normalizeCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function normalizePickupCopies(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value).map(([cardId, copies]) => [cardId, normalizeCount(copies)])
+  );
+}
+
+function normalizePullResult(value: unknown): BannerPullResult | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const result = value as Partial<BannerPullResult>;
+  const pulls = normalizeCount(result.pulls);
+  return {
+    pulls,
+    ticketsUsed: Math.min(pulls, normalizeCount(result.ticketsUsed)),
+    pickupCopies: normalizePickupCopies(result.pickupCopies)
+  };
+}
+
 function normalizeBanner(banner: PlannedBanner): PlannedBanner {
   return {
     ...banner,
     copyGoals: banner.copyGoals ?? {},
     ownedCopies: banner.ownedCopies ?? {},
     ticketsUsed:
-      typeof banner.ticketsUsed === 'number'
-        ? Math.max(0, Math.floor(banner.ticketsUsed || 0))
-        : undefined
+      typeof banner.ticketsUsed === 'number' ? normalizeCount(banner.ticketsUsed) : undefined,
+    pullResult: normalizePullResult(banner.pullResult)
   };
 }
 
@@ -204,7 +236,9 @@ function updateActivePlan(updater: (plan: CaratPlan) => CaratPlan) {
     const activeId = getActivePlan(state).id;
     return {
       plans: state.plans.map((plan) =>
-        plan.id === activeId ? { ...updater(plan), updatedAt: Date.now() } : plan
+        plan.id === activeId
+          ? { ...updater(plan), updatedAt: Math.max(Date.now(), plan.updatedAt + 1) }
+          : plan
       )
     };
   });
@@ -315,6 +349,92 @@ export function setOwnedCopies(bannerId: string, cardId: number, copies: number)
         nextOwned[cardId] = value;
       }
       return { ...banner, ownedCopies: nextOwned };
+    })
+  }));
+}
+
+/** Record a banner's actual result using the ticket allocation resolved by its caller. */
+export function markBannerPulled(id: string, ticketsUsed: number) {
+  updateActivePlan((plan) => ({
+    ...plan,
+    plannedBanners: plan.plannedBanners.map((banner) => {
+      if (banner.id !== id) return banner;
+      const pulls = normalizeCount(banner.plannedPulls);
+      return {
+        ...banner,
+        pullResult: {
+          pulls,
+          ticketsUsed: Math.min(pulls, normalizeCount(ticketsUsed)),
+          pickupCopies: {}
+        }
+      };
+    })
+  }));
+}
+
+export function setPullResultPulls(id: string, pulls: number) {
+  updateActivePlan((plan) => ({
+    ...plan,
+    plannedBanners: plan.plannedBanners.map((banner) => {
+      if (banner.id !== id || !banner.pullResult) return banner;
+      const nextPulls = normalizeCount(pulls);
+      return {
+        ...banner,
+        pullResult: {
+          ...banner.pullResult,
+          pulls: nextPulls,
+          ticketsUsed: Math.min(nextPulls, normalizeCount(banner.pullResult.ticketsUsed))
+        }
+      };
+    })
+  }));
+}
+
+export function setPullResultTicketsUsed(id: string, ticketsUsed: number) {
+  updateActivePlan((plan) => ({
+    ...plan,
+    plannedBanners: plan.plannedBanners.map((banner) => {
+      if (banner.id !== id || !banner.pullResult) return banner;
+      return {
+        ...banner,
+        pullResult: {
+          ...banner.pullResult,
+          ticketsUsed: Math.min(banner.pullResult.pulls, normalizeCount(ticketsUsed))
+        }
+      };
+    })
+  }));
+}
+
+export function setPullResultPickupCopies(
+  bannerId: string,
+  cardId: string | number,
+  copies: number
+) {
+  updateActivePlan((plan) => ({
+    ...plan,
+    plannedBanners: plan.plannedBanners.map((banner) => {
+      if (banner.id !== bannerId || !banner.pullResult) return banner;
+      const pickupCopies = { ...banner.pullResult.pickupCopies };
+      const value = normalizeCount(copies);
+      if (value === 0) {
+        delete pickupCopies[cardId];
+      } else {
+        pickupCopies[cardId] = value;
+      }
+      return { ...banner, pullResult: { ...banner.pullResult, pickupCopies } };
+    })
+  }));
+}
+
+/** Remove only the actual result, preserving every original planning field. */
+export function reopenBanner(id: string) {
+  updateActivePlan((plan) => ({
+    ...plan,
+    plannedBanners: plan.plannedBanners.map((banner) => {
+      if (banner.id !== id || !banner.pullResult) return banner;
+      const { pullResult: _pullResult, ...reopenedBanner } = banner;
+      return reopenedBanner;
     })
   }));
 }

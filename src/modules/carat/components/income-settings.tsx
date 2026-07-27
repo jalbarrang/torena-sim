@@ -196,22 +196,6 @@ export function IncomeSettings() {
         <span className="text-xs font-normal text-muted-foreground">Global server</span>
       </div>
 
-      <Section title="Starting Balance" emphasis defaultOpen>
-        <NumberField
-          label="Free carats"
-          settingKey="startingFreeCarats"
-          hint={
-            <InfoHint label="Free carats help" title="Free carats">
-              Free carats can be spent on standard banners and are the main balance used for
-              affordability.
-            </InfoHint>
-          }
-        />
-        <NumberField label="Paid carats" settingKey="startingPaidCarats" />
-        <NumberField label="Uma tickets" settingKey="umaTickets" />
-        <NumberField label="Support tickets" settingKey="supportTickets" />
-      </Section>
-
       <Section title="Competitive">
         <SelectField
           label="Expected CM placement"

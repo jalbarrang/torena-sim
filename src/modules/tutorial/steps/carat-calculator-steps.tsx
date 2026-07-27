@@ -23,14 +23,15 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
     showButtons: ['next', 'close']
   },
   {
-    element: '[data-tutorial="carat-settings"]',
-    title: 'Start with your carats and income',
+    element: '[data-tutorial="carat-starting-resources"]',
+    title: 'Start with your base resources and income',
     description: (
       <div className="flex flex-col gap-2 text-muted-foreground">
-        <div>Enter your current free carats, paid carats, and tickets.</div>
+        <div>Enter your base free carats, paid carats, and tickets.</div>
         <div>
-          Recurring income estimates monthly rewards, tickets, Team Trials, club rank, events, and
-          optional packs. Use the presets if you just want a safe starting point.
+          Use the Income Settings sidebar to configure recurring income from monthly rewards,
+          tickets, Team Trials, club rank, events, and optional packs. Use the presets if you just
+          want a safe starting point.
         </div>
       </div>
     ),
@@ -67,7 +68,7 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
     title: 'Add banners from the live timeline',
     description: (
       <div className="flex flex-col gap-2 text-muted-foreground">
-        <div>Pick upcoming character or support banners from the timeline.</div>
+        <div>Pick available character or support banners from the timeline.</div>
         <div>
           Confidence badges mean <strong className="text-foreground">Confirmed</strong>, estimated
           from JP spacing, or longer-range <strong className="text-foreground">Predicted</strong>.
@@ -88,22 +89,6 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
           <Term>1 spark</Term> sets <strong className="text-foreground">200 pulls</strong>, the pity
           point where you can exchange for one guaranteed pickup copy.
         </div>
-      </div>
-    ),
-    side: 'left',
-    align: 'center',
-    showButtons: ['previous', 'next', 'close']
-  },
-  {
-    element: '[data-tutorial="carat-balance"]',
-    title: 'Check affordability banner by banner',
-    description: (
-      <div className="flex flex-col gap-2 text-muted-foreground">
-        <div>
-          Green means <strong className="text-foreground">Affordable ✓</strong>. Red means you are
-          short after that banner.
-        </div>
-        <div>The shortfall also estimates about how many pulls you need to remove or earn.</div>
       </div>
     ),
     side: 'left',

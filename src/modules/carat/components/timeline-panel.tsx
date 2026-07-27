@@ -3,7 +3,10 @@ import { Button } from '@/components/ui/button';
 import { BannerPlanTable } from '@/modules/carat/components/banner-plan-table';
 import { fetchTimeline } from '@/modules/carat/data/timeline-client';
 
-export function TimelinePanel() {
+type TimelinePanelProps = { showFirstVisitNudge?: boolean };
+
+export function TimelinePanel(props: TimelinePanelProps) {
+  const { showFirstVisitNudge = false } = props;
   const timelineQuery = useQuery({
     queryKey: ['caratTimeline'],
     queryFn: fetchTimeline,
@@ -39,5 +42,7 @@ export function TimelinePanel() {
     );
   }
 
-  return <BannerPlanTable timeline={timelineQuery.data} />;
+  return (
+    <BannerPlanTable timeline={timelineQuery.data} showFirstVisitNudge={showFirstVisitNudge} />
+  );
 }

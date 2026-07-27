@@ -124,7 +124,7 @@ export function PlanSwitcher() {
         </SelectContent>
       </Select>
 
-      <Button size="sm" onClick={openCreate}>
+      <Button size="sm" variant="secondary" onClick={openCreate}>
         <Plus />
         New plan
       </Button>

@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCaratPlanSnapshotJson } from '../../src/modules/carat/share/snapshot';
+import type { CaratPlanSnapshot } from '../../src/modules/carat/share/types';
 
 type SheetBanner = {
   name: string;
@@ -52,37 +53,7 @@ type SupportCardCatalogEntry = {
   char_name: string;
 };
 
-type Snapshot = {
-  version: 1;
-  timestamp: number;
-  name: string;
-  settings: {
-    server: 'global';
-    startingFreeCarats: number;
-    startingPaidCarats: number;
-    umaTickets: number;
-    supportTickets: number;
-    monthlyCarats: number;
-    monthlyTickets: number;
-    teamTrialsClass: string;
-    clubRank: string;
-    cmPlacement: string;
-    lohRank: string;
-    dailyCaratPack: boolean;
-    trainingPass: 'none' | 'free' | 'paid';
-    trackPaidCarats: boolean;
-  };
-  plannedBanners: Array<{
-    id: string;
-    plannedPulls: number;
-    startingDupes: number;
-    copyGoals: Record<string, number>;
-    ownedCopies: Record<string, number>;
-    order: number;
-  }>;
-  paidPurchases: Record<string, never>;
-  selectorChoices: Record<string, never>;
-};
+type Snapshot = CaratPlanSnapshot;
 
 type MatchCandidate = {
   id: string;
@@ -665,7 +636,7 @@ async function main(): Promise<void> {
   }
 
   const snapshot: Snapshot = {
-    version: 1,
+    version: 2,
     timestamp: Date.now(),
     name: 'Latias4Ever pull plan (reference sheet import)',
     settings: buildSettings(source),

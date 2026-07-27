@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineEvent, TimelinePayload } from '@/modules/carat/data/timeline-types';
+import { projectIncome } from '@/modules/carat/model/income';
 import { CARAT_PER_PULL } from '@/modules/carat/model/income-tables';
 import { computePlan } from '@/modules/carat/model/plan';
 import type { CaratSettings, PlannedBanner } from '@/store/carat.store';
@@ -22,6 +23,22 @@ function banner(
     card_type: cardType,
     global_release_date: daysFromNow(days),
     estimated_end_date: daysFromNow(days + 10),
+    prediction: { kind: 'confirmed' }
+  };
+}
+
+function datedBanner(
+  id: string,
+  globalReleaseDate: string,
+  estimatedEndDate?: string,
+  cardType: 'character' | 'support' | null = 'character'
+): TimelineEvent {
+  return {
+    id,
+    type: 'banner',
+    card_type: cardType,
+    global_release_date: globalReleaseDate,
+    ...(estimatedEndDate ? { estimated_end_date: estimatedEndDate } : {}),
     prediction: { kind: 'confirmed' }
   };
 }
@@ -298,5 +315,164 @@ describe('computePlan', () => {
     // 10 pulls after flooring, 2 covered by tickets -> 8 carat-pulls.
     expect(rows[0].ticketsUsed).toBe(2);
     expect(rows[0].cost).toBe(8 * CARAT_PER_PULL);
+  });
+
+  it('settles past banners chronologically without projecting historical income', () => {
+    const now = new Date('2026-06-15T22:00:00.000Z');
+    const first = datedBanner('first', '2020-01-01T22:00:00.000Z', '2020-01-10T22:00:00.000Z');
+    const second = datedBanner('second', '2025-01-01T22:00:00.000Z', '2025-01-10T22:00:00.000Z');
+    const rows = computePlan(
+      { ...settings, startingFreeCarats: 1000, umaTickets: 3 },
+      timeline([second, first]),
+      [
+        {
+          id: 'second',
+          plannedPulls: 0,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          pullResult: { pulls: 4, ticketsUsed: 3, pickupCopies: {} },
+          order: 0
+        },
+        {
+          id: 'first',
+          plannedPulls: 0,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          pullResult: { pulls: 2, ticketsUsed: 0, pickupCopies: {} },
+          order: 1
+        }
+      ],
+      {},
+      { now }
+    );
+
+    expect(rows.map((row) => row.event.id)).toEqual(['first', 'second']);
+    expect(rows.map((row) => row.caratsAvailable)).toEqual([1000, 700]);
+    expect(rows.map((row) => row.balanceAfter)).toEqual([700, 550]);
+  });
+
+  it('keeps an explicit recorded ticket deficit out of the carat cost', () => {
+    const now = new Date('2026-06-15T22:00:00.000Z');
+    const recorded = datedBanner(
+      'recorded',
+      '2026-06-01T22:00:00.000Z',
+      '2026-06-10T22:00:00.000Z'
+    );
+    const rows = computePlan(
+      { ...settings, umaTickets: 1 },
+      timeline([recorded]),
+      [
+        {
+          id: 'recorded',
+          plannedPulls: 0,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          pullResult: { pulls: 10, ticketsUsed: 5, pickupCopies: {} },
+          order: 0
+        }
+      ],
+      {},
+      { now }
+    );
+
+    expect(rows[0]).toMatchObject({
+      status: 'recorded',
+      effectivePulls: 10,
+      ticketsAvailable: 1,
+      ticketsUsed: 5,
+      ticketDeficit: 4,
+      cost: 5 * CARAT_PER_PULL
+    });
+  });
+
+  it('marks an unresolved past banner as provisional', () => {
+    const now = new Date('2026-06-15T22:00:00.000Z');
+    const past = datedBanner('past', '2026-06-01T22:00:00.000Z', '2026-06-10T22:00:00.000Z');
+    const rows = computePlan(
+      { ...settings, umaTickets: 1 },
+      timeline([past]),
+      [{ id: 'past', plannedPulls: 3, startingDupes: 0, copyGoals: {}, ownedCopies: {}, order: 0 }],
+      {},
+      { now }
+    );
+
+    expect(rows[0]).toMatchObject({
+      status: 'provisional',
+      effectivePulls: 3,
+      ticketsUsed: 1,
+      cost: 2 * CARAT_PER_PULL
+    });
+  });
+
+  it('spends on live banners at now and earns only from now through future banners', () => {
+    const now = new Date('2026-06-15T22:00:00.000Z');
+    const live = datedBanner('live', '2020-01-01T22:00:00.000Z');
+    const future = datedBanner('future', '2026-07-15T22:00:00.000Z', '2026-07-25T22:00:00.000Z');
+    const rows = computePlan(
+      { ...settings, startingFreeCarats: 1000 },
+      timeline([live, future]),
+      [
+        { id: 'live', plannedPulls: 2, startingDupes: 0, copyGoals: {}, ownedCopies: {}, order: 0 },
+        {
+          id: 'future',
+          plannedPulls: 0,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          order: 1
+        }
+      ],
+      {},
+      { now }
+    );
+    const futureStart = new Date(future.global_release_date!);
+
+    expect(rows[0]).toMatchObject({ status: 'live', caratsAvailable: 1000, balanceAfter: 700 });
+    expect(rows[1].status).toBe('future');
+    expect(rows[1].caratsAvailable).toBeCloseTo(
+      rows[0].balanceAfter +
+        projectIncome(settings, timeline([live, future]), now, futureStart).carats
+    );
+  });
+
+  it('never exposes a negative ticket availability on future rows', () => {
+    const now = new Date('2026-06-15T22:00:00.000Z');
+    const recorded = datedBanner(
+      'recorded',
+      '2026-06-01T22:00:00.000Z',
+      '2026-06-10T22:00:00.000Z'
+    );
+    const future = datedBanner('future', '2026-06-16T22:00:00.000Z', '2026-06-26T22:00:00.000Z');
+    const rows = computePlan(
+      { ...settings, umaTickets: 1 },
+      timeline([recorded, future]),
+      [
+        {
+          id: 'recorded',
+          plannedPulls: 0,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          pullResult: { pulls: 10, ticketsUsed: 5, pickupCopies: {} },
+          order: 0
+        },
+        {
+          id: 'future',
+          plannedPulls: 2,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          order: 1
+        }
+      ],
+      {},
+      { now }
+    );
+
+    expect(rows[1]).toMatchObject({ status: 'future', ticketsAvailable: 0, ticketsRemaining: 0 });
+    expect(rows[1].ticketsAvailable).toBeGreaterThanOrEqual(0);
   });
 });

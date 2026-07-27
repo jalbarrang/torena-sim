@@ -116,12 +116,12 @@ export function CaratCalculatorPage() {
           <div className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <strong className="text-sm">Banner Plan</strong>
             <div className="flex items-center gap-2">
-              <AddBannerButton />
+              <AddBannerButton showFirstVisitNudge={showFirstVisitNudge} />
             </div>
           </div>
 
           <div className="relative flex min-h-0 flex-1 [&>*]:min-w-0 p-4 overflow-y-auto">
-            <TimelinePanel />
+            <TimelinePanel showFirstVisitNudge={showFirstVisitNudge} />
           </div>
         </section>
       </div>

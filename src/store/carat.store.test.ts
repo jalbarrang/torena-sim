@@ -5,13 +5,19 @@ import {
   deletePlan,
   duplicatePlan,
   getActivePlan,
+  markBannerPulled,
   migratePersisted,
   renamePlan,
+  reopenBanner,
   setActivePlan,
   setCaratSetting,
   setPlannedPulls,
+  setPullResultPickupCopies,
+  setPullResultPulls,
+  setPullResultTicketsUsed,
   useCaratStore
 } from '@/store/carat.store';
+import type { PlannedBanner } from '@/store/carat.store';
 
 function resetStore() {
   // Re-seed a single fresh plan so each test starts from a known baseline.
@@ -19,6 +25,14 @@ function resetStore() {
   useCaratStore.setState((state) => ({
     plans: state.plans.filter((plan) => plan.id === id),
     activePlanId: id
+  }));
+}
+
+function replaceActiveBanners(plannedBanners: PlannedBanner[]) {
+  useCaratStore.setState((state) => ({
+    plans: state.plans.map((plan) =>
+      plan.id === state.activePlanId ? { ...plan, plannedBanners } : plan
+    )
   }));
 }
 
@@ -47,6 +61,62 @@ describe('carat.store migration', () => {
     expect(plan.plannedBanners[0].id).toBe('b1');
     expect(plan.paidPurchases).toEqual({ anniv: { foo: 1 } });
     expect(plan.selectorChoices).toEqual({ anniv: { uma: 'x' } });
+  });
+
+  it('normalizes legacy planning fields without inventing a pull result', () => {
+    const legacyBanner = {
+      id: 'legacy-banner',
+      plannedPulls: 200,
+      startingDupes: 2,
+      copyGoals: { '101': 4 },
+      ownedCopies: { '101': 1 },
+      ticketsUsed: 7,
+      order: 3
+    };
+
+    const state = migratePersisted({
+      settings: { startingFreeCarats: 999 },
+      plannedBanners: [legacyBanner],
+      paidPurchases: { anniv: { foo: 1 } },
+      selectorChoices: { anniv: { uma: 'x' } }
+    });
+
+    const banner = state.plans[0].plannedBanners[0];
+    expect(banner.pullResult).toBeUndefined();
+    expect(banner).toMatchObject(legacyBanner);
+    expect(state.plans[0].paidPurchases).toEqual({ anniv: { foo: 1 } });
+    expect(state.plans[0].selectorChoices).toEqual({ anniv: { uma: 'x' } });
+  });
+
+  it('normalizes result counts without capping pickup copies', () => {
+    const state = migratePersisted({
+      plannedBanners: [
+        {
+          id: 'result-banner',
+          plannedPulls: 10,
+          startingDupes: 0,
+          copyGoals: {},
+          ownedCopies: {},
+          order: 0,
+          pullResult: {
+            pulls: 12.9,
+            ticketsUsed: 99.9,
+            pickupCopies: {
+              '101': 8.9,
+              '102': -2.5,
+              '103': Number.NaN,
+              '104': '3'
+            }
+          }
+        }
+      ]
+    });
+
+    expect(state.plans[0].plannedBanners[0].pullResult).toEqual({
+      pulls: 12,
+      ticketsUsed: 12,
+      pickupCopies: { '101': 8, '102': 0, '103': 0, '104': 0 }
+    });
   });
 
   it('passes through the new multi-plan shape and repairs a stale activePlanId', () => {
@@ -116,6 +186,69 @@ describe('carat.store active-plan mutations', () => {
     setCaratSetting('umaTickets', 5);
     const after = getActivePlan(useCaratStore.getState()).updatedAt;
     expect(after).toBeGreaterThanOrEqual(before);
+  });
+
+  it('tracks banner results only on the active plan and preserves planning fields when reopened', () => {
+    const activePlanId = useCaratStore.getState().activePlanId;
+    const plannedBanner: PlannedBanner = {
+      id: 'shared-banner',
+      plannedPulls: 12.9,
+      startingDupes: 2,
+      copyGoals: { '101': 3 },
+      ownedCopies: { '101': 1 },
+      ticketsUsed: 4,
+      order: 7
+    };
+
+    replaceActiveBanners([plannedBanner]);
+    const inactivePlanId = createPlan('Plan 2');
+    replaceActiveBanners([plannedBanner]);
+    const inactiveBefore = useCaratStore
+      .getState()
+      .plans.find((plan) => plan.id === inactivePlanId)!;
+    setActivePlan(activePlanId);
+
+    let previousUpdatedAt = getActivePlan(useCaratStore.getState()).updatedAt;
+    const expectUpdatedAtBump = (mutator: () => void) => {
+      mutator();
+      const nextUpdatedAt = getActivePlan(useCaratStore.getState()).updatedAt;
+      expect(nextUpdatedAt).toBeGreaterThan(previousUpdatedAt);
+      previousUpdatedAt = nextUpdatedAt;
+    };
+
+    expectUpdatedAtBump(() => markBannerPulled('shared-banner', 15.9));
+    expect(getActivePlan(useCaratStore.getState()).plannedBanners[0].pullResult).toEqual({
+      pulls: 12,
+      ticketsUsed: 12,
+      pickupCopies: {}
+    });
+
+    expectUpdatedAtBump(() => setPullResultPulls('shared-banner', 8.9));
+    expect(getActivePlan(useCaratStore.getState()).plannedBanners[0].pullResult).toMatchObject({
+      pulls: 8,
+      ticketsUsed: 8
+    });
+
+    expectUpdatedAtBump(() => setPullResultTicketsUsed('shared-banner', 99.9));
+    expect(getActivePlan(useCaratStore.getState()).plannedBanners[0].pullResult?.ticketsUsed).toBe(
+      8
+    );
+
+    expectUpdatedAtBump(() => setPullResultPickupCopies('shared-banner', '101', 8.9));
+    expect(
+      getActivePlan(useCaratStore.getState()).plannedBanners[0].pullResult?.pickupCopies
+    ).toEqual({ '101': 8 });
+
+    expectUpdatedAtBump(() => reopenBanner('shared-banner'));
+    const reopenedBanner = getActivePlan(useCaratStore.getState()).plannedBanners[0];
+    expect(reopenedBanner.pullResult).toBeUndefined();
+    expect(reopenedBanner).toEqual(plannedBanner);
+
+    const inactiveAfter = useCaratStore
+      .getState()
+      .plans.find((plan) => plan.id === inactivePlanId)!;
+    expect(inactiveAfter).toEqual(inactiveBefore);
+    expect(inactiveAfter.plannedBanners[0]).toEqual(plannedBanner);
   });
 });
 

@@ -20,11 +20,16 @@ type ImportCaratPlanDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-function totalPlannedPulls(snapshot: CaratPlanSnapshot): number {
+export function totalEffectivePulls(snapshot: CaratPlanSnapshot): number {
   return snapshot.plannedBanners.reduce(
-    (sum, banner) => sum + Math.max(0, Math.floor(banner.plannedPulls || 0)),
+    (sum, banner) =>
+      sum + Math.max(0, Math.floor(banner.pullResult?.pulls ?? banner.plannedPulls ?? 0)),
     0
   );
+}
+
+export function recordedBannerCount(snapshot: CaratPlanSnapshot): number {
+  return snapshot.plannedBanners.filter((banner) => banner.pullResult !== undefined).length;
 }
 
 export function ImportCaratPlanDialog(props: ImportCaratPlanDialogProps) {
@@ -194,9 +199,15 @@ export function ImportCaratPlanDialog(props: ImportCaratPlanDialogProps) {
               <span className="font-medium">{preview.plannedBanners.length}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Total planned pulls: </span>
-              <span className="font-medium">{totalPlannedPulls(preview)}</span>
+              <span className="text-muted-foreground">Total pulls: </span>
+              <span className="font-medium">{totalEffectivePulls(preview)}</span>
             </div>
+            {recordedBannerCount(preview) > 0 && (
+              <div>
+                <span className="text-muted-foreground">Recorded: </span>
+                <span className="font-medium">{recordedBannerCount(preview)}</span>
+              </div>
+            )}
           </div>
         )}
 

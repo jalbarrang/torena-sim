@@ -4,11 +4,17 @@ import {
   createPlan,
   getActivePlan,
   useCaratStore,
+  type BannerPullResult,
   type CaratPlan,
   type CaratSettings,
   type PlannedBanner
 } from '@/store/carat.store';
-import { CARAT_PLAN_SNAPSHOT_VERSION, type CaratPlanSnapshot } from './types';
+import {
+  CARAT_PLAN_SNAPSHOT_VERSION,
+  LEGACY_CARAT_PLAN_SNAPSHOT_VERSION,
+  type CaratPlanSnapshot,
+  type CaratPlanSnapshotVersion
+} from './types';
 
 export function buildCaratPlanSnapshot(planId?: string): CaratPlanSnapshot {
   const state = useCaratStore.getState();
@@ -20,7 +26,7 @@ export function buildCaratPlanSnapshot(planId?: string): CaratPlanSnapshot {
     timestamp: Date.now(),
     name: plan.name,
     settings: cloneDeep(plan.settings),
-    plannedBanners: cloneDeep(plan.plannedBanners),
+    plannedBanners: plan.plannedBanners.map(normalizeBannerForSnapshot),
     paidPurchases: cloneDeep(plan.paidPurchases),
     selectorChoices: cloneDeep(plan.selectorChoices)
   };
@@ -28,6 +34,10 @@ export function buildCaratPlanSnapshot(planId?: string): CaratPlanSnapshot {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isSettings(value: unknown): value is CaratSettings {
@@ -50,20 +60,82 @@ function isSettings(value: unknown): value is CaratSettings {
   );
 }
 
-function isPlannedBanner(value: unknown): value is PlannedBanner {
+function isPickupCopies(value: unknown): value is Record<string, number> {
+  return isRecord(value) && Object.values(value).every(isNonNegativeInteger);
+}
+
+function isPullResult(value: unknown): value is BannerPullResult {
   if (!isRecord(value)) return false;
   return (
-    typeof value.id === 'string' &&
-    typeof value.plannedPulls === 'number' &&
-    typeof value.startingDupes === 'number' &&
-    isRecord(value.copyGoals) &&
-    isRecord(value.ownedCopies) &&
-    typeof value.order === 'number' &&
-    (value.ticketsUsed === undefined || typeof value.ticketsUsed === 'number')
+    isNonNegativeInteger(value.pulls) &&
+    isNonNegativeInteger(value.ticketsUsed) &&
+    value.ticketsUsed <= value.pulls &&
+    isPickupCopies(value.pickupCopies)
   );
 }
 
-export function parseCaratPlanSnapshotJson(raw: string): CaratPlanSnapshot | null {
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isPlannedBanner(
+  value: unknown,
+  sourceVersion: CaratPlanSnapshotVersion
+): value is PlannedBanner {
+  if (!isRecord(value)) return false;
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.plannedPulls !== 'number' ||
+    typeof value.startingDupes !== 'number' ||
+    !isRecord(value.copyGoals) ||
+    !isRecord(value.ownedCopies) ||
+    typeof value.order !== 'number' ||
+    (value.ticketsUsed !== undefined && typeof value.ticketsUsed !== 'number')
+  ) {
+    return false;
+  }
+
+  if (!hasOwn(value, 'pullResult')) return true;
+  return sourceVersion === CARAT_PLAN_SNAPSHOT_VERSION && isPullResult(value.pullResult);
+}
+
+function normalizeCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function normalizePullResultForSnapshot(value: BannerPullResult): BannerPullResult {
+  const pulls = normalizeCount(value.pulls);
+  const pickupCopies = isRecord(value.pickupCopies)
+    ? Object.fromEntries(
+        Object.entries(value.pickupCopies).map(([cardId, copies]) => [
+          cardId,
+          normalizeCount(copies)
+        ])
+      )
+    : {};
+
+  return {
+    pulls,
+    ticketsUsed: Math.min(pulls, normalizeCount(value.ticketsUsed)),
+    pickupCopies
+  };
+}
+
+function normalizeBannerForSnapshot(banner: PlannedBanner): PlannedBanner {
+  const { pullResult, ...plan } = cloneDeep(banner);
+  return pullResult ? { ...plan, pullResult: normalizePullResultForSnapshot(pullResult) } : plan;
+}
+
+export type ParsedCaratPlanSnapshot = {
+  snapshot: CaratPlanSnapshot;
+  sourceVersion: CaratPlanSnapshotVersion;
+};
+
+/** Parse a strict v1 or v2 payload, normalizing compatible v1 data to current v2. */
+export function parseCaratPlanSnapshotJsonWithVersion(
+  raw: string,
+  expectedVersion?: CaratPlanSnapshotVersion
+): ParsedCaratPlanSnapshot | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -72,25 +144,50 @@ export function parseCaratPlanSnapshotJson(raw: string): CaratPlanSnapshot | nul
   }
 
   if (!isRecord(parsed)) return null;
-  if (parsed.version !== CARAT_PLAN_SNAPSHOT_VERSION) return null;
-  if (typeof parsed.timestamp !== 'number') return null;
+  const sourceVersion = parsed.version;
+  if (
+    sourceVersion !== LEGACY_CARAT_PLAN_SNAPSHOT_VERSION &&
+    sourceVersion !== CARAT_PLAN_SNAPSHOT_VERSION
+  ) {
+    return null;
+  }
+  if (expectedVersion !== undefined && sourceVersion !== expectedVersion) return null;
+  const timestamp = parsed.timestamp;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
   if (typeof parsed.name !== 'string') return null;
   if (!isSettings(parsed.settings)) return null;
-  if (!Array.isArray(parsed.plannedBanners) || !parsed.plannedBanners.every(isPlannedBanner)) {
+  if (
+    !Array.isArray(parsed.plannedBanners) ||
+    !parsed.plannedBanners.every((banner) => isPlannedBanner(banner, sourceVersion))
+  ) {
     return null;
   }
   if (!isRecord(parsed.paidPurchases)) return null;
   if (!isRecord(parsed.selectorChoices)) return null;
 
+  const plannedBanners = parsed.plannedBanners.map((banner) => {
+    const { pullResult: _pullResult, ...resultFreeBanner } = banner;
+    return sourceVersion === LEGACY_CARAT_PLAN_SNAPSHOT_VERSION
+      ? resultFreeBanner
+      : (banner as PlannedBanner);
+  });
+
   return {
-    version: CARAT_PLAN_SNAPSHOT_VERSION,
-    timestamp: parsed.timestamp,
-    name: parsed.name,
-    settings: parsed.settings,
-    plannedBanners: parsed.plannedBanners as PlannedBanner[],
-    paidPurchases: parsed.paidPurchases as CaratPlanSnapshot['paidPurchases'],
-    selectorChoices: parsed.selectorChoices as CaratPlanSnapshot['selectorChoices']
+    sourceVersion,
+    snapshot: {
+      version: CARAT_PLAN_SNAPSHOT_VERSION,
+      timestamp,
+      name: parsed.name,
+      settings: parsed.settings,
+      plannedBanners,
+      paidPurchases: parsed.paidPurchases as CaratPlanSnapshot['paidPurchases'],
+      selectorChoices: parsed.selectorChoices as CaratPlanSnapshot['selectorChoices']
+    }
   };
+}
+
+export function parseCaratPlanSnapshotJson(raw: string): CaratPlanSnapshot | null {
+  return parseCaratPlanSnapshotJsonWithVersion(raw)?.snapshot ?? null;
 }
 
 /** Import a snapshot as a NEW plan and make it active. Returns the new plan id. */
