@@ -289,6 +289,8 @@ pub struct Runner {
     // --- mechanics flags read by physics (full machinery added in t-016) ---
     /// Whether the runner is rushed (temptation).
     pub is_rushed: bool,
+    /// Whether natural rushed-state rolls are enabled for this runner.
+    pub rushed_enabled: bool,
     /// Whether the runner is in downhill (HP-saving) mode.
     pub is_downhill_mode: bool,
     /// Whether the runner is dueling.

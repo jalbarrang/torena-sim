@@ -189,6 +189,7 @@ describe('buildComparePlan', () => {
     expect(plan.wasmParamsContested.fillMobs).toBeUndefined();
     expect(plan.wasmParamsContested.masterSeed).toBe(42);
     expect(plan.wasmParamsContested.settings?.rushed).toBe(true);
+    expect(plan.wasmParamsContested.settings?.rushedRunners).toEqual([true, false]);
     expect('duelingRates' in plan.wasmParamsContested).toBe(false);
   });
 

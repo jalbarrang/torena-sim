@@ -12,6 +12,8 @@ export type SimulationSettings = {
   healthSystem: boolean;
   sectionModifier: boolean;
   rushed: boolean;
+  /** Optional per-runner rushed settings, in runner insertion order. */
+  rushedRunners?: boolean[];
   downhill: boolean;
   conservePower?: boolean;
   spotStruggle: boolean;

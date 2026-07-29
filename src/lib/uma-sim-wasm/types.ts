@@ -98,6 +98,8 @@ export type WasmSettings = {
   mode?: 'normal' | 'compare';
   healthSystem?: boolean;
   rushed?: boolean;
+  /** Per-runner rushed settings, in runner insertion order. */
+  rushedRunners?: boolean[];
   downhill?: boolean;
   conservePower?: boolean;
   spotStruggle?: boolean;

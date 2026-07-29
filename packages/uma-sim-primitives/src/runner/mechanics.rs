@@ -101,7 +101,7 @@ impl Runner {
         self.forced_rushed_index = 0;
         self.is_in_forced_rushed = false;
 
-        if self.rushed_rng.random() < self.rushed_chance() {
+        if self.rushed_enabled && self.rushed_rng.random() < self.rushed_chance() {
             self.rushed_section = 2 + i64::from(self.rushed_rng.uniform(8));
             self.rushed_enter_position = self.section_length * self.rushed_section as f64;
         }

@@ -48,8 +48,11 @@ pub struct SimulationSettings {
     pub health_system: bool,
     /// Whether per-section wisdom variance is applied (currently always on).
     pub section_modifier: bool,
-    /// Whether the rushed (temptation) mechanic is enabled.
+    /// Whether the rushed (temptation) mechanic is enabled by default.
     pub rushed: bool,
+    /// Per-runner rushed settings, by runner insertion index. Entries override
+    /// the default; unlisted runners (such as generated mobs) use `rushed`.
+    pub rushed_runners: Vec<bool>,
     /// Whether downhill mode is enabled.
     pub downhill: bool,
     /// Whether Power Conservation / Fully Charged is enabled.
@@ -74,6 +77,7 @@ impl Default for SimulationSettings {
             health_system: true,
             section_modifier: true,
             rushed: true,
+            rushed_runners: Vec::new(),
             downhill: true,
             conserve_power: true,
             spot_struggle: true,
@@ -265,6 +269,12 @@ impl Race {
             };
             runner.health_policy = policy;
             runner.wit_checks_enabled = self.settings.wit_checks;
+            runner.rushed_enabled = self
+                .settings
+                .rushed_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.rushed);
             runner.dueling_enabled = self.settings.dueling;
             runner.spot_struggle_enabled = self.settings.spot_struggle;
             runner.downhill_enabled = self.settings.downhill;
@@ -974,6 +984,30 @@ mod tests {
         b.prepare_round(777);
         b.run();
         assert_eq!(a.finished_runners(), b.finished_runners());
+    }
+
+    #[test]
+    fn per_runner_rushed_settings_override_the_race_default() {
+        let settings = SimulationSettings {
+            rushed: true,
+            rushed_runners: vec![true, false],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+        );
+        race.add_runner(props("enabled", Strategy::PaceChaser));
+        race.add_runner(props("disabled", Strategy::PaceChaser));
+        race.prepare_round(42);
+
+        assert!(race.runners[0].rushed_enabled);
+        assert!(!race.runners[1].rushed_enabled);
+
+        race.run();
+        assert!(race.runners[1].rushed_activations.is_empty());
     }
 
     fn hesitant_props(name: &str, strategy: Strategy) -> CreateRunner {

@@ -253,6 +253,7 @@ impl Race {
             };
             runner.health_policy = policy;
             runner.wit_checks_enabled = self.settings.wit_checks;
+            runner.rushed_enabled = self.settings.rushed;
             runner.dueling_enabled = self.settings.dueling;
             runner.spot_struggle_enabled = self.settings.spot_struggle;
             runner.downhill_enabled = self.settings.downhill;

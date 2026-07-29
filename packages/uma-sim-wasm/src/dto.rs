@@ -739,9 +739,12 @@ pub struct WasmSettings {
     /// HP system.
     #[serde(default)]
     pub health_system: Option<bool>,
-    /// Rushed mechanic.
+    /// Rushed mechanic default.
     #[serde(default)]
     pub rushed: Option<bool>,
+    /// Per-runner rushed settings, by runner insertion index.
+    #[serde(default)]
+    pub rushed_runners: Option<Vec<bool>>,
     /// Downhill mode.
     #[serde(default)]
     pub downhill: Option<bool>,
@@ -777,6 +780,7 @@ struct ResolvedSettings {
     health_system: bool,
     section_modifier: bool,
     rushed: bool,
+    rushed_runners: Vec<bool>,
     downhill: bool,
     conserve_power: bool,
     spot_struggle: bool,
@@ -793,6 +797,7 @@ impl WasmSettings {
             health_system: self.health_system.unwrap_or(true),
             section_modifier: self.section_modifier.unwrap_or(true),
             rushed: self.rushed.unwrap_or(true),
+            rushed_runners: self.rushed_runners.unwrap_or_default(),
             downhill: self.downhill.unwrap_or(true),
             conserve_power: self.conserve_power.unwrap_or(true),
             spot_struggle: self.spot_struggle.unwrap_or(true),
@@ -810,6 +815,7 @@ impl WasmSettings {
             health_system: r.health_system,
             section_modifier: r.section_modifier,
             rushed: r.rushed,
+            rushed_runners: r.rushed_runners,
             downhill: r.downhill,
             conserve_power: r.conserve_power,
             spot_struggle: r.spot_struggle,
@@ -1726,6 +1732,7 @@ mod tests {
                 },
                 "settings": {
                     "spotStruggle": true,
+                    "rushedRunners": [true, false],
                     "dueling": false,
                     "positionKeepMode": 2
                 },
@@ -1767,6 +1774,7 @@ mod tests {
         assert_eq!(domain.nsamples, 7);
         assert_eq!(domain.master_seed, 42);
         assert!(domain.settings.spot_struggle);
+        assert_eq!(domain.settings.rushed_runners, vec![true, false]);
         assert!(!domain.settings.dueling);
     }
 

@@ -168,6 +168,7 @@ export function buildComparePlan(
     positionKeepMode: 2,
     sectionModifier: options.allowSectionModifierUma1 || options.allowSectionModifierUma2,
     rushed: options.allowRushedUma1 || options.allowRushedUma2,
+    rushedRunners: [options.allowRushedUma1, options.allowRushedUma2],
     downhill: options.allowDownhillUma1 || options.allowDownhillUma2,
     conservePower: Boolean(options.allowConservePowerUma1 || options.allowConservePowerUma2),
     witChecks: options.skillCheckChanceUma1 || options.skillCheckChanceUma2,

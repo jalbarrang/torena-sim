@@ -217,6 +217,7 @@ impl Runner {
             out_of_hp: false,
             out_of_hp_position: None,
             is_rushed: false,
+            rushed_enabled: true,
             is_downhill_mode: false,
             is_dueling: false,
             in_spot_struggle: false,
