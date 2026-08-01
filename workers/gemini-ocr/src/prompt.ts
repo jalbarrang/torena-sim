@@ -1,4 +1,4 @@
-/** Instruction prompt sent to Gemini alongside the screenshot. */
+/** Instruction prompt sent to Gemini alongside the runner screenshot. */
 export const EXTRACTION_PROMPT = `Analyze this Uma Musume screenshot and extract the runner data.
 
 Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):

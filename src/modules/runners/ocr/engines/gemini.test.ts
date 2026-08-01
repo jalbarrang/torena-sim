@@ -36,9 +36,11 @@ function mockWorkerFetch(text: string) {
 }
 
 function mockWorkerError(code: string, status = 429) {
-  const fetchMock = vi.fn().mockResolvedValue(
-    Response.json({ ok: false, code, error: `worker said ${code}` }, { status })
-  );
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({ ok: false, code, error: `worker said ${code}` }, { status })
+    );
 
   vi.stubGlobal('fetch', fetchMock);
 
@@ -85,6 +87,7 @@ ${JSON.stringify({
     expect(requestBody).toBeInstanceOf(FormData);
     const form = requestBody as FormData;
     expect(form.get('token')).toBe('test-token');
+    expect(form.get('mode')).toBeNull();
     const imagePart = form.get('image');
     expect(imagePart).toBeInstanceOf(Blob);
     expect((imagePart as Blob).type).toBe('image/png');
@@ -195,17 +198,17 @@ ${JSON.stringify({
     mockWorkerError('quota_exhausted');
 
     const engine = createEngine();
-    await expect(
-      engine.recognize(new Blob(['image'], { type: 'image/png' }))
-    ).rejects.toThrow(/quota/i);
+    await expect(engine.recognize(new Blob(['image'], { type: 'image/png' }))).rejects.toThrow(
+      /quota/i
+    );
   });
 
   it('surfaces a friendly message when rate limited', async () => {
     mockWorkerError('rate_limited');
 
     const engine = createEngine();
-    await expect(
-      engine.recognize(new Blob(['image'], { type: 'image/png' }))
-    ).rejects.toThrow(/too many imports/i);
+    await expect(engine.recognize(new Blob(['image'], { type: 'image/png' }))).rejects.toThrow(
+      /too many imports/i
+    );
   });
 });

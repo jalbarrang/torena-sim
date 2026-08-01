@@ -27,6 +27,12 @@ export function initializePostHog(setup: PostHogSetup) {
       exception_steps: { enabled: true }
     },
     before_send: sanitizePostHogEvent,
+    // OCR review surfaces can contain filenames and recognized text. Keep analytics
+    // event-only: no DOM autocapture and no session replay, even after consent.
+    autocapture: false,
+    disable_session_recording: true,
+    mask_all_text: true,
+    mask_all_element_attributes: true,
     disable_capture_url_hashes: true,
     opt_out_capturing_by_default: true,
     opt_out_persistence_by_default: true,

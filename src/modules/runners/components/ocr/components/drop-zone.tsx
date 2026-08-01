@@ -99,11 +99,13 @@ export function DropZone(props: Readonly<DropZoneProps>) {
 
       {thumbnails.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {thumbnails.map((img) => (
+          {thumbnails.map((img, index) => (
             <div key={img.preview} className="size-12 rounded border overflow-hidden shrink-0">
               <img
                 src={img.preview}
-                alt="Screenshot preview"
+                alt={
+                  img.name ? `Screenshot preview: ${img.name}` : `Screenshot preview ${index + 1}`
+                }
                 className="w-full h-full object-cover"
               />
             </div>

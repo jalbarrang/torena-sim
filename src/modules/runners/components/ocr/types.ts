@@ -10,6 +10,7 @@ export interface PreparedImage {
   blob: Blob;
   maskType: OcrMaskType;
   preview: string; // object URL for thumbnail
+  name?: string;
 }
 
 export type WizardStep = 'align' | 'review-identity' | 'review-skills' | 'summary';

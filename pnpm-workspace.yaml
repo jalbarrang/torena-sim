@@ -8,4 +8,5 @@ allowBuilds:
   esbuild: true
   msw: false
   sharp: true
+  tesseract.js: false
   workerd: true

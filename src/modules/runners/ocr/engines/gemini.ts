@@ -5,7 +5,7 @@ import { findBestUmaMatch } from '@/modules/runners/data/search';
 import type { OcrEngine, OcrEngineResult } from '@/modules/runners/ocr/engine';
 import type { ExtractedSkill, ExtractedUmaData } from '@/modules/runners/ocr/types';
 
-interface GeminiStructuredResponse {
+type GeminiStructuredResponse = {
   name: string;
   outfit: string;
   speed: number;
@@ -16,7 +16,7 @@ interface GeminiStructuredResponse {
   aptitudes: RunnerAptitudes;
   strategy: string;
   skills: Array<string>;
-}
+};
 
 // Maps the worker prompt's aptitude keys onto the runner's RunnerAptitudes shape.
 const APTITUDE_KEY_MAP: Record<keyof RunnerAptitudes, string> = {
@@ -287,7 +287,7 @@ export class WorkerGeminiEngine implements OcrEngine {
     this.getToken = getToken;
   }
 
-  async recognize(imageData: Blob | File): Promise<OcrEngineResult> {
+  private async requestText(imageData: Blob | File): Promise<string> {
     const prepared = await prepareImageForOcr(imageData);
     const token = await this.getToken();
 
@@ -300,21 +300,30 @@ export class WorkerGeminiEngine implements OcrEngine {
 
     // Let the browser set the multipart Content-Type (with boundary) automatically.
     const response = await fetch(this.workerUrl, { method: 'POST', body: form });
+    const payload: unknown = await response.json().catch(() => null);
 
-    const payload = (await response.json().catch(() => null)) as
-      | { ok: true; text: string }
-      | { ok: false; code?: string; error?: string }
-      | null;
-
-    if (!response.ok || !payload || payload.ok !== true) {
-      const code = payload && payload.ok === false ? payload.code : undefined;
+    if (!response.ok || !isRecord(payload) || payload.ok !== true) {
+      const code =
+        isRecord(payload) && payload.ok === false && typeof payload.code === 'string'
+          ? payload.code
+          : undefined;
       const fallback =
-        (payload && payload.ok === false && payload.error) ||
-        'Screenshot import failed. Please try again.';
+        isRecord(payload) && payload.ok === false && typeof payload.error === 'string'
+          ? payload.error
+          : 'Screenshot import failed. Please try again.';
       throw new Error((code && WORKER_ERROR_MESSAGES[code]) || fallback);
     }
 
-    const structured = mapGeminiStructuredData(parseGeminiJsonResponse(payload.text));
+    if (typeof payload.text !== 'string') {
+      throw new TypeError('Screenshot import returned an invalid response.');
+    }
+
+    return payload.text;
+  }
+
+  async recognize(imageData: Blob | File): Promise<OcrEngineResult> {
+    const text = await this.requestText(imageData);
+    const structured = mapGeminiStructuredData(parseGeminiJsonResponse(text));
 
     return { structured };
   }

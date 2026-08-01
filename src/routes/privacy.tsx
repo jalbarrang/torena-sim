@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { config } from '@/config';
 
-const LAST_UPDATED = '13 June 2026';
+const LAST_UPDATED = '30 July 2026';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -99,13 +99,22 @@ export default function PrivacyPolicy() {
           </Section>
 
           <Section title="4. Screenshot OCR (optional)">
-            <ServiceCard tag="Google Gemini">
-              If you opt into reading stats from a screenshot, the image is sent to the{' '}
+            <ServiceCard tag="Shop screenshots · on-device OCR">
+              Shop screenshots are processed inside your browser and are not sent to an OCR service.
+              On first use, your browser downloads the OCR code and English recognition data from
+              Torena Sim. Your browser may cache those same-origin assets for later use, but private
+              browsing, cache eviction, or clearing site data can require another download.
+              Screenshot pixels, filenames, and recognized text are excluded from our analytics
+              capture.
+            </ServiceCard>
+            <ServiceCard tag="Runner screenshots · Google Gemini">
+              Runner screenshot import is a separate server-assisted feature. When you actively use
+              it, the image is sent through our Cloudflare Worker to the{' '}
               <ExternalLink href="https://ai.google.dev/gemini-api/terms">
                 Google Gemini API
               </ExternalLink>{' '}
-              using your own API key to extract the numbers. We don't store these images. This only
-              happens when you actively use that feature.
+              using the service&apos;s shared credential. Cloudflare Turnstile protects the request.
+              We do not store the uploaded image.
             </ServiceCard>
           </Section>
 

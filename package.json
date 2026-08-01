@@ -50,6 +50,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/noto-sans-jp": "^5.2.10",
     "@posthog/react": "^1.9.1",
+    "@tesseract.js-data/eng": "1.0.0",
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.25",
@@ -78,6 +79,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0",
     "vaul": "^1.1.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"

@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react';
 import { ImageIcon, PlusIcon } from 'lucide-react';
-import { toast } from 'sonner';
+import type { ShopOcrSkillMatch } from '../shop-ocr';
 import { addCandidate, removeCandidate, useSkillPlannerStore } from '../skill-planner.store';
 import { CandidateSkillList } from './CandidateSkillList';
+import { ShopScreenshotImportDialog } from './ShopScreenshotImportDialog';
 import { Button } from '@/components/ui/button';
 import { getSelectableSkillsForUma } from '@/modules/skills/utils';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { SkillPickerModal } from '@/modules/skills/components/skill-picker/modal';
 
 export function SkillPlannerShopStep() {
-  const { runner, candidates } = useSkillPlannerStore();
+  const { runner, candidates, obtainedSkillIds } = useSkillPlannerStore();
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [shopImportOpen, setShopImportOpen] = useState(false);
   const candidateIds = useMemo(() => Object.keys(candidates), [candidates]);
 
   const availableSkills = useMemo(() => {
@@ -20,6 +22,12 @@ export function SkillPlannerShopStep() {
 
     return getSelectableSkillsForUma(runner.outfitId, true);
   }, [runner.outfitId]);
+
+  const handleApplyShopImport = (matches: Array<ShopOcrSkillMatch>) => {
+    for (const match of matches) {
+      addCandidate(match.id, match.hintLevel);
+    }
+  };
 
   const handleSelectSkills = (skills: Array<string>) => {
     const nextSkillIds = new Set(skills);
@@ -46,8 +54,11 @@ export function SkillPlannerShopStep() {
       event.preventDefault();
       setSkillPickerOpen(true);
     },
-    { enableOnFormTags: true, enabled: !skillPickerOpen },
-    [skillPickerOpen]
+    {
+      enableOnFormTags: true,
+      enabled: Boolean(runner.outfitId) && !skillPickerOpen && !shopImportOpen
+    },
+    [runner.outfitId, shopImportOpen, skillPickerOpen]
   );
 
   return (
@@ -61,6 +72,15 @@ export function SkillPlannerShopStep() {
         onOpenChange={setSkillPickerOpen}
       />
 
+      <ShopScreenshotImportDialog
+        open={shopImportOpen}
+        onOpenChange={setShopImportOpen}
+        existingCandidateIds={candidateIds}
+        obtainedSkillIds={obtainedSkillIds}
+        selectableSkillIds={availableSkills}
+        onApply={handleApplyShopImport}
+      />
+
       <div className="flex flex-col gap-4">
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-4 text-sm font-medium">Skills Shop</div>
@@ -69,7 +89,8 @@ export function SkillPlannerShopStep() {
             <Button
               size="lg"
               className="justify-start sm:flex-1"
-              onClick={() => toast.info('Shop screenshot import is next up in this refactor.')}
+              onClick={() => setShopImportOpen(true)}
+              disabled={!runner.outfitId}
             >
               <ImageIcon className="mr-2" />
               Import shop screenshots

@@ -3,31 +3,11 @@
 import type { Env } from './env';
 import { isRecord } from './shared';
 import type { OcrPayload } from './ocr-request';
-import { EXTRACTION_PROMPT } from './prompt';
+import { buildRequestBody } from './gemini-request';
 
 export type GeminiResult =
   | { ok: true; text: string }
   | { ok: false; code: 'quota_exhausted' | 'upstream'; message: string };
-
-function buildRequestBody(imageBase64: string, mimeType: string) {
-  return {
-    contents: [
-      {
-        parts: [
-          { inline_data: { mime_type: mimeType, data: imageBase64 } },
-          { text: EXTRACTION_PROMPT }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.1,
-      topK: 1,
-      topP: 0.8,
-      maxOutputTokens: 4096,
-      responseMimeType: 'application/json'
-    }
-  };
-}
 
 function extractResponseText(response: unknown): string {
   if (!isRecord(response)) throw new Error('Gemini returned an invalid response payload');
@@ -38,7 +18,9 @@ function extractResponseText(response: unknown): string {
   }
 
   const text = candidates
-    .flatMap((c) => (isRecord(c) && isRecord(c.content) && Array.isArray(c.content.parts) ? c.content.parts : []))
+    .flatMap((c) =>
+      isRecord(c) && isRecord(c.content) && Array.isArray(c.content.parts) ? c.content.parts : []
+    )
     .flatMap((part) => (isRecord(part) && typeof part.text === 'string' ? [part.text] : []))
     .join('\n')
     .trim();

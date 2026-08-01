@@ -39,6 +39,7 @@ export function createPreparedImage(
   return {
     blob,
     maskType,
-    preview: URL.createObjectURL(blob)
+    preview: URL.createObjectURL(blob),
+    name: blob instanceof File ? blob.name : undefined
   };
 }

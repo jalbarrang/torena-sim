@@ -42,6 +42,10 @@ describe('PostHog observability adapter', () => {
           capture_console_errors: false
         },
         before_send: sanitizePostHogEvent,
+        autocapture: false,
+        disable_session_recording: true,
+        mask_all_text: true,
+        mask_all_element_attributes: true,
         opt_out_capturing_by_default: true,
         opt_out_persistence_by_default: true
       })
