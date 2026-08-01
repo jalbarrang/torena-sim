@@ -14,6 +14,7 @@ type UseBassinColumnsOptions = {
   showSkillIds: boolean;
   skillMetadataById: Map<string, SkillEntry>;
   filteredData: Array<SkillComparisonRoundResult>;
+  showLPerSP: boolean;
   hasFastLearner: boolean;
   getSkillMeta?: (skillId: string) => SkillSummaryMeta;
 };
@@ -23,11 +24,12 @@ export function useBassinColumns({
   showSkillIds,
   skillMetadataById,
   filteredData,
+  showLPerSP,
   hasFastLearner,
   getSkillMeta
 }: UseBassinColumnsOptions) {
   const costBySkillId = useMemo(() => {
-    if (!getSkillMeta) return new Map<string, number>();
+    if (!showLPerSP || !getSkillMeta) return new Map<string, number>();
 
     return new Map(
       filteredData.map((row) => [
@@ -39,7 +41,7 @@ export function useBassinColumns({
         }).netTotal
       ])
     );
-  }, [filteredData, getSkillMeta, hasFastLearner]);
+  }, [filteredData, getSkillMeta, hasFastLearner, showLPerSP]);
 
   const columns: Array<ColumnDef<SkillComparisonRoundResult>> = useMemo(() => {
     return [
@@ -73,31 +75,35 @@ export function useBassinColumns({
           return skillNameA < skillNameB ? -1 : 1;
         }
       },
-      {
-        id: 'lPerSP',
-        header: sortableHeader(
-          'L / SP',
-          'Mean lengths gained per skill point spent (includes hints, Fast Learner, and prerequisite costs)'
-        ),
-        accessorFn: (row) => {
-          const cost = costBySkillId.get(row.id);
-          if (cost == null || cost === 0) return null;
-          return row.mean / cost;
-        },
-        cell: (cellProps) => {
-          const value = cellProps.getValue<number | null>();
-          const cost = costBySkillId.get(cellProps.row.original.id);
-          if (cost === 0) {
-            return <span className="text-muted-foreground text-xs">Owned</span>;
-          }
-          if (value == null || !Number.isFinite(value)) {
-            return <span className="text-muted-foreground">—</span>;
-          }
-          return <span>{value.toFixed(3)}</span>;
-        },
-        sortDescFirst: true,
-        sortUndefined: 'last' as const
-      },
+      ...(showLPerSP
+        ? [
+            {
+              id: 'lPerSP',
+              header: sortableHeader(
+                'L / SP',
+                'Mean lengths gained per skill point spent (includes hints, Fast Learner, and prerequisite costs)'
+              ),
+              accessorFn: (row) => {
+                const cost = costBySkillId.get(row.id);
+                if (cost == null || cost === 0) return null;
+                return row.mean / cost;
+              },
+              cell: (cellProps) => {
+                const value = cellProps.getValue<number | null>();
+                const cost = costBySkillId.get(cellProps.row.original.id);
+                if (cost === 0) {
+                  return <span className="text-muted-foreground text-xs">Owned</span>;
+                }
+                if (value == null || !Number.isFinite(value)) {
+                  return <span className="text-muted-foreground">—</span>;
+                }
+                return <span>{value.toFixed(3)}</span>;
+              },
+              sortDescFirst: true,
+              sortUndefined: 'last' as const
+            } satisfies ColumnDef<SkillComparisonRoundResult>
+          ]
+        : []),
       {
         header: sortableHeader('Minimum'),
         accessorKey: 'min',
@@ -122,7 +128,7 @@ export function useBassinColumns({
         sortDescFirst: true
       }
     ];
-  }, [showUmaIcons, showSkillIds, skillMetadataById, costBySkillId]);
+  }, [showUmaIcons, showSkillIds, skillMetadataById, costBySkillId, showLPerSP]);
 
   return columns;
 }

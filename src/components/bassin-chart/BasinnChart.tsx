@@ -48,6 +48,7 @@ type BasinnChartProps = {
   onReplaceOutfit?: (id: string) => void;
   onRunAdditionalSamples?: (skillId: string, additionalSamples: number) => void;
   hasFastLearner?: boolean;
+  showLPerSP?: boolean;
   getSkillMeta?: (skillId: string) => SkillSummaryMeta;
   className?: string;
 };
@@ -71,6 +72,7 @@ export const BasinnChart = (props: BasinnChartProps) => {
     skillLoadingStates = {},
     onRunAdditionalSamples,
     hasFastLearner = false,
+    showLPerSP = false,
     getSkillMeta,
     className
   } = props;
@@ -107,6 +109,7 @@ export const BasinnChart = (props: BasinnChartProps) => {
     showSkillIds,
     skillMetadataById,
     filteredData,
+    showLPerSP,
     hasFastLearner,
     getSkillMeta
   });
@@ -279,7 +282,7 @@ export const BasinnChart = (props: BasinnChartProps) => {
         <div className="min-w-[900px] w-full text-sm">
           {/* Table Header */}
           <div className="sticky top-0 z-30">
-            <BassinTableHeader table={table} sorting={sorting} />
+            <BassinTableHeader table={table} sorting={sorting} showLPerSP={showLPerSP} />
           </div>
 
           {/* Table Body */}
@@ -304,6 +307,7 @@ export const BasinnChart = (props: BasinnChartProps) => {
               search={search}
               hiddenSkills={props.hiddenSkills}
               isSimulationRunning={isSimulationRunning}
+              showLPerSP={showLPerSP}
             />
           )}
         </div>

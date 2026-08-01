@@ -4,7 +4,9 @@ import { useMemo } from 'react';
  * Feature Flag Keys
  * Add new feature flags here to maintain type safety across the application
  */
-export const FeatureFlags: Record<string, string> = {};
+export const FeatureFlags = {
+  BASSIN_L_PER_SP_ENABLED: 'VITE_FEATURE_BASSIN_L_PER_SP'
+} as const;
 
 export type FeatureFlagKey = keyof typeof FeatureFlags;
 
@@ -86,7 +88,7 @@ export function FeatureFlag({
  * ```
  */
 export function getAllFeatureFlags(): Record<FeatureFlagKey, boolean> {
-  const flags = Object.keys(FeatureFlags);
+  const flags = Object.keys(FeatureFlags) as Array<FeatureFlagKey>;
 
   return flags.reduce(
     (acc, flag) => {

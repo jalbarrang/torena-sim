@@ -3,7 +3,7 @@ import { flexRender, type Row } from '@tanstack/react-table';
 import { ArrowLeft, ChartBar } from 'lucide-react';
 import { SkillComparisonRoundResult } from '@/modules/simulation/types';
 import { cn } from '@/lib/utils';
-import { gridClass } from '../styles';
+import { getBassinGridClass } from '../styles';
 import { BASSIN_DATA_EVENT_TOGGLE_ACTIVATION_DETAILS } from '../activation-details/activation-details-dialog';
 import { Button } from '../../ui/button';
 import React, { useMemo } from 'react';
@@ -113,6 +113,7 @@ type BassinVirtualTableRowProps = {
   isCurrentMatch: boolean;
   isPending: boolean;
   isHidden: boolean;
+  showLPerSP: boolean;
 };
 
 const BassinVirtualTableRow = React.memo(function BassinVirtualTableRow(
@@ -127,7 +128,8 @@ const BassinVirtualTableRow = React.memo(function BassinVirtualTableRow(
     isSearchMatch,
     isCurrentMatch,
     isPending,
-    isHidden
+    isHidden,
+    showLPerSP
   } = props;
 
   const classNameObject = useMemo(() => {
@@ -158,7 +160,7 @@ const BassinVirtualTableRow = React.memo(function BassinVirtualTableRow(
       className={classNameObject}
       style={styleObject}
     >
-      <div className={gridClass}>
+      <div className={getBassinGridClass(showLPerSP)}>
         <BassinVirtualTableRowCells row={row} hasRunData={hasRunData} />
       </div>
     </div>
@@ -176,6 +178,7 @@ export type BassinTableBodyProps = {
   };
   hiddenSkills: string[];
   isSimulationRunning: boolean;
+  showLPerSP: boolean;
 };
 
 export const BassinTableBody = React.memo((props: BassinTableBodyProps) => {
@@ -186,7 +189,8 @@ export const BassinTableBody = React.memo((props: BassinTableBodyProps) => {
     expandedSkillId,
     search,
     hiddenSkills,
-    isSimulationRunning
+    isSimulationRunning,
+    showLPerSP
   } = props;
 
   return (
@@ -220,6 +224,7 @@ export const BassinTableBody = React.memo((props: BassinTableBodyProps) => {
             isCurrentMatch={isCurrentMatch}
             isPending={isPending}
             isHidden={hiddenSkills.includes(id)}
+            showLPerSP={showLPerSP}
           />
         );
       })}

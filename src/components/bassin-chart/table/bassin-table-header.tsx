@@ -6,7 +6,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, CircleHelp } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { cn } from '@/lib/utils';
-import { gridClass } from '../styles';
+import { getBassinGridClass } from '../styles';
 import type { SkillComparisonRoundResult } from '@/modules/simulation/types';
 
 const BassinTableSortingContext = createContext<SortingState>([]);
@@ -69,11 +69,14 @@ export const sortableHeader = (name: string, tooltip?: string) => {
 
 type BassinTableHeaderRowProps = {
   headerGroup: HeaderGroup<SkillComparisonRoundResult>;
+  showLPerSP: boolean;
 };
 
-const BassinTableHeaderRow = ({ headerGroup }: BassinTableHeaderRowProps) => {
+const BassinTableHeaderRow = (props: BassinTableHeaderRowProps) => {
+  const { headerGroup, showLPerSP } = props;
+
   return (
-    <div className={cn('bg-card hover:bg-muted p-2', gridClass)}>
+    <div className={cn('bg-card hover:bg-muted p-2', getBassinGridClass(showLPerSP))}>
       {headerGroup.headers.map((header) => (
         <div
           key={header.id}
@@ -93,13 +96,20 @@ const BassinTableHeaderRow = ({ headerGroup }: BassinTableHeaderRowProps) => {
 type BassinTableHeaderProps = {
   table: Table<SkillComparisonRoundResult>;
   sorting: SortingState;
+  showLPerSP: boolean;
 };
 
-export function BassinTableHeader({ table, sorting }: BassinTableHeaderProps) {
+export function BassinTableHeader(props: BassinTableHeaderProps) {
+  const { table, sorting, showLPerSP } = props;
+
   return (
     <BassinTableSortingContext.Provider value={sorting}>
       {table.getHeaderGroups().map((headerGroup) => (
-        <BassinTableHeaderRow key={headerGroup.id} headerGroup={headerGroup} />
+        <BassinTableHeaderRow
+          key={headerGroup.id}
+          headerGroup={headerGroup}
+          showLPerSP={showLPerSP}
+        />
       ))}
     </BassinTableSortingContext.Provider>
   );

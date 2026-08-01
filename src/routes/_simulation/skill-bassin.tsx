@@ -14,7 +14,7 @@ import { setSkillToRunner, useRunner } from '@/store/runners.store';
 import { useSettingsStore } from '@/store/settings.store';
 import { RaceSettingsPanel } from '@/modules/skill-planner/components/RaceSettingsPanel';
 import { useSkillSingleRunner } from '@/modules/simulation/hooks/skill-bassin/useSkillSingleRunner';
-import { skillBassinSteps } from '@/modules/tutorial/steps/skill-bassin-steps';
+import { getSkillBassinSteps } from '@/modules/tutorial/steps/skill-bassin-steps';
 import { coursesService } from '@/modules/data/services/CourseService';
 import { TutorialId } from '@/components/tutorial/types';
 import { SimulationProgressBanner } from '@/components/simulation-progress-banner';
@@ -23,6 +23,7 @@ import {
   getSkillPlanningMeta,
   useSkillPlannerStore
 } from '@/modules/skill-planner/skill-planner.store';
+import { useFeature } from '@/lib/feature-flags';
 
 export default function SkillComparePage() {
   const { selectedSkills, setSelectedSkills } = useChartData();
@@ -44,6 +45,7 @@ export default function SkillComparePage() {
 
   const courseId = useSettingsStore(useShallow((state) => state.courseId));
   const hasFastLearner = useSkillPlannerStore((state) => state.hasFastLearner);
+  const showLPerSP = useFeature('BASSIN_L_PER_SP_ENABLED');
   const { runnerId, runner } = useRunner();
 
   const course = useMemo(() => coursesService.getSimCourse(courseId), [courseId]);
@@ -80,10 +82,10 @@ export default function SkillComparePage() {
   const tutorialSettings = useMemo(() => {
     return {
       id: 'skill-bassin' as TutorialId,
-      steps: skillBassinSteps,
+      steps: getSkillBassinSteps(showLPerSP),
       tooltip: 'How to use Compare Skills'
     };
-  }, []);
+  }, [showLPerSP]);
 
   return (
     <div className="flex flex-col gap-4 flex-1 min-w-0">
@@ -122,6 +124,7 @@ export default function SkillComparePage() {
           skillLoadingStates={skillLoadingStates}
           onRunAdditionalSamples={runAdditionalSamples}
           hasFastLearner={hasFastLearner}
+          showLPerSP={showLPerSP}
           getSkillMeta={getSkillPlanningMeta}
           className="min-w-0"
         />

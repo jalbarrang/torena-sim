@@ -4,7 +4,7 @@ const HighlightedText = ({ children }: { children: React.ReactNode }) => {
   return <code className="text-foreground font-mono p-2 rounded-md bg-muted">{children}</code>;
 };
 
-export const skillBassinSteps: Array<TutorialStep> = [
+export const getSkillBassinSteps = (showLPerSP: boolean): Array<TutorialStep> => [
   {
     title: 'Welcome to Compare Skills! 📊',
     description: (
@@ -56,10 +56,12 @@ export const skillBassinSteps: Array<TutorialStep> = [
           <li>
             <strong className="text-foreground">Skill Name</strong>: The skill being analyzed
           </li>
-          <li>
-            <strong className="text-foreground">L / SP</strong>: Lengths gained per skill point
-            spent — factors in hints, Fast Learner, and prerequisite costs
-          </li>
+          {showLPerSP && (
+            <li>
+              <strong className="text-foreground">L / SP</strong>: Lengths gained per skill point
+              spent — factors in hints, Fast Learner, and prerequisite costs
+            </li>
+          )}
           <li>
             <strong className="text-foreground">Minimum/Maximum</strong>: Best and worst performance
             with the skill
@@ -91,10 +93,12 @@ export const skillBassinSteps: Array<TutorialStep> = [
         <div className="font-semibold text-foreground">Tips for Analysis:</div>
 
         <ul className="list-disc list-inside space-y-1 mb-3">
-          <li>
-            Higher <HighlightedText>L / SP</HighlightedText> values indicate the best skill point
-            investment
-          </li>
+          {showLPerSP && (
+            <li>
+              Higher <HighlightedText>L / SP</HighlightedText> values indicate the best skill point
+              investment
+            </li>
+          )}
           <li>
             Higher <HighlightedText>mean</HighlightedText> values indicate more effective skills
           </li>
