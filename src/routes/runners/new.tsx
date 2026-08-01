@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router';
 
 import { useState } from 'react';
 import { RunnerEditorLayout } from '@/layout/runner-editor-layout';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 
 export default function NewRunnerPage() {

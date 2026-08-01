@@ -1,6 +1,6 @@
 import { useComparePairRunners } from '@/store/runners.store';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 
 const COMPARE_A_FALLBACK = 'Compare A';
 const COMPARE_B_FALLBACK = 'Compare B';

@@ -1,8 +1,8 @@
-import { AptitudeSelect } from '../AptitudeSelect';
-import { MoodSelect } from '../MoodSelect';
-import { StrategySelect } from '../StrategySelect';
-import { reconcileRunawayOnStrategyChange } from './types';
-import type { IRunnerState } from './types';
+import { AptitudeSelect } from '../../AptitudeSelect';
+import { MoodSelect } from '../../MoodSelect';
+import { StrategySelect } from '../../StrategySelect';
+import { reconcileRunawayOnStrategyChange } from '../domain/runaway-policy';
+import type { IRunnerState } from '../domain/runner-state';
 import { updateCurrentSkills } from '@/modules/skills/store';
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
 import type { IMood, IStrategyName } from '@/lib/uma-domain/runner/definitions';

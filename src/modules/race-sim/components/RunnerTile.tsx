@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
 import { getIconUrl } from '@/assets/icons';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { StatImage } from '@/modules/runners/components/StatInput';
 

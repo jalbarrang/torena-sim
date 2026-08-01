@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { AptitudeBucketsField } from '@/modules/runners/components/aptitude-buckets-field';
-import { StatsTable, type StatsKey } from '@/modules/runners/components/runner-card/stats-table';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
-import { reconcileRunawayOnSkillsChange } from '@/modules/runners/components/runner-card/types';
+import {
+  StatsTable,
+  type StatsKey
+} from '@/modules/runners/components/runner-card/presentation/stats-table';
+import { reconcileRunawayOnSkillsChange } from '@/modules/runners/components/runner-card/domain/runaway-policy';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { UmaSelector } from '@/modules/runners/components/runner-selector';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import {
@@ -271,11 +274,7 @@ export function RunnerDetailPanel({
           </Section>
 
           <Section title="Aptitudes & Style">
-            <AptitudeBucketsField
-              value={runner}
-              onChange={applyRunnerPatch}
-              courseId={courseId}
-            />
+            <AptitudeBucketsField value={runner} onChange={applyRunnerPatch} courseId={courseId} />
           </Section>
 
           <Section title="Team">

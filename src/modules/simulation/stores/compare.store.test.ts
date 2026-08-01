@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { useRunnersStore } from '@/store/runners.store';
 import {
   clampFieldSize,

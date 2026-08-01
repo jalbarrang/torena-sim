@@ -4,7 +4,7 @@
 // data-dependent helpers (skill effect metadata, group sorter) live in
 // `shared.ts`, which must stay main-thread-only.
 
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import type { CreateRunner } from '@/lib/uma-domain/runner/types';
 import type {
   DuelingRates,

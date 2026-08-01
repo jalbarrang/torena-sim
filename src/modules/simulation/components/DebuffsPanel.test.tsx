@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { DebuffsPanel } from './DebuffsPanel';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { useRaceStore } from '@/modules/simulation/stores/compare.store';
-import { runawaySkillId } from '@/modules/runners/components/runner-card/types';
+import { runawaySkillId } from '@/modules/runners/components/runner-card/domain/runaway-policy';
 import { isInjectableExternalDebuffSkill } from '@/lib/uma-domain/skills/external-debuffs';
 
 const pickerState = vi.hoisted(() => ({

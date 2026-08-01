@@ -10,7 +10,7 @@ import { Command } from 'commander';
 import { initCliData } from './lib/init-data';
 import { ensureLoaderWasm } from './lib/wasm-init';
 import { DebugConfigSchema } from './runner-config.schema';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { coursesService } from '@/modules/data/services/CourseService';
 import { buildSkillSamplingPlan } from '@/modules/simulation/simulators/wasm-skill-compare-plan';
 import { runSamplingFromPlan } from '@/modules/simulation/simulators/wasm-skill-compare';

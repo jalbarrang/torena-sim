@@ -1,16 +1,11 @@
-import { StatInput } from '../StatInput';
+import { StatInput } from '../../StatInput';
+import type { RunnerCardStatKey } from '../runner-card.types';
 import { getIconUrl } from '@/assets/icons';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
-type Stats = {
-  speed: number;
-  stamina: number;
-  power: number;
-  guts: number;
-  wisdom: number;
-};
-export type StatsKey = keyof Stats;
+type Stats = Record<RunnerCardStatKey, number>;
+export type StatsKey = RunnerCardStatKey;
 
 type StatsTableProps = {
   value: Stats;

@@ -1,6 +1,6 @@
 import { getIconUrl } from '@/assets/icons';
 import { memo } from 'react';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { Aptitude } from '@/lib/uma-domain/runner/definitions';
 
 export type IShareCardProps = {

@@ -1,5 +1,5 @@
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
-import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/types';
+import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/domain/runner-state';
 import {
   DISTANCE_BUCKETS,
   STYLE_BUCKETS,
@@ -57,10 +57,7 @@ export function OcrAptitudesEditor(props: Readonly<OcrAptitudesEditorProps>) {
 
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
               {group.buckets.map((bucket) => (
-                <label
-                  key={bucket.key}
-                  className="flex items-center gap-1.5 text-sm tabular-nums"
-                >
+                <label key={bucket.key} className="flex items-center gap-1.5 text-sm tabular-nums">
                   <span className="w-14 text-xs text-muted-foreground">{bucket.label}</span>
                   <AptitudeSelect
                     value={aptitudes[bucket.key]}

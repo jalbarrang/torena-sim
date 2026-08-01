@@ -3,8 +3,8 @@ import { Label } from '@/components/ui/label';
 import { StrategySelect } from './StrategySelect';
 import { MoodSelect } from './MoodSelect';
 import { BucketAptitudesEditor } from './BucketAptitudesEditor';
-import { reconcileRunawayOnStrategyChange } from './runner-card/types';
-import type { IRunnerState } from './runner-card/types';
+import { reconcileRunawayOnStrategyChange } from './runner-card/domain/runaway-policy';
+import type { IRunnerState } from './runner-card/domain/runner-state';
 import { updateCurrentSkills } from '@/modules/skills/store';
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
 import type { IMood, IStrategyName } from '@/lib/uma-domain/runner/definitions';
@@ -41,10 +41,7 @@ export function AptitudeBucketsField({
   const handleStrategy = useCallback(
     (strategy: string | null) => {
       if (!strategy || !strategyNames.includes(strategy as IStrategyName)) return;
-      const reconciled = reconcileRunawayOnStrategyChange(
-        strategy as IStrategyName,
-        value.skills
-      );
+      const reconciled = reconcileRunawayOnStrategyChange(strategy as IStrategyName, value.skills);
       const next = {
         ...value,
         strategy: reconciled.strategy,

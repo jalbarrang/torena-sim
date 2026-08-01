@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { computeFieldPopularity } from './popularity';
 
 const runner = (props: Partial<IRunnerState>): IRunnerState => createRunnerState(props);

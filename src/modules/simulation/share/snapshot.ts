@@ -14,8 +14,8 @@ import {
 } from '@/modules/simulation/stores/compare.store';
 import { useForcedPositionsStore } from '@/modules/simulation/stores/forced-positions.store';
 import { useScenarioOverridesStore } from '@/modules/simulation/stores/scenario-overrides.store';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import type { SimulationSnapshot } from './types';
 import { SIMULATION_SNAPSHOT_VERSION } from './types';
 

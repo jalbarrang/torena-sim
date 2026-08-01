@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Import } from 'lucide-react';
-import type { StatsKey } from '@/modules/runners/components/runner-card/stats-table';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { StatsKey } from '@/modules/runners/components/runner-card/presentation/stats-table';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { cn } from '@/lib/utils';
-import { StatsTable } from '@/modules/runners/components/runner-card/stats-table';
+import { StatsTable } from '@/modules/runners/components/runner-card/presentation/stats-table';
 import { UmaSelector } from '@/modules/runners/components/runner-selector';
 import { AptitudeBucketsField } from '@/modules/runners/components/aptitude-buckets-field';
 import { useSettingsStore } from '@/store/settings.store';
@@ -74,11 +74,7 @@ export const RunnerCard = (props: RunnerCardProps) => {
 
         <StatsTable value={value} onChange={handleUpdateStat} />
 
-        <AptitudeBucketsField
-          value={value}
-          onChange={handleUpdateAptitude}
-          courseId={courseId}
-        />
+        <AptitudeBucketsField value={value} onChange={handleUpdateAptitude} courseId={courseId} />
       </div>
     </>
   );

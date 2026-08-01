@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { getIconUrl } from '@/assets/icons';
 import { getTeamStyle } from '@/modules/race-sim/team-colors';

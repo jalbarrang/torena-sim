@@ -1,6 +1,6 @@
 import type { IStrategyName } from '@/lib/uma-domain/runner/definitions';
 import { skillsService } from '@/modules/data/services/SkillService';
-import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/types';
+import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { findBestUmaMatch } from '@/modules/runners/data/search';
 import type { OcrEngine, OcrEngineResult } from '@/modules/runners/ocr/engine';
 import type { ExtractedSkill, ExtractedUmaData } from '@/modules/runners/ocr/types';

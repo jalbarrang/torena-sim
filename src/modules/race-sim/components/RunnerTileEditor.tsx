@@ -11,10 +11,13 @@ import {
   DrawerTitle
 } from '@/components/ui/drawer';
 import { skillsService } from '@/modules/data/services/SkillService';
-import { AptitudesTable } from '@/modules/runners/components/runner-card/aptitudes-table';
-import { StatsTable, type StatsKey } from '@/modules/runners/components/runner-card/stats-table';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
-import { reconcileRunawayOnSkillsChange } from '@/modules/runners/components/runner-card/types';
+import { AptitudesTable } from '@/modules/runners/components/runner-card/presentation/aptitudes-table';
+import {
+  StatsTable,
+  type StatsKey
+} from '@/modules/runners/components/runner-card/presentation/stats-table';
+import { reconcileRunawayOnSkillsChange } from '@/modules/runners/components/runner-card/domain/runaway-policy';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { UmaSelector } from '@/modules/runners/components/runner-selector';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import {
@@ -214,10 +217,7 @@ export function RunnerTileEditor(props: RunnerTileEditorProps) {
 
             <StatsTable value={runner} onChange={handleUpdateStat} />
 
-            <AptitudesTable
-              value={runner}
-              onChange={handleUpdateAptitudes}
-            />
+            <AptitudesTable value={runner} onChange={handleUpdateAptitudes} />
 
             <div className="flex items-center gap-2">
               <div className="bg-card py-1 px-2 border font-bold rounded-lg flex-1 text-center h-auto">

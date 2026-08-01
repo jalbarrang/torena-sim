@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CollectedRunnerRoundData } from '@/lib/uma-domain/race/race-observer';
 import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import type { RaceParameters } from '@/lib/uma-domain/race/types';
-import { createRunnerState, runawaySkillId } from '@/modules/runners/components/runner-card/types';
+import { runawaySkillId } from '@/modules/runners/components/runner-card/domain/runaway-policy';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import type { CompareParams } from '@/modules/simulation/types';
 import type {
   WasmCompareData,

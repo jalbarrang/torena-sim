@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRankScore, estimateRunnerRankScore } from './rank-score';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 
 // Aptitudes for the validation runners: ground A(7), distance S(8), style A(7).
 const apt = {

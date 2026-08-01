@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { decodeSingleUma } from './encoding';
 import { singleExportToRunnerState } from './converters';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { StatImage } from '@/modules/runners/components/StatInput';
 import { skillsService } from '@/modules/data/services/SkillService';

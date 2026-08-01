@@ -1,4 +1,4 @@
-import { IRunnerState } from '../components/runner-card/types';
+import { IRunnerState } from '../components/runner-card/domain/runner-state';
 import { ISingleExportData } from '../share/types';
 
 export type IDecodedRunner = {

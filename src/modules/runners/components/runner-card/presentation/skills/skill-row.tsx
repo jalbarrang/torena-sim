@@ -39,8 +39,8 @@ export function RunnerCardSkillRow(props: Readonly<RunnerCardSkillRowProps>) {
         </SkillItemMain>
 
         <div className="flex items-center gap-2 px-1 pb-1 empty:hidden">
-          <SkillItemHintStepper />
-          <SkillItemCostAction layout="inline" className="ml-auto" />
+          {/* <SkillItemHintStepper /> */}
+          {/* <SkillItemCostAction layout="inline" className="ml-auto" /> */}
         </div>
       </SkillItemBody>
     </SkillItemRoot>

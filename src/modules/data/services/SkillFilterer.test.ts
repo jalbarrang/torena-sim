@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { coursesService } from '@/modules/data/services/CourseService';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { createRaceConditions, racedefToParams } from '@/utils/races';

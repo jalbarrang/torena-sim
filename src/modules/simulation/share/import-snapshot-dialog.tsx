@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { parseSnapshotJson, importSnapshot } from './snapshot';
 import type { SimulationSnapshot } from './types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { trackDescription } from '@/modules/racetrack/labels';
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import UmaBasinPoolWasmWorker from '@workers/pool/uma-basin/uma-basin-wasm.pool.worker.ts?worker';
 import type { SkillComparisonResponse } from '@/modules/simulation/types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import {
   appendResultsToTable,
   resetTable,

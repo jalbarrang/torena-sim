@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckIcon, SearchIcon } from 'lucide-react';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUmaDisplayInfo, getUmaImageUrl } from '@/modules/runners/utils';
 import { useRunnerLibraryStore, type ISavedRunner } from '@/store/runner-library.store';
 import { Button } from '@/components/ui/button';

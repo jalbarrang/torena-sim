@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { calculateDisplayCost, calculateSkillCost, getNetCost } from './cost-calculator';
 import type { CandidateSkill } from './types';
 import { skillsService } from '@/modules/data/services/SkillService';
-import { runawaySkillId } from '@/modules/runners/components/runner-card/types';
+import { runawaySkillId } from '@/modules/runners/components/runner-card/domain/runaway-policy';
 import { getWhiteVersion } from '@/modules/skills/skill-relationships';
 
 const getSkillIdByName = (name: string): string => {

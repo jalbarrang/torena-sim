@@ -4,7 +4,7 @@
 // safe `ComparePlan` the worker runs without touching the dataset.
 
 import type { CompareParams } from '@/modules/simulation/types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import {
   compareParamsToWasm,
   contestedCompareParamsToWasm

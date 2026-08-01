@@ -1,20 +1,13 @@
 import { strategyNames } from '@/lib/uma-domain/runner/definitions';
-import {
-  aptitudesFromInnate,
-  collapsedFromBuckets
-} from '@/modules/runners/aptitude-buckets';
+import { aptitudesFromInnate, collapsedFromBuckets } from '@/modules/runners/aptitude-buckets';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
 import { getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { skillsService } from '@/modules/data/services/SkillService';
 import { umasService } from '@/modules/data/services/UmaService';
 
-import type { IRunnerState } from './types';
+import type { IRunnerState } from '../domain/runner-state';
 
-/**
- * Build the next runner state when OCR-extracted data is applied.
- * Returns the merged state plus the skill ids to sync into the skill picker
- * store (or `null` when OCR detected no skills).
- */
+/** Builds imported runner state and returns any skills to sync with the picker store. */
 export function buildOcrImportState(
   state: IRunnerState,
   data: ExtractedUmaData
@@ -66,11 +59,7 @@ export function buildOcrImportState(
   return { next: { ...state, ...newState }, syncSkills };
 }
 
-/**
- * Build the next runner state when the selected uma (outfit) changes.
- * Keeps rarity < 3 skills, seeds the uma's unique skill, and applies innate
- * aptitudes when available.
- */
+/** Changes the outfit while retaining eligible skills and applying innate aptitudes. */
 export function buildRunnerChangeState(
   state: IRunnerState,
   outfitId: string,

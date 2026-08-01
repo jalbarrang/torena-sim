@@ -19,8 +19,8 @@ import { Navbar } from '@/modules/app/components/navbar';
 import { ImportCodeDialog } from '@/modules/runners/share/import-code-dialog';
 import { useRoosterImport } from '@/modules/runners/share/use-rooster-import';
 import { getCompareFieldId, setRunner } from '@/store/runners.store';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { toast } from 'sonner';
 import { scan } from 'react-scan';
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { cloneDeep } from 'es-toolkit';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 
 export type ISavedRunner = IRunnerState & {
   id: string;

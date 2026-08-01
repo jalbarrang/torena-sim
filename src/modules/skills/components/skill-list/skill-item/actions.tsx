@@ -72,7 +72,7 @@ export function SkillItemDetailsActions(props: Readonly<SkillItemDetailsActionsP
 
   return (
     <>
-      <Popover open={detailsOpen} onOpenChange={setDetailsOpen}>
+      {/* <Popover open={detailsOpen} onOpenChange={setDetailsOpen}>
         <PopoverTrigger
           render={
             <Button
@@ -96,7 +96,7 @@ export function SkillItemDetailsActions(props: Readonly<SkillItemDetailsActionsP
             />
           </PopoverContent>
         )}
-      </Popover>
+      </Popover> */}
 
       {dismissable && (
         <Button

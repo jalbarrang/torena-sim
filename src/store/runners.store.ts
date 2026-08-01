@@ -4,8 +4,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/shallow';
 import { toast } from 'sonner';
 import { cloneDeep } from 'es-toolkit';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
-import { createRunnerState, runawaySkillId } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
+import { runawaySkillId } from '@/modules/runners/components/runner-card/domain/runaway-policy';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getGeneVersionSkillId, getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { skillsService } from '@/modules/data/services/SkillService';
 

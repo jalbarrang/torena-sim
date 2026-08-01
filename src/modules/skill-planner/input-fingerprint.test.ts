@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRaceConditions } from '@/utils/races';
-import { createRunnerState } from '../runners/components/runner-card/types';
+import { createRunnerState } from '../runners/components/runner-card/domain/runner-state';
 import { buildOptimizationInputFingerprint } from './input-fingerprint';
 import type { CandidateSkill } from './types';
 

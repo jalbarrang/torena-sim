@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { OcrImportDialog } from '@/modules/runners/components/ocr-import-dialog';
 import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import {
@@ -665,7 +665,9 @@ export default function RosterHomePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Load Runner to Compare pages</DialogTitle>
-            <DialogDescription>Choose which compare slot to load this runner into.</DialogDescription>
+            <DialogDescription>
+              Choose which compare slot to load this runner into.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-2">

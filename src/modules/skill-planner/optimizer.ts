@@ -13,7 +13,7 @@
  * Uses racer-sim's BatchSimulator for efficient simulation.
  */
 
-import type { IRunnerState } from '../runners/components/runner-card/types';
+import type { IRunnerState } from '../runners/components/runner-card/domain/runner-state';
 import type { CandidateSkill, CombinationResult } from './types';
 import type { CourseData } from '@/lib/uma-domain/course/definitions';
 import type { RaceParameters } from '@/lib/uma-domain/race/types';

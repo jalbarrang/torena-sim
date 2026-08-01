@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { generateSeed } from '@/utils/crypto';
-import { createRunnerState } from '../runners/components/runner-card/types';
-import type { IRunnerState } from '../runners/components/runner-card/types';
+import { createRunnerState } from '../runners/components/runner-card/domain/runner-state';
+import type { IRunnerState } from '../runners/components/runner-card/domain/runner-state';
 import type {
   CandidateSkill,
   HintLevel,

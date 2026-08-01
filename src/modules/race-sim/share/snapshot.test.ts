@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Mood } from '@/lib/uma-domain/runner/definitions';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { createRaceConditions } from '@/utils/races';
 import { useSettingsStore } from '@/store/settings.store';
 import { useRaceSimStore } from '@/modules/simulation/stores/race-sim.store';

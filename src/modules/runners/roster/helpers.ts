@@ -1,4 +1,4 @@
-import { createRunnerState } from '../components/runner-card/types';
+import { createRunnerState } from '../components/runner-card/domain/runner-state';
 import { singleExportToRunnerState } from '../share/converters';
 import { ISingleExportData } from '../share/types';
 import { getUmaDisplayInfo, getUmaImageUrl } from '../utils';

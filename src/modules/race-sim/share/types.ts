@@ -1,4 +1,4 @@
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import type { RaceConditions } from '@/utils/races';
 
 export const RACE_SIM_SNAPSHOT_VERSION = 1 as const;

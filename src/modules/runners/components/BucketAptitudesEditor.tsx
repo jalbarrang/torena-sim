@@ -5,7 +5,7 @@ import {
   SURFACE_BUCKETS,
   type AptitudeBucketKey
 } from '@/modules/runners/aptitude-buckets';
-import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/types';
+import type { RunnerAptitudes } from '@/modules/runners/components/runner-card/domain/runner-state';
 
 type BucketAptitudesEditorProps = {
   value: RunnerAptitudes;

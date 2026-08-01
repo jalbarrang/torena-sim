@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { RunnerEditorLayout } from '@/layout/runner-editor-layout';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import {

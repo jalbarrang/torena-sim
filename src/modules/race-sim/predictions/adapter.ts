@@ -1,5 +1,5 @@
 import { Strategy, StrategyName } from '@/lib/uma-domain/runner/definitions';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/types';
+import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { aptitudeToEncoding } from '@/modules/runners/share/converters';
 import { bucketsFromRunner } from '@/modules/runners/aptitude-buckets';
 import { estimateRunnerRankScore } from '@/modules/race-sim/eval/rank-score';

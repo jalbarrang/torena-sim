@@ -1,5 +1,5 @@
 import type { RaceConditions } from '@/utils/races';
-import type { IRunnerState } from '../runners/components/runner-card/types';
+import type { IRunnerState } from '../runners/components/runner-card/domain/runner-state';
 import type { CandidateSkill, SkillPlanningMeta } from './types';
 
 export interface OptimizationInputFingerprintParams {

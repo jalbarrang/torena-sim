@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRunnerState } from '@/modules/runners/components/runner-card/types';
+import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
 import { createRaceConditions } from '@/utils/races';
 import { parseSnapshotJson } from './snapshot';
 import { SIMULATION_SNAPSHOT_VERSION } from './types';
