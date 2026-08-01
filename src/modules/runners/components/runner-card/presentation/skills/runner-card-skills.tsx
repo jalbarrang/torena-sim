@@ -52,10 +52,7 @@ export function RunnerCardSkills(props: Readonly<RunnerCardSkillsProps>) {
             onBoughtChange={skills.isCostEnabled ? skills.handleBoughtChange : undefined}
             getSkillMeta={skills.isCostEnabled ? skills.getSkillMetaForRunner : undefined}
           >
-            <RunnerCardSkillRow
-              dismissable={skillId !== skills.uniqueSkillId}
-              inline={skills.isCostEnabled}
-            />
+            <RunnerCardSkillRow dismissable={skillId !== skills.uniqueSkillId} />
           </SkillItem>
         ))}
       </div>

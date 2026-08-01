@@ -153,25 +153,35 @@ type ExpandedSkillDetailsProps = {
   distanceFactor?: number;
   valueScalingContext?: ValueScalingDisplayContext;
   className?: string;
+  showIdentity?: boolean;
 };
 
 export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
-  const { skill: skillData, valueScalingContext } = props;
+  const {
+    id,
+    skill: skillData,
+    distanceFactor,
+    valueScalingContext,
+    className,
+    showIdentity = true
+  } = props;
 
   return (
-    <div className={cn('bg-background border-2 rounded-b-sm flex flex-col')}>
-      <div className="text-sm p-2">
-        <div className="flex flex-col gap-1 mb-1">
-          <div className="flex items-center gap-2">
-            <SkillIcon iconId={skillData.iconId} />
-            <div className="text-sm font-medium">{skillData.name}</div>
-          </div>
+    <div className={cn('flex flex-col rounded-b-sm border-2 bg-background', className)}>
+      <div className="p-2 text-sm">
+        {showIdentity && (
+          <div className="mb-1 flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <SkillIcon iconId={skillData.iconId} />
+              <div className="text-sm font-medium">{skillData.name}</div>
+            </div>
 
-          <div className="text-xs text-muted-foreground">
-            {i18n.t('skilldetails.id')}
-            {props.id}
+            <div className="text-xs text-muted-foreground">
+              {i18n.t('skilldetails.id')}
+              {id}
+            </div>
           </div>
-        </div>
+        )}
 
         {skillData.alternatives.length > 1 ? (
           <Tabs defaultValue={0}>
@@ -194,7 +204,7 @@ export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
                 <TabsContent key={alternativeKey} value={index}>
                   <AlternativeDetails
                     alternative={alternative}
-                    distanceFactor={props.distanceFactor}
+                    distanceFactor={distanceFactor}
                     valueScalingContext={valueScalingContext}
                   />
                 </TabsContent>
@@ -204,7 +214,7 @@ export function ExpandedSkillDetails(props: ExpandedSkillDetailsProps) {
         ) : (
           <AlternativeDetails
             alternative={skillData.alternatives[0]}
-            distanceFactor={props.distanceFactor}
+            distanceFactor={distanceFactor}
             valueScalingContext={valueScalingContext}
           />
         )}

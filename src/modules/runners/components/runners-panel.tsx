@@ -295,7 +295,6 @@ export const RunnersPanel = () => {
             onCopy={handleCopyRunner}
             onSwap={handleSwapRunners}
             skillHotkey="k"
-            showSkillSpCosts
           />
         </div>
       </PanelContent>
