@@ -12,10 +12,8 @@ results/
 .DS_Store
 
 # AI tools
-.cursor/plans
 .impeccable/
 .agents/skills/impeccable/scripts/
-.cursor/skills/impeccable/scripts/
 
 CLAUDE.md
 

@@ -33,6 +33,6 @@
       "@cli/*": ["./cli/*"]
     }
   },
-  "include": ["src", "tests", "scripts", ".cursor", "vite.config.ts"],
+  "include": ["src", "tests", "scripts", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -4,6 +4,13 @@ import type { RacePreset } from '@/utils/races';
 import cmPresets from './cm-presets.json';
 
 const PRESET_STORE_NAME = 'umalator-presets';
+const PRESET_STORE_VERSION = 2;
+const BUNDLED_PRESET_ADDITIONS_V2 = new Set([
+  'c450e9b8-8255-5a78-992c-6e69f3326d2d',
+  '63b4832b-dda6-5243-a159-04a54696916d',
+  '24a47f6d-45c9-5a17-b872-9ba194f53d30',
+  '5a01e28f-63e2-57bc-ab4e-153b47d6fa4d'
+]);
 
 const defaultPresets: Record<string, RacePreset> = Object.fromEntries(
   cmPresets.map((p) => [p.id, p as RacePreset])
@@ -16,10 +23,61 @@ export type IPresetStore = {
   presetOrder: string[];
 };
 
+function insertPresetByBundledOrder(order: string[], id: string): void {
+  const defaultIndex = defaultPresetOrder.indexOf(id);
+
+  for (let index = defaultIndex - 1; index >= 0; index -= 1) {
+    const previousIndex = order.indexOf(defaultPresetOrder[index]);
+    if (previousIndex !== -1) {
+      order.splice(previousIndex + 1, 0, id);
+      return;
+    }
+  }
+
+  for (let index = defaultIndex + 1; index < defaultPresetOrder.length; index += 1) {
+    const nextIndex = order.indexOf(defaultPresetOrder[index]);
+    if (nextIndex !== -1) {
+      order.splice(nextIndex, 0, id);
+      return;
+    }
+  }
+
+  order.push(id);
+}
+
+function addBundledPresetAdditions(
+  persisted: IPresetStore,
+  additions: ReadonlySet<string>
+): IPresetStore {
+  const presets = { ...persisted.presets };
+  const presetOrder = [...(persisted.presetOrder ?? [])];
+
+  for (const id of defaultPresetOrder) {
+    if (!additions.has(id) || presets[id]) continue;
+    presets[id] = defaultPresets[id];
+    insertPresetByBundledOrder(presetOrder, id);
+  }
+
+  const seen = new Set(presetOrder);
+  for (const id of Object.keys(presets)) {
+    if (!seen.has(id)) {
+      presetOrder.push(id);
+      seen.add(id);
+    }
+  }
+
+  return { presets, presetOrder };
+}
+
 function migratePresetsPersisted(persistedState: unknown, version: number): IPresetStore {
   const persisted = persistedState as IPresetStore | null | undefined;
   const current = { presets: defaultPresets, presetOrder: defaultPresetOrder };
-  if (!persisted || version >= 1) return persisted ?? current;
+  if (!persisted) return current;
+  if (version >= PRESET_STORE_VERSION) return persisted;
+
+  if (version >= 1) {
+    return addBundledPresetAdditions(persisted, BUNDLED_PRESET_ADDITIONS_V2);
+  }
 
   const mergedPresets: Record<string, RacePreset> = { ...defaultPresets };
   for (const [id, preset] of Object.entries(persisted.presets)) {
@@ -54,7 +112,7 @@ export const usePresetStore = create<IPresetStore>()(
     }),
     {
       name: PRESET_STORE_NAME,
-      version: 1,
+      version: PRESET_STORE_VERSION,
       storage: createJSONStorage(() => localStorage),
       migrate: migratePresetsPersisted
     }
@@ -105,3 +163,5 @@ export const reorderPresets = (newOrder: string[]) => {
 export const resetPresets = () => {
   usePresetStore.setState({ presets: defaultPresets, presetOrder: defaultPresetOrder });
 };
+
+export { migratePresetsPersisted };

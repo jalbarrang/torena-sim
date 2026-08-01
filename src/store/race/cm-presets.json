@@ -165,6 +165,28 @@
     "time": 2
   },
   {
+    "id": "c450e9b8-8255-5a78-992c-6e69f3326d2d",
+    "name": "DIRT",
+    "type": 0,
+    "date": "2023-08-18",
+    "courseId": 11402,
+    "season": 2,
+    "ground": 1,
+    "weather": 1,
+    "time": 2
+  },
+  {
+    "id": "63b4832b-dda6-5243-a159-04a54696916d",
+    "name": "CLASSIC",
+    "type": 0,
+    "date": "2023-10-13",
+    "courseId": 11203,
+    "season": 3,
+    "ground": 3,
+    "weather": 3,
+    "time": 2
+  },
+  {
     "id": "f036b00b-194b-4e90-979c-3f4278379b83",
     "name": "LONG",
     "type": 0,
@@ -336,6 +358,28 @@
     "date": "2026-01-22",
     "courseId": 10506,
     "season": 4,
+    "ground": 1,
+    "weather": 1,
+    "time": 2
+  },
+  {
+    "id": "24a47f6d-45c9-5a17-b872-9ba194f53d30",
+    "name": "CLASSIC",
+    "type": 0,
+    "date": "2026-06-23",
+    "courseId": 10606,
+    "season": 1,
+    "ground": 3,
+    "weather": 2,
+    "time": 2
+  },
+  {
+    "id": "5a01e28f-63e2-57bc-ab4e-153b47d6fa4d",
+    "name": "LONG",
+    "type": 0,
+    "date": "2026-07-24",
+    "courseId": 10507,
+    "season": 2,
     "ground": 1,
     "weather": 1,
     "time": 2

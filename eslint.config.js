@@ -14,7 +14,6 @@ export default tseslint.config(
     ignores: [
       '.agents/',
       '.pi/',
-      '.cursor/',
       'dist/',
       'node_modules/',
       '**/.wrangler/',
