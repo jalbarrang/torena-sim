@@ -16,24 +16,31 @@ type IRunnerRowProps = Readonly<{
   runner: IDecodedRunner;
   index: number;
   isSelected: boolean;
+  disabled?: boolean;
   onToggle: (index: number) => void;
 }>;
 
 export const RunnerRow = memo(function RunnerRow(props: Readonly<IRunnerRowProps>) {
-  const { runner, index, isSelected, onToggle } = props;
+  const { runner, index, isSelected, disabled = false, onToggle } = props;
 
   const runnerSource = runner.source;
 
   return (
     <button
       type="button"
-      className={`flex items-center gap-3 p-2 border rounded-md text-left transition-colors cursor-pointer w-full ${
-        isSelected ? 'border-primary/40 bg-primary/5' : 'opacity-50 hover:opacity-80'
+      className={`flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors ${
+        disabled
+          ? 'cursor-default opacity-50'
+          : isSelected
+            ? 'cursor-pointer border-primary/40 bg-primary/5'
+            : 'cursor-pointer opacity-50 hover:opacity-80'
       }`}
+      disabled={disabled}
       onClick={() => onToggle(index)}
     >
       <Checkbox
         checked={isSelected}
+        disabled={disabled}
         onCheckedChange={() => onToggle(index)}
         onClick={(e) => e.stopPropagation()}
       />
@@ -102,8 +109,8 @@ export const RunnerRow = memo(function RunnerRow(props: Readonly<IRunnerRowProps
             <AptGrade value={runnerSource.proper_running_style_oikomi} />
           </div>
 
-          <span className="text-xs text-muted-foreground ml-auto">
-            {runner.state.skills.length} skills
+          <span className="ml-auto text-xs text-muted-foreground">
+            {disabled ? 'Already saved' : `${runner.state.skills.length} skills`}
           </span>
         </div>
       </div>
