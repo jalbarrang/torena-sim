@@ -84,7 +84,7 @@ describe('UmadumpDeepLinkImport', () => {
     renderImport('/runners?from=not*base64');
 
     const dialog = await screen.findByRole('dialog', { name: 'umadump preview' });
-    expect(dialog).toHaveTextContent('malformed payload');
+    expect(dialog).toHaveTextContent('malformed or truncated payload');
     await waitFor(() => {
       expect(screen.getByLabelText('location')).toHaveTextContent('/runners');
     });
