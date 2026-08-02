@@ -20,18 +20,29 @@ import {
   type ParseUmadumpResult
 } from './parser';
 
+export type UmadumpInitialImport = {
+  id: string;
+  sourceName: string;
+  result: ParseUmadumpResult;
+};
+
 type UmadumpImportDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialImport?: UmadumpInitialImport;
 };
 
 type ParsedPreview = Extract<ParseUmadumpResult, { ok: true }>;
 
 export function UmadumpImportDialog(props: Readonly<UmadumpImportDialogProps>) {
-  const { open, onOpenChange } = props;
-  const [preview, setPreview] = useState<ParsedPreview | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { open, onOpenChange, initialImport } = props;
+  const [preview, setPreview] = useState<ParsedPreview | null>(() =>
+    initialImport?.result.ok ? initialImport.result : null
+  );
+  const [fileName, setFileName] = useState(initialImport?.sourceName ?? '');
+  const [error, setError] = useState<string | null>(() =>
+    initialImport && !initialImport.result.ok ? initialImport.result.error : null
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [isReading, setIsReading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,8 +207,8 @@ export function UmadumpImportDialog(props: Readonly<UmadumpImportDialogProps>) {
         <DialogHeader>
           <DialogTitle>Import from umadump</DialogTitle>
           <DialogDescription>
-            Choose the trained_chara_data.json file created by umadump. It stays in your browser and
-            is never uploaded.
+            Review an umadump link or choose trained_chara_data.json. The data stays in your browser
+            and is never uploaded.
           </DialogDescription>
         </DialogHeader>
 

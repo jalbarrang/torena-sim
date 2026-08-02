@@ -1,4 +1,4 @@
-export function base64ToBytes(base64: string): Uint8Array {
+function base64ToBytes(base64: string): Uint8Array {
   const standard = base64.replaceAll('-', '+').replaceAll('_', '/');
   const binaryStr = atob(standard);
   const bytes = new Uint8Array(binaryStr.length);
@@ -8,7 +8,7 @@ export function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-export function bytesToBase64(bytes: Uint8Array): string {
+function bytesToBase64(bytes: Uint8Array): string {
   const binaryStr = Array.from(bytes)
     .map((byte) => String.fromCodePoint(byte))
     .join('');

@@ -35,7 +35,6 @@ export function RunnerCard(props: Readonly<RunnerCardProps>) {
         isMobile={model.isMobile}
         showShareButton={showShareButton}
         shareCardRef={model.shareCardRef}
-        onChange={onChange}
         onChangeRunner={model.handleChangeRunner}
         onReset={onReset}
         onCopy={onCopy}

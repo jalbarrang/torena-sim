@@ -1,20 +1,11 @@
 import { BitVector } from './bit-vector';
-import type { ISingleExportData, ISingleExportSkill } from './types';
+import type { ISingleExportData } from './types';
 
 function parseUtcTimestamp(str: string): number {
   const [datePart, timePart] = str.split(' ');
   const [y, mo, d] = datePart!.split('-').map(Number);
   const [h, mi, s] = timePart!.split(':').map(Number);
   return Date.UTC(y!, mo! - 1, d, h, mi, s);
-}
-
-function formatUtcTimestamp(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return (
-    `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
-    `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
-  );
 }
 
 const clampStat = (v: number) => Math.max(0, Math.min(2047, v));
@@ -61,74 +52,4 @@ export function encodeSingleUma(data: ISingleExportData): string {
   }
 
   return bv.toBase64();
-}
-
-export function decodeSingleUma(encoded: string): ISingleExportData | null {
-  try {
-    const bv = BitVector.fromBase64(encoded);
-
-    if (bv.bitsRemaining() < 162) return null;
-
-    const version = bv.read(8);
-    if (version !== 2) return null;
-
-    const card_id = bv.read(20);
-
-    const speed = bv.read(11);
-    const stamina = bv.read(11);
-    const power = bv.read(11);
-    const guts = bv.read(11);
-    const wiz = bv.read(11);
-
-    const proper_distance_short = bv.read(4);
-    const proper_distance_mile = bv.read(4);
-    const proper_distance_middle = bv.read(4);
-    const proper_distance_long = bv.read(4);
-    const proper_ground_turf = bv.read(4);
-    const proper_ground_dirt = bv.read(4);
-    const proper_running_style_nige = bv.read(4);
-    const proper_running_style_senko = bv.read(4);
-    const proper_running_style_sashi = bv.read(4);
-    const proper_running_style_oikomi = bv.read(4);
-
-    const ts = bv.read(32);
-    const create_time = formatUtcTimestamp(ts * 1000);
-
-    let rank_score: number | undefined;
-    if (bv.read(1) === 1) {
-      rank_score = bv.read(15);
-    }
-
-    const skill_count = bv.read(6);
-    const skill_array: ISingleExportSkill[] = [];
-    for (let i = 0; i < skill_count; i++) {
-      const skill_id = bv.read(20);
-      const skill_level = bv.read(4) + 1;
-      skill_array.push({ skill_id, skill_level });
-    }
-
-    return {
-      card_id,
-      speed,
-      stamina,
-      power,
-      guts,
-      wiz,
-      proper_distance_short,
-      proper_distance_mile,
-      proper_distance_middle,
-      proper_distance_long,
-      proper_ground_turf,
-      proper_ground_dirt,
-      proper_running_style_nige,
-      proper_running_style_senko,
-      proper_running_style_sashi,
-      proper_running_style_oikomi,
-      create_time,
-      rank_score,
-      skill_array
-    };
-  } catch {
-    return null;
-  }
 }

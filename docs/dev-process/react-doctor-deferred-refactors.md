@@ -14,7 +14,7 @@ Address the warnings below only when editing the related feature — avoid drive
 | `RosterSelectionToolbar` | `selected`, `isSelecting`, bulk delete flow                   |
 | `RosterDeleteDialog`     | `deleteDialogOpen`, `runnerToDelete`                          |
 | `RosterLoadDialog`       | `loadDialogOpen`, `runnerToLoad`                              |
-| `RosterImportDialogs`    | `rosterImportOpen`, `ocrImportOpen`                           |
+| `RosterImportDialogs`    | `umadumpImportOpen`, `ocrImportOpen`                          |
 
 Prefer colocating dialog state in extracted components over a page-level `useReducer` unless transitions stay tangled after extraction.
 
@@ -25,7 +25,7 @@ Prefer colocating dialog state in extracted components over a page-level `useRed
 | Extract (suggested)                      | Notes                                                                                     |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `RunnerCardHeader`                       | Uma selector, action menu, share/import triggers                                          |
-| `RunnerCardSkillsSection`                | Skill list; dialogs (`importDialogOpen`, `codeImportDialogOpen`) can move with this block |
+| `RunnerCardSkillsSection`                | Skill list; screenshot dialog (`importDialogOpen`) can move with this block               |
 | Existing `StatsTable` / `AptitudesTable` | Already split — keep as boundaries                                                        |
 
 ## `src/components/presets-panel.tsx` — `PresetsPanel`

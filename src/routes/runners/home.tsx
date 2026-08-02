@@ -41,7 +41,6 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { getCompareFieldId, loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
-import { RosterImportDialog } from '@/modules/runners/roster/import-dialog';
 import { UmadumpImportDialog } from '@/modules/runners/umadump/import-dialog';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { aptitudeNames, strategyNames } from '@/lib/uma-domain/runner/definitions';
@@ -96,7 +95,6 @@ type RosterHomeState = {
   runnerToDelete: string | null;
   loadDialogOpen: boolean;
   runnerToLoad: ISavedRunner | null;
-  rosterImportOpen: boolean;
   umadumpImportOpen: boolean;
   ocrImportOpen: boolean;
   search: string;
@@ -114,7 +112,6 @@ type RosterHomeAction =
   | { type: 'load:open'; runner: ISavedRunner }
   | { type: 'load:dialogOpenChange'; open: boolean }
   | { type: 'load:completed' }
-  | { type: 'rosterImport:openChange'; open: boolean }
   | { type: 'umadumpImport:openChange'; open: boolean }
   | { type: 'ocrImport:openChange'; open: boolean }
   | { type: 'search:set'; value: string }
@@ -136,7 +133,6 @@ function createInitialRosterHomeState(): RosterHomeState {
     runnerToDelete: null,
     loadDialogOpen: false,
     runnerToLoad: null,
-    rosterImportOpen: false,
     umadumpImportOpen: false,
     ocrImportOpen: false,
     search: '',
@@ -178,8 +174,6 @@ function rosterHomeReducer(state: RosterHomeState, action: RosterHomeAction): Ro
       };
     case 'load:completed':
       return { ...state, loadDialogOpen: false, runnerToLoad: null };
-    case 'rosterImport:openChange':
-      return { ...state, rosterImportOpen: action.open };
     case 'umadumpImport:openChange':
       return { ...state, umadumpImportOpen: action.open };
     case 'ocrImport:openChange':
@@ -421,12 +415,6 @@ export default function RosterHomePage() {
               />
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem
-                  onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-                >
-                  <Import className="size-4" />
-                  RosterView code
-                </DropdownMenuItem>
-                <DropdownMenuItem
                   onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
                 >
                   <FileJson2 className="size-4" />
@@ -508,12 +496,6 @@ export default function RosterHomePage() {
               <DropdownMenuItem onClick={handleAddNew}>
                 <Plus className="size-4" />
                 Add Runner
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-              >
-                <Import className="size-4" />
-                Import Roster
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
@@ -601,12 +583,6 @@ export default function RosterHomePage() {
                   }
                 />
                 <DropdownMenuContent align="center" className="w-52">
-                  <DropdownMenuItem
-                    onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-                  >
-                    <Import className="size-4" />
-                    RosterView code
-                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
                   >
@@ -736,11 +712,6 @@ export default function RosterHomePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <RosterImportDialog
-        open={page.rosterImportOpen}
-        onOpenChange={(open) => dispatch({ type: 'rosterImport:openChange', open })}
-      />
 
       <UmadumpImportDialog
         open={page.umadumpImportOpen}

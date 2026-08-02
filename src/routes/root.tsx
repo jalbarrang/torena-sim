@@ -16,15 +16,10 @@ import { CreditsModal } from '@/components/credits-modal';
 import { SuggestionModal } from '@/components/suggestion-modal';
 import { TutorialProvider, TutorialRoot } from '@/components/tutorial';
 import { Navbar } from '@/modules/app/components/navbar';
-import { ImportCodeDialog } from '@/modules/runners/share/import-code-dialog';
-import { useRoosterImport } from '@/modules/runners/share/use-rooster-import';
-import { getCompareFieldId, setRunner } from '@/store/runners.store';
-import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
-import type { IRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
-import { toast } from 'sonner';
+import { UmadumpDeepLinkImport } from '@/modules/runners/umadump/deep-link-import';
 import { scan } from 'react-scan';
 
-import { Suspense, useCallback, useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 // Layouts
@@ -76,18 +71,6 @@ function RoutePage({ title, description, noindex = false, children }: RoutePageP
 }
 
 export function RootComponent() {
-  const { importCode, dialogOpen, setDialogOpen } = useRoosterImport();
-
-  const handleRoosterImport = useCallback(
-    (slot: 'uma1' | 'uma2', partialRunner: Partial<IRunnerState>) => {
-      const fullRunner = createRunnerState(partialRunner);
-      setRunner(getCompareFieldId(slot), fullRunner);
-      setDialogOpen(false);
-      toast.success(`Runner loaded to ${slot === 'uma1' ? 'Compare A' : 'Compare B'}`);
-    },
-    [setDialogOpen]
-  );
-
   // useScan() has a bug where it ignores `enabled` and always calls start(),
   // so we use scan() directly which properly respects the enabled flag
   useEffect(() => {
@@ -282,13 +265,7 @@ export function RootComponent() {
         <ChangelogModal />
         <SuggestionModal />
 
-        <ImportCodeDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          initialCode={importCode}
-          mode="slot-picker"
-          onLoadToSlot={handleRoosterImport}
-        />
+        <UmadumpDeepLinkImport />
       </div>
       <Toaster />
       <TutorialRoot />
