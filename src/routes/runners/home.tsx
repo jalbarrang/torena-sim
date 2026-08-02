@@ -365,7 +365,7 @@ export default function RosterHomePage() {
               onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
             >
               <Import />
-              Import with umadump
+              Import
             </Button>
 
             <Activity mode={runners.length > 0 ? 'visible' : 'hidden'}>
@@ -440,7 +440,7 @@ export default function RosterHomePage() {
                 onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
               >
                 <Import className="size-4" />
-                Import with umadump
+                Import
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -511,7 +511,7 @@ export default function RosterHomePage() {
                 onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
               >
                 <Import />
-                Import with umadump
+                Import
               </Button>
               <Button onClick={handleAddNew}>
                 <Plus className="mr-2" />
