@@ -14,7 +14,7 @@ Address the warnings below only when editing the related feature — avoid drive
 | `RosterSelectionToolbar` | `selected`, `isSelecting`, bulk delete flow                   |
 | `RosterDeleteDialog`     | `deleteDialogOpen`, `runnerToDelete`                          |
 | `RosterLoadDialog`       | `loadDialogOpen`, `runnerToLoad`                              |
-| `RosterImportDialogs`    | `umadumpImportOpen`, `ocrImportOpen`                          |
+| `RosterImportDialog`     | `umadumpImportOpen`                                           |
 
 Prefer colocating dialog state in extracted components over a page-level `useReducer` unless transitions stay tangled after extraction.
 
