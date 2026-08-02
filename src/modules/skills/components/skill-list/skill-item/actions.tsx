@@ -72,32 +72,6 @@ export function SkillItemDetailsActions(props: Readonly<SkillItemDetailsActionsP
 
   return (
     <>
-      {/* <Popover open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <PopoverTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              title="Show skill details"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <CircleHelp />
-            </Button>
-          }
-        />
-
-        {detailsOpen && (
-          <PopoverContent align="start" side="right" className="w-[300px] p-0">
-            <ExpandedSkillDetails
-              id={skillId}
-              skill={skill}
-              distanceFactor={distanceFactor}
-              valueScalingContext={valueScalingContext}
-            />
-          </PopoverContent>
-        )}
-      </Popover> */}
-
       {dismissable && (
         <Button
           variant="ghost"

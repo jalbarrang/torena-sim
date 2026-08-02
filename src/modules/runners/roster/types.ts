@@ -7,6 +7,7 @@ export type IDecodedRunner = {
   displayInfo: { name: string; outfit: string } | null;
   imageUrl: string;
   searchText: string;
+  importNotes?: string;
 };
 
 export type IAptitudeSlotKey =

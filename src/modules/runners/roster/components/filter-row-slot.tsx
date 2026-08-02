@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { IAptitudeFilters, IAptitudeSlotKey } from '../types';
 import {
   Select,
@@ -19,10 +19,9 @@ type IAptitudeFilterRowSlotProps = {
 export const AptitudeFilterRowSlot = (props: Readonly<IAptitudeFilterRowSlotProps>) => {
   const { slot, filters, onChange } = props;
 
-  const [value] = useState<string>(() => {
-    const current = filters[slot.key];
-    return current !== undefined && current !== null ? String(current) : 'any';
-  });
+  const current = filters[slot.key];
+  const value = current !== undefined && current !== null ? String(current) : 'any';
+  const label = current !== undefined && current !== null ? encodingToAptitude(current) : 'All';
 
   const onValueChange = useCallback(
     (v: string | null) => {
@@ -42,7 +41,7 @@ export const AptitudeFilterRowSlot = (props: Readonly<IAptitudeFilterRowSlotProp
 
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger size="sm" className="w-auto min-w-18 gap-1 text-xs">
-          <SelectValue />
+          <SelectValue>{label}</SelectValue>
         </SelectTrigger>
 
         <SelectContent className="text-xs">
