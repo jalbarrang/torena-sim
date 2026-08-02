@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router';
 
 import { Activity, useReducer, useMemo, useCallback } from 'react';
-import { Camera, FileJson2, Import, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { Import, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import type { ISavedRunner } from '@/store/runner-library.store';
 import { Button } from '@/components/ui/button';
 import { FloatingButton } from '@/components/ui/fab';
@@ -26,10 +26,6 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { OcrImportDialog } from '@/modules/runners/components/ocr-import-dialog';
-import type { ExtractedUmaData } from '@/modules/runners/ocr/types';
-import { createRunnerState } from '@/modules/runners/components/runner-card/domain/runner-state';
-import { getUniqueSkillForByUmaId } from '@/modules/skills/utils';
 import { useRunnerLibraryStore } from '@/store/runner-library.store';
 import {
   Dialog,
@@ -41,7 +37,6 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { getCompareFieldId, loadRunnerFromLibrary, showRunner } from '@/store/runners.store';
-import { RosterImportDialog } from '@/modules/runners/roster/import-dialog';
 import { UmadumpImportDialog } from '@/modules/runners/umadump/import-dialog';
 import { getUmaDisplayInfo } from '@/modules/runners/utils';
 import { aptitudeNames, strategyNames } from '@/lib/uma-domain/runner/definitions';
@@ -96,9 +91,7 @@ type RosterHomeState = {
   runnerToDelete: string | null;
   loadDialogOpen: boolean;
   runnerToLoad: ISavedRunner | null;
-  rosterImportOpen: boolean;
   umadumpImportOpen: boolean;
-  ocrImportOpen: boolean;
   search: string;
   strategyFilter: string;
   distanceFilter: string;
@@ -114,9 +107,7 @@ type RosterHomeAction =
   | { type: 'load:open'; runner: ISavedRunner }
   | { type: 'load:dialogOpenChange'; open: boolean }
   | { type: 'load:completed' }
-  | { type: 'rosterImport:openChange'; open: boolean }
   | { type: 'umadumpImport:openChange'; open: boolean }
-  | { type: 'ocrImport:openChange'; open: boolean }
   | { type: 'search:set'; value: string }
   | { type: 'filter:strategy'; value: string }
   | { type: 'filter:distance'; value: string }
@@ -136,9 +127,7 @@ function createInitialRosterHomeState(): RosterHomeState {
     runnerToDelete: null,
     loadDialogOpen: false,
     runnerToLoad: null,
-    rosterImportOpen: false,
     umadumpImportOpen: false,
-    ocrImportOpen: false,
     search: '',
     strategyFilter: 'all',
     distanceFilter: 'all',
@@ -178,12 +167,8 @@ function rosterHomeReducer(state: RosterHomeState, action: RosterHomeAction): Ro
       };
     case 'load:completed':
       return { ...state, loadDialogOpen: false, runnerToLoad: null };
-    case 'rosterImport:openChange':
-      return { ...state, rosterImportOpen: action.open };
     case 'umadumpImport:openChange':
       return { ...state, umadumpImportOpen: action.open };
-    case 'ocrImport:openChange':
-      return { ...state, ocrImportOpen: action.open };
     case 'search:set':
       return { ...state, search: action.value };
     case 'filter:strategy':
@@ -231,8 +216,7 @@ function rosterHomeReducer(state: RosterHomeState, action: RosterHomeAction): Ro
 
 export default function RosterHomePage() {
   const navigate = useNavigate();
-  const { runners, addRunner, deleteRunner, deleteRunners, duplicateRunner } =
-    useRunnerLibraryStore();
+  const { runners, deleteRunner, deleteRunners, duplicateRunner } = useRunnerLibraryStore();
 
   const [page, dispatch] = useReducer(rosterHomeReducer, undefined, createInitialRosterHomeState);
 
@@ -369,77 +353,20 @@ export default function RosterHomePage() {
 
   const clearAllFilters = useCallback(() => dispatch({ type: 'filters:clear' }), []);
 
-  const handleOcrImportApply = useCallback(
-    (data: ExtractedUmaData) => {
-      const baseRunnerState = createRunnerState();
-      const extractedSkills = data.skills.map((skill) => skill.id);
-      const uniqueSkillId = data.outfitId ? getUniqueSkillForByUmaId(data.outfitId) : null;
-      const skills = uniqueSkillId
-        ? [uniqueSkillId, ...extractedSkills.filter((skillId) => skillId !== uniqueSkillId)]
-        : extractedSkills;
-
-      const runnerState = {
-        ...baseRunnerState,
-        outfitId: data.outfitId ?? baseRunnerState.outfitId,
-        speed: data.speed ?? baseRunnerState.speed,
-        stamina: data.stamina ?? baseRunnerState.stamina,
-        power: data.power ?? baseRunnerState.power,
-        guts: data.guts ?? baseRunnerState.guts,
-        wisdom: data.wisdom ?? baseRunnerState.wisdom,
-        distanceAptitude: data.distanceAptitude ?? baseRunnerState.distanceAptitude,
-        surfaceAptitude: data.surfaceAptitude ?? baseRunnerState.surfaceAptitude,
-        strategyAptitude: data.strategyAptitude ?? baseRunnerState.strategyAptitude,
-        strategy:
-          data.strategy && strategyNames.includes(data.strategy)
-            ? data.strategy
-            : baseRunnerState.strategy,
-        skills
-      };
-
-      addRunner({
-        ...runnerState,
-        notes: data.outfitName || data.umaName || 'Imported Runner'
-      });
-    },
-    [addRunner]
-  );
-
   return (
     <div className="flex flex-col flex-1 p-4 gap-2 min-h-0 overflow-hidden">
       <div className="flex md:flex-row-reverse md:items-center md:justify-between">
         {/* [Desktop] Actions */}
         {!isMobile && (
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="default" variant="outline">
-                    <Import />
-                    Import
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-                >
-                  <Import className="size-4" />
-                  RosterView code
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
-                >
-                  <FileJson2 className="size-4" />
-                  umadump JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => dispatch({ type: 'ocrImport:openChange', open: true })}
-                >
-                  <Camera className="size-4" />
-                  Screenshot
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              size="default"
+              variant="outline"
+              onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
+            >
+              <Import />
+              Import
+            </Button>
 
             <Activity mode={runners.length > 0 ? 'visible' : 'hidden'}>
               <Button size="default" onClick={handleAddNew}>
@@ -510,22 +437,10 @@ export default function RosterHomePage() {
                 Add Runner
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-              >
-                <Import className="size-4" />
-                Import Roster
-              </DropdownMenuItem>
-              <DropdownMenuItem
                 onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
               >
-                <FileJson2 className="size-4" />
-                Import umadump JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => dispatch({ type: 'ocrImport:openChange', open: true })}
-              >
-                <Camera className="size-4" />
-                Import Screenshot
+                <Import className="size-4" />
+                Import
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -591,36 +506,13 @@ export default function RosterHomePage() {
 
           <EmptyContent>
             <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="outline">
-                      <Import />
-                      Import
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="center" className="w-52">
-                  <DropdownMenuItem
-                    onClick={() => dispatch({ type: 'rosterImport:openChange', open: true })}
-                  >
-                    <Import className="size-4" />
-                    RosterView code
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
-                  >
-                    <FileJson2 className="size-4" />
-                    umadump JSON
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => dispatch({ type: 'ocrImport:openChange', open: true })}
-                  >
-                    <Camera className="size-4" />
-                    Screenshot
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="outline"
+                onClick={() => dispatch({ type: 'umadumpImport:openChange', open: true })}
+              >
+                <Import />
+                Import
+              </Button>
               <Button onClick={handleAddNew}>
                 <Plus className="mr-2" />
                 Add Runner
@@ -737,20 +629,9 @@ export default function RosterHomePage() {
         </DialogContent>
       </Dialog>
 
-      <RosterImportDialog
-        open={page.rosterImportOpen}
-        onOpenChange={(open) => dispatch({ type: 'rosterImport:openChange', open })}
-      />
-
       <UmadumpImportDialog
         open={page.umadumpImportOpen}
         onOpenChange={(open) => dispatch({ type: 'umadumpImport:openChange', open })}
-      />
-
-      <OcrImportDialog
-        open={page.ocrImportOpen}
-        onOpenChange={(open) => dispatch({ type: 'ocrImport:openChange', open })}
-        onApply={handleOcrImportApply}
       />
     </div>
   );

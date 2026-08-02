@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardPaste, Upload } from 'lucide-react';
+import { ChevronDown, Upload } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -10,11 +10,10 @@ import {
 
 type RunnerCardImportMenuProps = {
   onScreenshotImport: () => void;
-  onCodeImport: () => void;
 };
 
 export function RunnerCardImportMenu(props: Readonly<RunnerCardImportMenuProps>) {
-  const { onScreenshotImport, onCodeImport } = props;
+  const { onScreenshotImport } = props;
 
   return (
     <DropdownMenu>
@@ -31,10 +30,6 @@ export function RunnerCardImportMenu(props: Readonly<RunnerCardImportMenuProps>)
         <DropdownMenuItem onClick={onScreenshotImport}>
           <Upload className="size-4 mr-2" />
           From Screenshot (OCR)
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCodeImport}>
-          <ClipboardPaste className="size-4 mr-2" />
-          From Code
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

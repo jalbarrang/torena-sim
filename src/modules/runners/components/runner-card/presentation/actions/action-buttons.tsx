@@ -17,7 +17,6 @@ type RunnerCardActionButtonsProps = {
   onReset?: () => void;
   onCopy?: () => void;
   onScreenshotImport: () => void;
-  onCodeImport: () => void;
 };
 
 export function RunnerCardActionButtons(props: Readonly<RunnerCardActionButtonsProps>) {
@@ -30,15 +29,12 @@ export function RunnerCardActionButtons(props: Readonly<RunnerCardActionButtonsP
     shareCardRef,
     onReset,
     onCopy,
-    onScreenshotImport,
-    onCodeImport
+    onScreenshotImport
   } = props;
 
   return (
     <div className="grid grid-cols-2 gap-2">
-      {!isMobile && (
-        <RunnerCardImportMenu onScreenshotImport={onScreenshotImport} onCodeImport={onCodeImport} />
-      )}
+      {!isMobile && <RunnerCardImportMenu onScreenshotImport={onScreenshotImport} />}
 
       {runnerId !== 'pacer' && onCopy && (
         <Button onClick={onCopy} size="sm" variant="outline" title="Copy to other runner">
