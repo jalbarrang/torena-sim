@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  Torena Sim is a fan-made race and skill simulation toolkit for Uma Musume: Pretty Derby Global. It lets players configure repeatable race scenarios, compare runners and skills, and inspect simulation results.
+
+  Architecture and stack:
+  - The web app is a React 19, TypeScript, Vite, and Tailwind CSS SPA under src/. It uses React Router, Base UI, Zustand, TanStack Query, Vitest, and Testing Library.
+  - The simulation engine is a Rust workspace under packages/ and is exposed to the app through compiled WASM in src/lib/uma-sim-wasm/pkg/.
+  - Data extraction and maintenance tools are TypeScript scripts run on Node.js 26 with tsx. Cloudflare Pages hosts the app; ancillary Cloudflare Workers live under workers/.
+
+  Project conventions and constraints:
+  - Use pnpm and existing package.json scripts. Do not use npm, yarn, bun, or start a development server.
+  - Follow React 19 and the repository's Base UI composition patterns. Do not assume Radix APIs such as asChild. Use named exports, type aliases for component props, ref props instead of forwardRef, and no barrel files.
+  - Keep simulation domain logic in the Rust engine and treat docs/mechanics/README.md plus docs/mechanics/quick-reference.md as the mechanics source of truth. Update those documents with cited evidence when mechanics change.
+  - Rust changes require pnpm run wasm:build before the app can use them. Optional JS-to-WASM DTO fields must use Rust Option<T> because present-but-undefined values do not trigger serde defaults.
+  - Validate changes with the relevant package.json scripts, including typecheck, test, intent, lint, and wasm:build when packages/ changes.
+
+rules:
+  proposal:
+    - Write in Standard Technical English. Use direct sentences, define project-specific terms and acronyms on first use, and avoid idioms, marketing language, vague qualifiers, and unexplained jargon.
+    - Make the proposal easy to follow from problem to outcome. State the current behavior, desired behavior, scope, non-goals, user-visible effects, and risks in a logical order; use short sections and concrete bullet points.
+    - Inspect the existing implementation before proposing changes. Name the affected routes, modules, components, stores, engine crates, workers, or scripts, and cite concrete repository paths where they are known.
+    - Pre-design the code changes enough to remove implementation guesswork. Describe responsibilities and boundaries, existing code to reuse or extract, new or changed interfaces and state, data flow, error handling, migration or compatibility needs, and the testing and validation approach.
+    - Resolve material implementation decisions and alternatives before approval. Do not defer core architecture, ownership, or integration choices to the implementation phase.
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

@@ -13,6 +13,7 @@ export default tseslint.config(
     // Global ignores — Rust target dirs, build output, generated data, tooling.
     ignores: [
       '.agents/',
+      '.cache/',
       '.pi/',
       'dist/',
       'node_modules/',
