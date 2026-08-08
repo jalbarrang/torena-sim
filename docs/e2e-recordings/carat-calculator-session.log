@@ -1,0 +1,91 @@
+
+### 0. Open with a clean store
+"{\"title\":\"Carat Calculator | Torena Sim\",\"h1\":\"Carat Calculator\",\"url\":\"/carat-calculator\"}"
+
+### 1. Three parts render in spec order
+"[\"carat-assumptions\",\"carat-summary\",\"carat-planner\"]"
+
+### 2. Band is collapsed and summarizes itself
+"{\"expanded\":\"false\",\"summary\":\"24,500 starting carats·4 income sources·85 reward sources\",\"tabsInDom\":0}"
+
+### 3. Expand the band -> Balance group is shown
+"{\"tabs\":[\"Balance:true\",\"Income:false\",\"Rewards:false\"],\"freeCarats\":\"24500\"}"
+
+### 4. Edit starting free carats -> summary + projection update
+"set"
+"{\"bandSummary\":\"31,000 starting carats\",\"stats\":[\"—\",\"31,000\",\"0 / 0\",\"26,657\",\"0\"]}"
+
+### 5. Switch to Income group -> only that group is shown
+"{\"income\":true,\"balanceGone\":true,\"rewardsGone\":true}"
+
+### 6. Income sections are present and collapsible
+"[\"Competitive\",\"Passes & Packs\",\"Recurring Income\",\"What do these terms mean?\"]"
+
+### 7. Switch to Rewards group -> read-only list
+"{\"rows\":85,\"inputs\":0,\"first\":\"Sprinters Stakes Legend RaceEvent · Aug 13, 202650\"}"
+
+### 8. Collapse the band again
+"{\"expanded\":\"false\",\"tabsInDom\":0}"
+
+### 9. Statistics strip shows five figures
+"[\"Balance at last banner\",\"Current Carats\",\"Starting Tickets\",\"Monthly Income\",\"Total Spend\"]"
+
+### 10. Monthly income breakdown popover opens
+"{\"open\":true,\"rows\":[\"Recurring rewards7,4193.9/3.9 tixChampions Meeting00/0 tixLeague of Heroes00/0 tixEvents & calendar19,2382.6/2.6 tixTotal26,6576.6/6.6 tix\",\"Recurring rewards7,4193.9/3.9 tix\",\"Champions Meeting00/0 tix\",\"League of Heroes00/0 tix\",\"Events & calendar19,2382.6/2.6 tix\",\"Total26,6576.6/6.6 tix\"]}"
+
+### 11. Empty plan shows the empty state pointing at Balance
+"{\"empty\":true}"
+
+### 12. Add three banners from the timeline
+"{\"dialog\":true,\"options\":310}"
+"{\"rows\":3}"
+
+### 13. Set planned pulls -> cost and balance update
+"Planned pulls for Smart Falcon"
+"{\"cost\":\"Cost 30,000\",\"spend\":\"30,000\"}"
+
+### 14. Spark shortcut (+200) adds pulls
+"clicked"
+"{\"pulls\":\"400\"}"
+
+### 15. Odds column is fully visible at 1440
+"{\"headerRight\":1278,\"innerWidth\":1440,\"oddsRendered\":true,\"oddsText\":\"77.6% chance to get the rate-up Uma from\"}"
+
+### 16. No horizontal overflow at any supported width
+  360px: "{\"pageOverflow\":0,\"docOverflow\":0}"
+  768px: "{\"pageOverflow\":0,\"docOverflow\":0}"
+  1024px: "{\"pageOverflow\":0,\"docOverflow\":0}"
+  1440px: "{\"pageOverflow\":0,\"docOverflow\":0}"
+
+### 17. Narrow viewport keeps part order and uses stacked cards
+"{\"order\":[\"carat-assumptions\",\"carat-summary\",\"carat-planner\"],\"table\":0,\"handles\":3}"
+
+### 18. Statistics strip wraps at 360 with nothing clipped
+"{\"lines\":4,\"clipped\":0,\"overflowX\":0}"
+
+### 19. Reorder by drag at wide viewport
+"[\"Smart FalconJu\",\"Light Hello + \",\"Winning Ticket\"]"
+  drag (50,771) -> (50,480)
+"[\"Smart FalconJu\",\"Light Hello + \",\"Winning Ticket\"]"
+
+### 20. Remove a planned banner
+"Remove Smart Falcon"
+"{\"rows\":2}"
+
+### 21. Plan persists across reload
+"{\"before\":2}"
+"{\"rows\":2,\"startingCarats\":\"31,000 starting carats\",\"bandCollapsed\":\"false\"}"
+
+### 22. Guided tour reaches every target, including inside the collapsed band
+  step[intro]: "{\"found\":false,\"visible\":\"n/a\"}"
+  step[carat-starting-resources]: "{\"found\":true,\"visible\":true}"
+  step[carat-settings]: "{\"found\":true,\"visible\":true}"
+  step[carat-summary]: "{\"found\":true,\"visible\":true}"
+  step[carat-add-banner]: "{\"found\":true,\"visible\":true}"
+  step[carat-pulls-input]: "{\"found\":true,\"visible\":true}"
+  step[carat-odds]: "{\"found\":true,\"visible\":true}"
+"{\"tourClosed\":true}"
+
+### 23. Share code round-trips
+"{\"prefix\":\"cp2:\",\"roundTrips\":true}"
+

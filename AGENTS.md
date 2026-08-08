@@ -7,6 +7,12 @@
 ## Dev Server
 
 - **Never** run `pnpm run dev`, `vite`, or any development server commands. The user manages the dev server themselves.
+- The one exception is `pnpm run test:e2e`: Playwright owns the server lifecycle through `webServer` in `playwright.config.ts`, and locally it attaches to the user's running server rather than starting a second one. Never start a server yourself to make e2e tests run.
+
+## End-to-End Tests (e2e/)
+
+- **`e2e/` is Playwright, not Vitest.** `pnpm run test` excludes the directory; use `pnpm run test:e2e`. See `e2e/README.md` for the fixtures, the stubbed timeline, and the gotchas that make assertions deterministic.
+- **The suite needs no Rust build.** The engine is reached through a runtime dynamic import Vite never resolves statically, so e2e passes with `src/lib/uma-sim-wasm/pkg/` absent. A spec that drives the race simulator would change that and would need the wasm steps from `deploy-cloudflare.yml`.
 
 ## Package Management
 

@@ -36,7 +36,10 @@
     "changelog:generate": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0",
     "wasm:build": "tsx scripts/build-wasm.ts",
     "check:worker-bundles": "tsx scripts/check-worker-bundles.ts",
-    "data:manifest": "tsx scripts/generate-data-manifest.ts"
+    "data:manifest": "tsx scripts/generate-data-manifest.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "repository": {
     "type": "git",
@@ -50,10 +53,10 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/noto-sans-jp": "^5.2.10",
     "@posthog/react": "^1.9.1",
-    "@tesseract.js-data/eng": "1.0.0",
     "@tanstack/react-query": "^5.100.11",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.25",
+    "@tesseract.js-data/eng": "1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -89,6 +92,7 @@
     "@commitlint/cli": "^21.0.1",
     "@commitlint/config-conventional": "^21.0.1",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.62.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/commit-analyzer": "13.0.1",

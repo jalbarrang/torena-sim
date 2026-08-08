@@ -56,3 +56,12 @@ bun.lock
 
 /.references/
 /.api-tests/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Exploratory session videos (kept on disk, not in history)
+docs/e2e-recordings/*.webm

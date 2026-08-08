@@ -1,5 +1,3 @@
-/// <reference types="vitest/config" />
-
 import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -7,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { configDefaults, defineConfig } from 'vitest/config';
 import babel from '@rolldown/plugin-babel';
 import sitemap from 'vite-sitemap-plugin';
 import { generateDataManifest } from './scripts/generate-data-manifest';
@@ -127,6 +125,8 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    setupFiles: ['./src/test-setup.ts']
+    setupFiles: ['./src/test-setup.ts'],
+    // e2e/ holds Playwright specs, which have their own runner (`pnpm run test:e2e`).
+    exclude: [...configDefaults.exclude, 'e2e/**']
   }
 });
