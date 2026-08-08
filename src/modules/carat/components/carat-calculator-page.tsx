@@ -58,7 +58,7 @@ export function CaratCalculatorPage() {
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Carat Calculator</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Pull Planner</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Plan your pulls against the live banner timeline
           </p>

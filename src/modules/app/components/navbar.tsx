@@ -32,7 +32,7 @@ const toolNavItems: NavItem[] = [
   { value: 'skills', label: 'Skills', to: '/skills' },
   { value: 'skill-visualizer', label: 'Skill Visualizer', to: '/skill-visualizer' },
   { value: 'support-cards', label: 'Support Cards', to: '/support-cards' },
-  { value: 'carat-calculator', label: 'Carat Calculator', to: '/carat-calculator' },
+  { value: 'carat-calculator', label: 'Pull Planner', to: '/carat-calculator' },
   { value: 'trainee-list', label: 'Trainee List', to: '/trainee-list' },
   { value: 'team-trials', label: 'Team Trials', to: '/team-trials' }
 ];

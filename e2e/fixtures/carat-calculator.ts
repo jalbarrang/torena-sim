@@ -151,9 +151,7 @@ export class CaratCalculatorPage {
 
   async goto() {
     await this.page.goto(CARAT_CALCULATOR_PATH);
-    await expect(
-      this.page.getByRole('heading', { name: 'Carat Calculator', level: 1 })
-    ).toBeVisible();
+    await expect(this.page.getByRole('heading', { name: 'Pull Planner', level: 1 })).toBeVisible();
     await expect(this.assumptionsBand).toBeVisible();
   }
 }

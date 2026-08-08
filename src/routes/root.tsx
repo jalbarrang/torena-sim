@@ -201,7 +201,7 @@ export function RootComponent() {
               path="/carat-calculator"
               element={
                 <RoutePage
-                  title="Carat Calculator"
+                  title="Pull Planner"
                   description="Plan your gacha pulls against the live banner timeline"
                 >
                   <CaratCalculatorPage />
