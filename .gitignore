@@ -15,8 +15,6 @@ results/
 .impeccable/
 .agents/skills/impeccable/scripts/
 
-CLAUDE.md
-
 # debug scripts
 scripts/runners/*.json
 scripts/skill-lists/*.json
