@@ -132,16 +132,20 @@ describe('banner plan lifecycle UI', () => {
     setViewport(1024);
   });
 
-  it('renders synthetic starting resources with four accessible labels and no balance verdict', () => {
+  it('keeps starting resources out of the plan at both breakpoints', () => {
     setViewport(1200);
+    const wide = render(<BannerPlanTable timeline={timeline()} />);
 
+    expect(screen.queryByRole('spinbutton', { name: 'Free carats' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Starting Carats / Tickets')).not.toBeInTheDocument();
+    expect(screen.getByText(/Plan assumptions → Balance/)).toBeInTheDocument();
+
+    wide.unmount();
+    setViewport(800);
     render(<BannerPlanTable timeline={timeline()} />);
 
-    expect(screen.getByRole('spinbutton', { name: 'Free carats' })).toHaveValue(12345);
-    expect(screen.getByRole('spinbutton', { name: 'Paid carats' })).toHaveValue(0);
-    expect(screen.getByRole('spinbutton', { name: 'Uma tickets' })).toHaveValue(0);
-    expect(screen.getByRole('spinbutton', { name: 'Support tickets' })).toHaveValue(0);
-    expect(screen.queryByText('Balance', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: 'Free carats' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Starting Carats / Tickets')).not.toBeInTheDocument();
   });
 
   it('records and reopens a past banner through card lifecycle state', () => {

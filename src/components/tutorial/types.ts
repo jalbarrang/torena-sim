@@ -43,6 +43,12 @@ export interface TutorialStep {
 
   /** Custom text for the done/finish button (last step) */
   doneBtnText?: string;
+
+  /**
+   * Runs before the step's target selector is resolved. Use it to reveal a
+   * target that is hidden behind a disclosure, so the highlight can find it.
+   */
+  onBeforeStep?: () => void;
 }
 
 /**

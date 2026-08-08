@@ -27,21 +27,26 @@ function formatTickets(value: number) {
   return (Math.round(value * 10) / 10).toLocaleString();
 }
 
-function SecondaryMetric(props: {
+function Stat(props: {
   label: string;
   value: string;
   sub: string;
   labelAction?: React.ReactNode;
+  badge?: React.ReactNode;
+  valueClassName?: string;
 }) {
-  const { label, value, sub, labelAction } = props;
+  const { label, value, sub, labelAction, badge, valueClassName } = props;
 
   return (
-    <div className="px-4 py-3">
+    <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-1">
         <div className="text-xs font-bold text-muted-foreground">{label}</div>
         {labelAction}
       </div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <div className={cn('text-lg font-semibold tabular-nums', valueClassName)}>{value}</div>
+        {badge}
+      </div>
       <div className="text-xs text-muted-foreground">{sub}</div>
     </div>
   );
@@ -135,80 +140,70 @@ export function SummaryStats() {
   return (
     <section
       data-tutorial="carat-summary"
-      className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_minmax(0,1.45fr)]"
+      className={cn(
+        'flex flex-wrap gap-x-8 gap-y-4 rounded-xl border px-4 py-3 shadow-sm',
+        affordable && 'border-emerald-600/30 bg-emerald-500/6 dark:border-emerald-400/25',
+        short && 'border-destructive/30 bg-destructive/6',
+        !lastRow && 'bg-card'
+      )}
     >
       {/* Primary verdict — the one answer this page exists to deliver. */}
-      <div
-        className={cn(
-          'flex flex-col justify-between rounded-xl border p-3 shadow-sm',
-          affordable && 'border-emerald-600/30 bg-emerald-500/6 dark:border-emerald-400/25',
-          short && 'border-destructive/30 bg-destructive/6',
-          !lastRow && 'bg-card'
+      <Stat
+        label="Balance at last banner"
+        value={lastRow ? formatCarats(lastRow.balanceAfter) : '—'}
+        valueClassName={cn(
+          'text-xl font-bold',
+          affordable && 'text-emerald-600 dark:text-emerald-400',
+          short && 'text-destructive'
         )}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold text-muted-foreground">Balance at last banner</span>
-          {lastRow ? (
+        badge={
+          lastRow ? (
             <span
               className={cn(
-                'rounded-full px-2 py-1 text-xs font-semibold',
+                'rounded-full px-2 py-0.5 text-xs font-semibold',
                 affordable && 'bg-emerald-600/15 text-emerald-700 dark:text-emerald-300',
                 short && 'bg-destructive/15 text-destructive'
               )}
             >
               {affordable ? 'Affordable ✓' : 'Short'}
             </span>
-          ) : null}
-        </div>
-        <div>
-          <div
-            className={cn(
-              'text-2xl font-bold tabular-nums',
-              affordable && 'text-emerald-600 dark:text-emerald-400',
-              short && 'text-destructive'
-            )}
-          >
-            {lastRow ? formatCarats(lastRow.balanceAfter) : '—'}
-          </div>
+          ) : null
+        }
+        sub={
+          lastRow
+            ? affordable
+              ? 'left over after your final planned spend'
+              : `short by ${formatCarats(shortfall)} — about ${Math.ceil(shortfall / 150).toLocaleString()} more pulls of income`
+            : 'add a banner from the timeline to project your balance'
+        }
+      />
 
-          <p className="text-sm text-muted-foreground">
-            {lastRow
-              ? affordable
-                ? 'Carats left over after your final planned spend.'
-                : `Short by ${formatCarats(shortfall)} carats — add about ${Math.ceil(shortfall / 150).toLocaleString()} more pulls of income.`
-              : 'Add a banner from the timeline to project your balance.'}
-          </p>
-        </div>
-      </div>
-
-      {/* Supporting context — grouped, visually subordinate to the verdict. */}
-      <div className="grid grid-cols-1 divide-y rounded-xl border bg-card shadow-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-        <SecondaryMetric
-          label="Current Carats"
-          value={settings.startingFreeCarats.toLocaleString()}
-          sub={settings.trackPaidCarats ? '+ paid pool tracked' : '+ paid not tracked'}
-        />
-        <SecondaryMetric
-          label="Starting Tickets"
-          value={`${settings.umaTickets.toLocaleString()} / ${settings.supportTickets.toLocaleString()}`}
-          sub="Uma / Support · typed pools"
-        />
-        <SecondaryMetric
-          label="Monthly Income"
-          value={formatCarats(breakdown ? breakdown.total.carats : monthly.carats)}
-          sub={
-            breakdown
-              ? `all-in · ${formatTickets(breakdown.total.umaTickets)}/${formatTickets(breakdown.total.supportTickets)} tickets/mo`
-              : `recurring only · ${monthly.umaTickets}/${monthly.supportTickets} tickets/mo`
-          }
-          labelAction={breakdown ? <IncomeBreakdownHint breakdown={breakdown} /> : null}
-        />
-        <SecondaryMetric
-          label="Total Spend"
-          value={totalSpend > 0 ? formatCarats(totalSpend) : '0'}
-          sub={`${totalPulls.toLocaleString()} pulls · ${plan.length.toLocaleString()} banner${plan.length === 1 ? '' : 's'}${provisionalCount > 0 ? ` · ${provisionalCount} provisional` : ''}`}
-        />
-      </div>
+      {/* Supporting context — same strip, visually subordinate to the verdict. */}
+      <Stat
+        label="Current Carats"
+        value={settings.startingFreeCarats.toLocaleString()}
+        sub={settings.trackPaidCarats ? '+ paid pool tracked' : '+ paid not tracked'}
+      />
+      <Stat
+        label="Starting Tickets"
+        value={`${settings.umaTickets.toLocaleString()} / ${settings.supportTickets.toLocaleString()}`}
+        sub="Uma / Support · typed pools"
+      />
+      <Stat
+        label="Monthly Income"
+        value={formatCarats(breakdown ? breakdown.total.carats : monthly.carats)}
+        sub={
+          breakdown
+            ? `all-in · ${formatTickets(breakdown.total.umaTickets)}/${formatTickets(breakdown.total.supportTickets)} tickets/mo`
+            : `recurring only · ${monthly.umaTickets}/${monthly.supportTickets} tickets/mo`
+        }
+        labelAction={breakdown ? <IncomeBreakdownHint breakdown={breakdown} /> : null}
+      />
+      <Stat
+        label="Total Spend"
+        value={totalSpend > 0 ? formatCarats(totalSpend) : '0'}
+        sub={`${totalPulls.toLocaleString()} pulls · ${plan.length.toLocaleString()} banner${plan.length === 1 ? '' : 's'}${provisionalCount > 0 ? ` · ${provisionalCount} provisional` : ''}`}
+      />
     </section>
   );
 }

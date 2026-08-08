@@ -1,4 +1,8 @@
 import type { TutorialStep } from '@/components/tutorial';
+import {
+  revealPlanAssumptions,
+  setPlanAssumptionsBandOpen
+} from '@/modules/carat/components/plan-assumptions-band-state';
 
 const Term = (props: { children: React.ReactNode }) => {
   const { children } = props;
@@ -24,28 +28,53 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
   },
   {
     element: '[data-tutorial="carat-starting-resources"]',
-    title: 'Start with your base resources and income',
+    onBeforeStep: () => revealPlanAssumptions('balance'),
+    title: 'Start with your base resources',
     description: (
       <div className="flex flex-col gap-2 text-muted-foreground">
-        <div>Enter your base free carats, paid carats, and tickets.</div>
         <div>
-          Use the Income Settings sidebar to configure recurring income from monthly rewards,
-          tickets, Team Trials, club rank, events, and optional packs. Use the presets if you just
-          want a safe starting point.
+          Everything the projection assumes lives in{' '}
+          <strong className="text-foreground">Plan assumptions</strong>, above the plan. It stays
+          collapsed and summarizes itself, so you can open it only when something looks off.
+        </div>
+        <div>
+          In <strong className="text-foreground">Balance</strong>, enter your base free carats, paid
+          carats, and tickets. Your plan starts from these.
         </div>
       </div>
     ),
-    side: 'right',
+    side: 'bottom',
+    align: 'start',
+    showButtons: ['previous', 'next', 'close']
+  },
+  {
+    element: '[data-tutorial="carat-settings"]',
+    onBeforeStep: () => revealPlanAssumptions('income'),
+    title: 'Set your recurring income',
+    description: (
+      <div className="flex flex-col gap-2 text-muted-foreground">
+        <div>
+          The <strong className="text-foreground">Income</strong> group configures recurring income
+          from monthly rewards, tickets, Team Trials, club rank, and optional packs.
+        </div>
+        <div>
+          The <strong className="text-foreground">Rewards</strong> group next to it lists the event
+          and calendar rewards already counted for you.
+        </div>
+      </div>
+    ),
+    side: 'bottom',
     align: 'start',
     showButtons: ['previous', 'next', 'close']
   },
   {
     element: '[data-tutorial="carat-summary"]',
+    onBeforeStep: () => setPlanAssumptionsBandOpen(false),
     title: 'Read the top-line summary',
     description: (
       <div className="flex flex-col gap-2 text-muted-foreground">
         <div>
-          These cards summarize your current stash, all-in monthly income, planned spend, and final
+          This strip summarizes your current stash, all-in monthly income, planned spend, and final
           balance after the last banner in your plan.
         </div>
         <div>
@@ -54,8 +83,8 @@ export const caratCalculatorSteps: Array<TutorialStep> = [
           reconcile against other calculators.
         </div>
         <div>
-          If the last card says <strong className="text-foreground">Affordable ✓</strong>, your full
-          plan fits the current assumptions.
+          If it says <strong className="text-foreground">Affordable ✓</strong>, your full plan fits
+          the current assumptions.
         </div>
       </div>
     ),

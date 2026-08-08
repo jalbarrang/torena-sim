@@ -173,8 +173,9 @@ function isInAccrualWindow(time: number, fromTime: number, toTime: number) {
   return time > fromTime && time <= toTime;
 }
 
-function calendarLoginBonusCarats(fromTime: number, toTime: number) {
-  let carats = 0;
+/** Reset-hour timestamps of the calendar login bonuses that fall inside the accrual window. */
+function calendarLoginBonusTimes(fromTime: number, toTime: number) {
+  const times: number[] = [];
   const fromYear = new Date(fromTime).getUTCFullYear();
   const toYear = new Date(toTime).getUTCFullYear();
 
@@ -185,12 +186,16 @@ function calendarLoginBonusCarats(fromTime: number, toTime: number) {
     ]) {
       const time = Date.UTC(year, month, day, RESET_HOUR_UTC);
       if (isInAccrualWindow(time, fromTime, toTime)) {
-        carats += CALENDAR_LOGIN_BONUS_CARATS;
+        times.push(time);
       }
     }
   }
 
-  return carats;
+  return times;
+}
+
+function calendarLoginBonusCarats(fromTime: number, toTime: number) {
+  return calendarLoginBonusTimes(fromTime, toTime).length * CALENDAR_LOGIN_BONUS_CARATS;
 }
 
 export function projectIncome(
@@ -321,6 +326,68 @@ export function projectMonthlyIncomeBreakdown(
     leagueOfHeroes: scaleIncome(leagueOfHeroes, normalize),
     eventsAndCalendar: scaleIncome(eventsAndCalendar, normalize)
   };
+}
+
+export type RewardSource = {
+  id: string;
+  label: string;
+  kind: 'event' | 'calendar';
+  /** Reset-hour timestamp at which the reward accrues. */
+  time: number;
+  income: ProjectedIncome;
+};
+
+/**
+ * The individual event and calendar rewards `projectIncome` folds into the
+ * projection, listed rather than summed. This performs no computation of its
+ * own: it walks the same accrual window with the same reward tables.
+ */
+export function listRewardSources(
+  settings: CaratSettings,
+  timeline: TimelinePayload,
+  now: Date = new Date(),
+  days: number = ALL_IN_PROJECTION_DAYS
+): RewardSource[] {
+  const fromTime = normalizeToResetDate(now).getTime();
+  const toTime = normalizeToResetDate(new Date(now.getTime() + days * MS_PER_DAY)).getTime();
+  const sources: RewardSource[] = [];
+
+  for (const event of timeline.events) {
+    const time = eventDateValue(event.global_release_date ?? event.jp_release_date);
+    if (time === null || !isInAccrualWindow(time, fromTime, toTime)) {
+      continue;
+    }
+    if (!isEventIncomeType(event.type)) {
+      continue;
+    }
+
+    const income = EVENT_INCOME_OVERRIDES_BY_ID[event.id] ?? EVENT_INCOME_BY_TYPE[event.type];
+    sources.push({
+      id: event.id,
+      label: event.title ?? 'Untitled event',
+      kind: 'event',
+      time,
+      income: {
+        carats: income.carats,
+        umaTickets: income.umaTickets,
+        supportTickets: income.supportTickets
+      }
+    });
+  }
+
+  if (settings.server === 'global') {
+    for (const time of calendarLoginBonusTimes(fromTime, toTime)) {
+      sources.push({
+        id: `calendar-login-bonus-${time}`,
+        label: 'Calendar login bonus',
+        kind: 'calendar',
+        time,
+        income: { carats: CALENDAR_LOGIN_BONUS_CARATS, umaTickets: 0, supportTickets: 0 }
+      });
+    }
+  }
+
+  return sources.sort((left, right) => left.time - right.time);
 }
 
 export function caratsAvailableAt(settings: CaratSettings, timeline: TimelinePayload, date: Date) {

@@ -15,6 +15,10 @@
     "@semantic-release/release-notes-generator"
   ],
   "ignore": [".agents/**", "**/*.test.ts", "src/components/ui/**"],
+  "ignoreUnresolved": [
+    "/src/modules/carat/share/snapshot.ts",
+    "/src/modules/carat/share/share-code.ts"
+  ],
   "workspaces": {
     ".": {
       "entry": [

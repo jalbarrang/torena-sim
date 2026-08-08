@@ -5,7 +5,7 @@
  * This replaces the driver.js instance management with React context.
  */
 
-import { createContext, use, useCallback, useState } from 'react';
+import { createContext, use, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { TutorialActions, TutorialId, TutorialState, TutorialStep } from './types';
 
@@ -17,6 +17,14 @@ type TutorialProviderProps = {
   children: ReactNode;
 };
 
+/**
+ * Give a step the chance to reveal its target before the overlay resolves the
+ * selector, which happens in an effect on the render that follows.
+ */
+function runBeforeStep(step: TutorialStep | undefined) {
+  step?.onBeforeStep?.();
+}
+
 export function TutorialProvider(props: TutorialProviderProps) {
   const { children } = props;
   const [state, setState] = useState<TutorialState>({
@@ -25,8 +33,14 @@ export function TutorialProvider(props: TutorialProviderProps) {
     steps: [],
     tutorialId: null
   });
+  const stateRef = useRef(state);
+
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const start = useCallback((tutorialId: TutorialId, steps: Array<TutorialStep>) => {
+    runBeforeStep(steps[0]);
     setState({
       isActive: true,
       currentStepIndex: 0,
@@ -36,22 +50,24 @@ export function TutorialProvider(props: TutorialProviderProps) {
   }, []);
 
   const next = useCallback(() => {
-    setState((prev) => {
-      if (prev.currentStepIndex < prev.steps.length - 1) {
-        return { ...prev, currentStepIndex: prev.currentStepIndex + 1 };
-      }
-      // On last step, "next" button closes the tutorial
-      return { ...prev, isActive: false };
-    });
+    const { currentStepIndex, steps } = stateRef.current;
+
+    if (currentStepIndex < steps.length - 1) {
+      runBeforeStep(steps[currentStepIndex + 1]);
+      setState((prev) => ({ ...prev, currentStepIndex: prev.currentStepIndex + 1 }));
+      return;
+    }
+
+    // On last step, "next" button closes the tutorial
+    setState((prev) => ({ ...prev, isActive: false }));
   }, []);
 
   const previous = useCallback(() => {
-    setState((prev) => {
-      if (prev.currentStepIndex > 0) {
-        return { ...prev, currentStepIndex: prev.currentStepIndex - 1 };
-      }
-      return prev;
-    });
+    const { currentStepIndex, steps } = stateRef.current;
+    if (currentStepIndex <= 0) return;
+
+    runBeforeStep(steps[currentStepIndex - 1]);
+    setState((prev) => ({ ...prev, currentStepIndex: prev.currentStepIndex - 1 }));
   }, []);
 
   const close = useCallback(() => {
@@ -59,12 +75,11 @@ export function TutorialProvider(props: TutorialProviderProps) {
   }, []);
 
   const goToStep = useCallback((index: number) => {
-    setState((prev) => {
-      if (index >= 0 && index < prev.steps.length) {
-        return { ...prev, currentStepIndex: index };
-      }
-      return prev;
-    });
+    const { steps } = stateRef.current;
+    if (index < 0 || index >= steps.length) return;
+
+    runBeforeStep(steps[index]);
+    setState((prev) => ({ ...prev, currentStepIndex: index }));
   }, []);
 
   const value: TutorialContextValue = {

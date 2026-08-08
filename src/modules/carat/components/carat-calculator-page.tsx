@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useTutorial } from '@/components/tutorial';
 import { caratCalculatorSteps } from '@/modules/tutorial/steps/carat-calculator-steps';
 import { AddBannerButton } from '@/modules/carat/components/add-banner-button';
-import { IncomeSettings } from '@/modules/carat/components/income-settings';
+import { PlanAssumptionsBand } from '@/modules/carat/components/plan-assumptions-band';
 import { PlanSwitcher } from '@/modules/carat/components/plan-switcher';
 import { SummaryStats } from '@/modules/carat/components/summary-stats';
 import { TimelinePanel } from '@/modules/carat/components/timeline-panel';
@@ -54,7 +54,7 @@ export function CaratCalculatorPage() {
   };
 
   return (
-    <div className="flex w-full min-h-0 flex-col gap-2 px-4 py-4 overflow-y-auto lg:overflow-hidden">
+    <div className="flex w-full min-h-0 flex-col gap-2 overflow-y-auto px-4 py-4">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -100,18 +100,15 @@ export function CaratCalculatorPage() {
         results will vary. This is not financial advice; only spend what you can comfortably afford.
       </p>
 
-      {/* Summary stats */}
-      <div className="shrink-0">
-        <SummaryStats />
-      </div>
+      {/* Planner — one column, so the plan gets the full content width. */}
+      <div className="flex min-w-0 flex-col gap-2">
+        <PlanAssumptionsBand />
 
-      {/* Planner */}
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[330px_1fr] lg:grid-rows-[minmax(0,1fr)]">
-        <IncomeSettings />
+        <SummaryStats />
 
         <section
           data-tutorial="carat-planner"
-          className="flex min-h-0 flex-col rounded-xl border bg-card shadow-sm lg:h-full"
+          className="flex min-w-0 flex-col rounded-xl border bg-card shadow-sm"
         >
           <div className="flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <strong className="text-sm">Banner Plan</strong>
@@ -120,7 +117,7 @@ export function CaratCalculatorPage() {
             </div>
           </div>
 
-          <div className="relative flex min-h-0 flex-1 [&>*]:min-w-0 p-4 overflow-y-auto">
+          <div className="relative flex min-w-0 flex-col p-4 [&>*]:min-w-0">
             <TimelinePanel showFirstVisitNudge={showFirstVisitNudge} />
           </div>
         </section>

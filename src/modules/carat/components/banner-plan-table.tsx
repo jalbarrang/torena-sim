@@ -15,12 +15,9 @@ import {
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { InfoHint } from '@/modules/carat/components/info-hint';
+import { PlanEmptyState } from '@/modules/carat/components/plan-empty-state';
 import { SortablePlanCard } from '@/modules/carat/components/sortable-plan-card';
 import { SortablePlanRow } from '@/modules/carat/components/sortable-plan-row';
-import {
-  StartingResourcesCard,
-  StartingResourcesRow
-} from '@/modules/carat/components/starting-resources';
 import { useWideViewport } from '@/modules/carat/components/use-wide-viewport';
 import type { TimelineEvent, TimelinePayload } from '@/modules/carat/data/timeline-types';
 import { computePlan } from '@/modules/carat/model/plan';
@@ -152,7 +149,6 @@ export function BannerPlanTable(props: BannerPlanTableProps) {
                 </tr>
               </thead>
               <tbody>
-                <StartingResourcesRow />
                 <SortableContext
                   items={rows.map((row) => row.event.id)}
                   strategy={verticalListSortingStrategy}
@@ -168,18 +164,8 @@ export function BannerPlanTable(props: BannerPlanTableProps) {
                 </SortableContext>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center">
-                      <div className="text-sm font-semibold">Start with three quick steps</div>
-                      <ol className="mx-auto mt-3 w-fit space-y-1 text-left text-sm text-muted-foreground">
-                        <li>1. Set your available carats and tickets above</li>
-                        <li>
-                          2. Add a banner with{' '}
-                          <span className="font-medium text-foreground">
-                            + Add banner from timeline
-                          </span>
-                        </li>
-                        <li>3. Set pulls and review the projection</li>
-                      </ol>
+                    <td colSpan={7} className="p-0">
+                      <PlanEmptyState />
                     </td>
                   </tr>
                 ) : null}
@@ -188,7 +174,6 @@ export function BannerPlanTable(props: BannerPlanTableProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            <StartingResourcesCard />
             <SortableContext
               items={rows.map((row) => row.event.id)}
               strategy={verticalListSortingStrategy}
@@ -203,17 +188,7 @@ export function BannerPlanTable(props: BannerPlanTableProps) {
               ))}
             </SortableContext>
             {rows.length === 0 ? (
-              <div className="rounded-xl border border-dashed bg-background/60 p-8 text-center">
-                <div className="text-sm font-semibold">Start with three quick steps</div>
-                <ol className="mx-auto mt-3 w-fit space-y-1 text-left text-sm text-muted-foreground">
-                  <li>1. Set your available carats and tickets above</li>
-                  <li>
-                    2. Add a banner with{' '}
-                    <span className="font-medium text-foreground">+ Add banner from timeline</span>
-                  </li>
-                  <li>3. Set pulls and review the projection</li>
-                </ol>
-              </div>
+              <PlanEmptyState className="rounded-xl border border-dashed bg-background/60" />
             ) : null}
           </div>
         )}

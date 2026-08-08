@@ -166,7 +166,8 @@ function SwitchRow(props: {
   );
 }
 
-export function IncomeSettings() {
+/** The income settings groups and glossary, hosted by the Income group of the plan assumptions band. */
+export function IncomeSettingsSections() {
   const settings = useCaratStore((state) => getActivePlan(state).settings);
   const now = new Date();
   const monthly = monthlyRecurringCarats(settings, now);
@@ -182,10 +183,7 @@ export function IncomeSettings() {
   });
 
   return (
-    <aside
-      data-tutorial="carat-settings"
-      className="rounded-xl border bg-card shadow-sm lg:min-h-0 lg:overflow-y-auto"
-    >
+    <div data-tutorial="carat-settings" className="overflow-hidden rounded-lg border bg-card">
       <div className="flex items-center justify-between border-b px-4 py-3 text-sm font-bold">
         <span className="inline-flex items-center gap-1">
           Income & Settings
@@ -318,6 +316,6 @@ export function IncomeSettings() {
         <span>Pull cost: 150 carats/pull</span>
         <span>Spark/pity: 200 pulls</span>
       </div>
-    </aside>
+    </div>
   );
 }
