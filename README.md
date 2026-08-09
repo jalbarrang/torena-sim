@@ -25,6 +25,13 @@ Install `wasm-pack` to build the npm package.
 cargo install wasm-pack --version 0.15.0 --locked
 ```
 
+Install the pinned release tools to calculate and apply versions locally.
+
+```bash
+cargo install git-cliff --version 2.13.1 --locked
+cargo install cargo-edit --version 0.13.11 --locked
+```
+
 ## Commands
 
 Run all commands from the repository root.
@@ -62,9 +69,15 @@ The script runs `wasm-pack`, preserves the existing `uma_sim_wasm` JavaScript an
 
 ## Releases
 
-All Rust and npm artifacts use the workspace version in [`Cargo.toml`](Cargo.toml). The manual [`Release`](.github/workflows/release.yml) workflow accepts that exact version without a `v` prefix.
+All Rust and npm artifacts use the workspace version in [`Cargo.toml`](Cargo.toml). Calculate the next version from Conventional Commits and apply it to the workspace.
 
-Before dispatch, commit the version change to `main` and run the full gates. The workflow validates the version and runs the gates and package dry-runs again. It creates an immutable version tag, publishes crates.io before npm, and then creates a GitHub Release with generated notes. Reruns resolve the existing tag and skip registry versions that already exist.
+```bash
+./scripts/bump-version.sh
+```
+
+The script uses [`cliff.toml`](cliff.toml) and commits after the latest `vX.Y.Z` tag. A `BREAKING CHANGE` footer or `!` increments the major version. A `feat` commit increments the minor version. Other included changes increment the patch version. Release commits do not increment the version. The initial version is `v0.1.1` because this repository does not have a Git release tag yet.
+
+Review the version diff. Commit it to `main`, and run the full gates. Then start the manual [`Release`](.github/workflows/release.yml) workflow. The workflow reads the version from `Cargo.toml`, validates it, and runs the gates and package dry-runs again. It creates an immutable version tag, publishes crates.io before npm, and then creates a GitHub Release with generated notes. Reruns resolve the existing tag and skip registry versions that already exist.
 
 The first crates.io release must use the temporary `CRATES_IO_BOOTSTRAP_TOKEN` repository secret. Later releases use crates.io trusted publishing. npm releases use trusted publishing.
 

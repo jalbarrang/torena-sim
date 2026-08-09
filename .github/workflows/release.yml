@@ -2,11 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Exact SemVer already committed to Cargo.toml, without a v prefix"
-        required: true
-        type: string
 
 concurrency:
   group: release
@@ -20,16 +15,24 @@ jobs:
       contents: read
     outputs:
       release_sha: ${{ steps.release.outputs.release_sha }}
-    env:
-      VERSION: ${{ inputs.version }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v6.1.0
         with:
           fetch-depth: 0
-      - name: Resolve tag or main commit
+      - name: Resolve version, tag, and commit
         id: release
         run: |
-          tag="v$VERSION"
+          version=$(python3 - <<'PY'
+          import pathlib
+          import tomllib
+
+          with pathlib.Path("Cargo.toml").open("rb") as source:
+              print(tomllib.load(source)["workspace"]["package"]["version"])
+          PY
+          )
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          tag="v$version"
           if git rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1; then
             echo "release_sha=$(git rev-list -n 1 "$tag")" >> "$GITHUB_OUTPUT"
           else
@@ -41,13 +44,13 @@ jobs:
           fi
 
   verify:
-    name: Verify v${{ inputs.version }}
+    name: Verify v${{ needs.resolve.outputs.version }}
     needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.resolve.outputs.version }}
     steps:
       - uses: actions/checkout@v6.1.0
         with:
@@ -63,7 +66,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
       - uses: swatinem/rust-cache@v2.9.2
-      - name: Validate release input
+      - name: Validate release version
         run: ./scripts/validate-release-version.sh "$VERSION"
       - name: Install pinned release tools
         run: |
@@ -84,13 +87,13 @@ jobs:
         run: npm pack --dry-run --json
 
   create_tag:
-    name: Create immutable tag v${{ inputs.version }}
+    name: Create immutable tag v${{ needs.resolve.outputs.version }}
     needs: [resolve, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.resolve.outputs.version }}
       RELEASE_SHA: ${{ needs.resolve.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v6.1.0
@@ -110,7 +113,7 @@ jobs:
           fi
 
   publish_registries:
-    name: Publish registries v${{ inputs.version }}
+    name: Publish registries v${{ needs.resolve.outputs.version }}
     needs: [resolve, create_tag]
     runs-on: ubuntu-latest
     environment: release
@@ -118,12 +121,12 @@ jobs:
       contents: read
       id-token: write
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.resolve.outputs.version }}
     steps:
       - uses: actions/checkout@v6.1.0
         with:
           fetch-depth: 0
-          ref: v${{ inputs.version }}
+          ref: v${{ needs.resolve.outputs.version }}
       - uses: dtolnay/rust-toolchain@1.97.0
         with:
           targets: wasm32-unknown-unknown
@@ -180,13 +183,13 @@ jobs:
         run: npm publish --access public
 
   github_release:
-    name: Create GitHub Release v${{ inputs.version }}
-    needs: publish_registries
+    name: Create GitHub Release v${{ needs.resolve.outputs.version }}
+    needs: [resolve, publish_registries]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.resolve.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Create release with generated notes
