@@ -1,0 +1,5 @@
+# Pin release builds to one toolchain. The enforced MSRV lives in clippy.toml.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

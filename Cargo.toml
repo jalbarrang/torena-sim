@@ -1,0 +1,78 @@
+[workspace]
+members = ["honse-sim", "honse-sim-wasm"]
+resolver = "2"
+
+# Shared package metadata, inherited by each crate via `field.workspace = true`.
+[workspace.package]
+version = "0.1.1"
+edition = "2021"
+license = "GPL-3.0-only"
+repository = "https://github.com/jalbarrang/torena-sim"
+# Packages opt in to publication explicitly. The workspace default disables it.
+publish = false
+
+# =============================================================================
+# Workspace lint policy
+#
+# DESIGN PRINCIPLE: everything here is "warn", but CI runs
+# `cargo clippy -- -D warnings`, which promotes every warning to a hard error.
+#   - Local dev: yellow warnings, iterate freely
+#   - CI / pre-commit: zero tolerance, nothing merges with warnings
+#   - Exceptions must be explicit `#[allow(lint, reason = "...")]`
+#
+# This is a clean, safe, deterministic simulation library (no FFI/unsafe heavy
+# code), so the bar is deliberately strict.
+# =============================================================================
+# =============================================================================
+# Release profile (workspace-global; per-package profiles are ignored by Cargo).
+# Native default favors simulation throughput; the WASM crate leans toward a
+# smaller artifact (further size reduction happens via wasm-opt in the build
+# pipeline, added in plan task t-021).
+# =============================================================================
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.release.package.honse-sim-wasm]
+opt-level = "s"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"   # explicit unsafe blocks inside unsafe fns
+non_ascii_idents = "deny"         # confusing identifiers (domain strings are fine)
+unreachable_pub = "warn"          # keep the public surface intentional
+unused_qualifications = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+# --- Lint groups: deny correctness (always bugs), warn the rest ---
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+
+# --- Anti-"AI-slop" lints: things generated code does wrong ---
+disallowed_methods = "warn"                 # bans unwrap()/panic-prone calls (see clippy.toml)
+unnecessary_wraps = "warn"                  # fns that always return Some/Ok
+redundant_clone = "warn"
+redundant_closure_for_method_calls = "warn"
+inefficient_to_string = "warn"
+cloned_instead_of_copied = "warn"
+implicit_clone = "warn"
+manual_let_else = "warn"
+map_unwrap_or = "warn"
+unnested_or_patterns = "warn"
+explicit_iter_loop = "warn"
+semicolon_if_nothing_returned = "warn"
+
+# --- Determinism / numeric-safety health lints ---
+large_types_passed_by_value = "warn"
+verbose_bit_mask = "warn"
+needless_pass_by_value = "warn"
+
+# --- Documentation hygiene (relaxed for now) ---
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"   # DDD: Race in `racing`, RaceObserver, etc.

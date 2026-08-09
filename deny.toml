@@ -1,0 +1,71 @@
+# =============================================================================
+# cargo-deny Configuration — uma-sim (cargo-deny v0.18+)
+# Supply-chain security: licenses, advisories, bans, and source restrictions.
+#
+# Run: cargo deny check from the repository root.
+# Docs: https://embarkstudios.github.io/cargo-deny/
+# =============================================================================
+
+[graph]
+# Check the platforms we actually target: native hosts + the WASM web target.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
+]
+
+# =============================================================================
+# [advisories] — Known vulnerability scanning
+# =============================================================================
+[advisories]
+unmaintained = "workspace"
+unsound = "all"
+ignore = []
+
+# =============================================================================
+# [licenses] — License compliance (permissive open-source only)
+# =============================================================================
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "CDLA-Permissive-2.0",
+]
+# The workspace itself is GPL-3.0-only (this is our code). Dependencies must
+# still be permissive (the allow-list above).
+exceptions = [
+    { allow = ["GPL-3.0-only"], crate = "honse-sim" },
+    { allow = ["GPL-3.0-only"], crate = "honse-sim-wasm" },
+]
+
+# =============================================================================
+# [bans] — Crate bans and duplicate detection
+# =============================================================================
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Internal workspace crates are referenced by path without a version; that is
+# not a real wildcard-dependency risk.
+allow-wildcard-paths = true
+highlight = "all"
+deny = [
+    { crate = "openssl", reason = "No native TLS needed; avoid the OpenSSL C dependency." },
+    { crate = "openssl-sys", reason = "No native TLS needed; avoid the OpenSSL C dependency." },
+]
+
+# =============================================================================
+# [sources] — Allowed dependency sources
+# =============================================================================
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

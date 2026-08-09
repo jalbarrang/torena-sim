@@ -1,0 +1,21 @@
+# =============================================================================
+# Rustfmt Configuration — uma-sim (Rust workspace)
+# Consistent formatting across human and AI-authored code.
+# =============================================================================
+
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+
+# Shorthand forms — idiomatic Rust
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Formatting choices
+newline_style = "Auto"
+fn_params_layout = "Tall"
+
+# NOTE: `imports_granularity` / `group_imports` are nightly-only rustfmt
+# options. The toolchain is pinned to stable, so import organization is kept
+# tidy by convention (std, then external crates, then local) rather than
+# enforced here. Enable them if/when the project adopts a nightly fmt step.

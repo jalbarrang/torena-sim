@@ -1,0 +1,19 @@
+# Rust build output
+/target/
+
+# Generated wasm-pack output
+/honse-sim-wasm/pkg/
+
+# Operating system and editor files
+.DS_Store
+*.swp
+*.swo
+
+# Local agent and planning artifacts
+/.references/
+/.hiker-cache/
+/.plans/
+/.taskman/
+/.issues/
+/.pi/context-folders.json
+/.pi/discord.json

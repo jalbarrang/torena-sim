@@ -1,0 +1,13 @@
+# =============================================================================
+# Cargo Configuration — uma-sim (Rust workspace)
+# Convenience aliases for the quality-gate commands.
+# =============================================================================
+
+[alias]
+# Lint with zero-warning policy (mirrors CI).
+lint = "clippy --locked --workspace --all-targets -- -D warnings"
+lint-fix = "clippy --locked --workspace --all-targets --fix --allow-dirty -- -D warnings"
+# Fast type-check across all targets.
+qa = "check --locked --workspace --all-targets"
+# Build the WASM crate for the browser target.
+wasm = "build --locked -p honse-sim-wasm --target wasm32-unknown-unknown --release"

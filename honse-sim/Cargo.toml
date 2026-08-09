@@ -1,0 +1,26 @@
+[package]
+name = "honse-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = ["crates-io"]
+readme = "../README.md"
+description = "Deterministic Uma Musume race simulation with contested and synthetic engines."
+keywords = ["simulation", "racing", "uma-musume", "deterministic", "game"]
+categories = ["simulation", "game-development"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+rand_xoshiro = "0.7"
+rand_core = "0.9"
+
+[features]
+# Exposes deterministic runner fixtures to downstream integration tests.
+test-support = []
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

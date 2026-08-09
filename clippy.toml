@@ -1,0 +1,28 @@
+# =============================================================================
+# Clippy Configuration — uma-sim (Rust workspace)
+#
+# A clean, deterministic race-simulation library compiled to native + WASM.
+# Most code is AI-generated, so thresholds are tighter than clippy defaults to
+# force decomposition and discourage panic-prone shortcuts.
+# =============================================================================
+
+# AI generates deeply nested match/if chains. Force decomposition.
+cognitive-complexity-threshold = 20
+
+# Max function body lines. Long functions get split (the Runner already does
+# this across lifecycle/physics/skills/mechanics submodules).
+too-many-lines-threshold = 120
+
+# Type complexity: keep signatures readable.
+type-complexity-threshold = 250
+
+# Disallowed methods: panics have no place in a library that runs inside web
+# workers and backend servers. Use `?`, `unwrap_or`, `expect("reason")`, or
+# handle the case explicitly. (Tests may opt out with #[allow].)
+disallowed-methods = [
+    { path = "core::result::Result::unwrap", reason = "Use `?`, `.unwrap_or(..)`, `.expect(\"reason\")`, or handle the error. unwrap() panics." },
+    { path = "core::option::Option::unwrap", reason = "Use `?`, `.unwrap_or(..)`, `.expect(\"reason\")`, or handle the None case. unwrap() panics." },
+]
+
+# MSRV — prevent use of features newer than the pinned toolchain.
+msrv = "1.90.0"

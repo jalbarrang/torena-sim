@@ -1,0 +1,20 @@
+# Normalize text files across development platforms.
+* text=auto eol=lf
+
+# Keep generated and media files binary.
+*.wasm binary
+*.tgz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp3 binary
+*.mp4 binary
+*.zip binary
+*.gz binary
