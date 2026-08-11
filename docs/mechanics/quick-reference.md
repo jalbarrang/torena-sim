@@ -47,6 +47,8 @@ This document is a quick reference for the race mechanics that are available cur
 - ✅ HP recovery skills (percentage of max HP)
 - ✅ Out of HP → minimum speed
 
+The closed forms above — `MaxHP = 0.8 * StrategyCoefficient * Stamina + Distance`, the strategy coefficient table, the guts modifier, and the wit activation chance — are exported as pure functions from `honse_sim::readouts` (and over the WASM boundary as `maxHp`, `hpStrategyCoefficient`, `gutsHpBurnMultiplier`, `skillActivationPercent`). The engines call the same functions, so a caller that only wants the number cannot drift from the simulation.
+
 ## Skill System ✅
 
 ### Activation & Duration

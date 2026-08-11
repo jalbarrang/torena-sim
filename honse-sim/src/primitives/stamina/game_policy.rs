@@ -6,11 +6,12 @@
 
 use crate::course::model::CourseData;
 use crate::course::phase::phase_start;
+use crate::readouts::{guts_hp_burn_multiplier, max_hp};
 use crate::shared_kernel::language::{GroundCondition, Phase, Strategy};
 use crate::shared_kernel::rng::Prng;
 use crate::skills::effect::PositionKeepState;
 use crate::stamina::policy::{RaceStateSlice, StaminaPolicy, StaminaStats};
-use crate::stamina::spurt::{get_ground_consumption_coef, HP_STRATEGY_COEFFICIENT};
+use crate::stamina::spurt::get_ground_consumption_coef;
 
 /// Buffer distance (meters) the game keeps before the finish in spurt math.
 const SPURT_BUFFER_METERS: f64 = 60.0;
@@ -144,13 +145,9 @@ impl GameStaminaPolicy {
 
 impl StaminaPolicy for GameStaminaPolicy {
     fn init(&mut self, stats: &StaminaStats) {
-        let coef = HP_STRATEGY_COEFFICIENT
-            .get(stats.strategy as usize)
-            .copied()
-            .unwrap_or(1.0);
-        self.max_hp = 0.8 * coef * stats.stamina + self.distance;
+        self.max_hp = max_hp(stats.stamina, stats.strategy, self.distance);
         self.current_health = self.max_hp;
-        self.guts_modifier = 1.0 + 200.0 / (600.0 * stats.guts).sqrt();
+        self.guts_modifier = guts_hp_burn_multiplier(stats.guts);
         self.subpar_accept_chance = ((15.0 + 0.05 * stats.wit) * 1000.0).round();
         self.achieved_max_spurt = false;
     }

@@ -13,6 +13,8 @@ use wasm_bindgen::prelude::*;
 
 use honse_sim::contested::race::Race;
 use honse_sim::contested::{run_contested_compare, run_race_sim};
+use honse_sim::readouts;
+use honse_sim::shared_kernel::language::Strategy;
 use honse_sim::vacuum::run_compare;
 
 use crate::dto::{
@@ -97,6 +99,59 @@ pub fn known_condition_tokens_wasm() -> Vec<String> {
         .collect();
     tokens.sort();
     tokens
+}
+
+/// Resolve a game strategy id (1-5) into the domain enum.
+fn strategy_from_id(strategy: u8) -> Result<Strategy, JsError> {
+    match strategy {
+        1 => Ok(Strategy::FrontRunner),
+        2 => Ok(Strategy::PaceChaser),
+        3 => Ok(Strategy::LateSurger),
+        4 => Ok(Strategy::EndCloser),
+        5 => Ok(Strategy::Runaway),
+        other => Err(JsError::new(&format!(
+            "unknown strategy id {other}; expected 1-5"
+        ))),
+    }
+}
+
+/// Stamina's HP conversion coefficient for a strategy id (1-5).
+///
+/// See [`honse_sim::readouts::hp_strategy_coefficient`].
+#[wasm_bindgen(js_name = hpStrategyCoefficient)]
+pub fn hp_strategy_coefficient_wasm(strategy: u8) -> Result<f64, JsError> {
+    Ok(readouts::hp_strategy_coefficient(strategy_from_id(
+        strategy,
+    )?))
+}
+
+/// The HP a runner starts a race with, from stamina, strategy id, and course
+/// distance in meters.
+///
+/// See [`honse_sim::readouts::max_hp`].
+#[wasm_bindgen(js_name = maxHp)]
+pub fn max_hp_wasm(stamina: f64, strategy: u8, distance: f64) -> Result<f64, JsError> {
+    Ok(readouts::max_hp(
+        stamina,
+        strategy_from_id(strategy)?,
+        distance,
+    ))
+}
+
+/// The late-race HP consumption multiplier for a guts stat.
+///
+/// See [`honse_sim::readouts::guts_hp_burn_multiplier`].
+#[wasm_bindgen(js_name = gutsHpBurnMultiplier)]
+pub fn guts_hp_burn_multiplier_wasm(guts: f64) -> f64 {
+    readouts::guts_hp_burn_multiplier(guts)
+}
+
+/// The pre-race wisdom check pass rate, as a percentage, for a base wit stat.
+///
+/// See [`honse_sim::readouts::skill_activation_percent`].
+#[wasm_bindgen(js_name = skillActivationPercent)]
+pub fn skill_activation_percent_wasm(base_wit: f64) -> f64 {
+    readouts::skill_activation_percent(base_wit)
 }
 
 /// A streaming race simulator with per-event JS callbacks.
