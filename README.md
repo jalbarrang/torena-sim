@@ -77,9 +77,9 @@ All Rust and npm artifacts use the workspace version in [`Cargo.toml`](Cargo.tom
 
 The script uses [`cliff.toml`](cliff.toml) and commits after the latest `vX.Y.Z` tag. A `BREAKING CHANGE` footer or `!` increments the major version. A `feat` commit increments the minor version. Other included changes increment the patch version. Release commits do not increment the version. The initial version is `v0.1.1` because this repository does not have a Git release tag yet.
 
-Review the version diff. Commit it to `main`, and run the full gates. Then start the manual [`Release`](.github/workflows/release.yml) workflow. The workflow reads the version from `Cargo.toml`, validates it, and runs the gates and package dry-runs again. It creates an immutable version tag, publishes crates.io before npm, and then creates a GitHub Release with generated notes. Reruns resolve the existing tag and skip registry versions that already exist.
+Review the version diff. Commit it to `main`, and run the full gates. Then start the manual [`Release`](.github/workflows/release.yml) workflow. The workflow reads the version from `Cargo.toml`, validates it, and runs the gates and package dry-runs again. Choose `all` to publish crates.io before npm, or `npm-only` to skip crates.io publication. It creates an immutable version tag and a GitHub Release with generated notes. Reruns resolve the existing tag and skip registry versions that already exist.
 
-The first crates.io release must use the temporary `CRATES_IO_BOOTSTRAP_TOKEN` repository secret. Later releases use crates.io trusted publishing. npm releases use trusted publishing.
+The first crates.io release must use the temporary `CRATES_IO_BOOTSTRAP_TOKEN` repository secret. Later crates.io releases use trusted publishing. npm releases use trusted publishing in both modes.
 
 ## Mechanics documentation
 
