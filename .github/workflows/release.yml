@@ -2,6 +2,15 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Registry publication target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - npm-only
 
 concurrency:
   group: release
@@ -155,7 +164,7 @@ jobs:
         id: registry
         run: ./scripts/check-release-state.sh "$VERSION" "${{ steps.archives.outputs.crate_archive }}" "${{ steps.archives.outputs.npm_archive }}"
       - name: Require bootstrap token for the first crates.io release
-        if: steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any != 'true'
+        if: inputs.publish == 'all' && steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any != 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}
         run: |
@@ -165,15 +174,15 @@ jobs:
           }
       - name: Authenticate to crates.io with OIDC
         id: crates_auth
-        if: steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any == 'true'
+        if: inputs.publish == 'all' && steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any == 'true'
         uses: rust-lang/crates-io-auth-action@v1.0.5
       - name: Publish first crates.io release with bootstrap token
-        if: steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any != 'true'
+        if: inputs.publish == 'all' && steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any != 'true'
         run: cargo publish --locked -p honse-sim
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}
       - name: Publish crates.io release with OIDC
-        if: steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any == 'true'
+        if: inputs.publish == 'all' && steps.registry.outputs.crate_exists_exact != 'true' && steps.registry.outputs.crate_exists_any == 'true'
         run: cargo publish --locked -p honse-sim
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates_auth.outputs.token }}
