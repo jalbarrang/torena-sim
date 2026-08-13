@@ -15,6 +15,9 @@ pub mod compare;
 
 pub mod stamina;
 
+/// Closed-form pre-race readouts shared by the engines and external planners.
+pub mod readouts;
+
 pub mod position_keep;
 pub mod runner;
 

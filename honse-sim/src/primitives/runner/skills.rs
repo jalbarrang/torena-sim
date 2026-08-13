@@ -614,7 +614,7 @@ impl Runner {
     fn do_wit_check(&mut self) -> bool {
         let wit = self.base_stats.wit;
         let roll = self.wit_rng.random();
-        let threshold = (100.0 - 9000.0 / wit).max(20.0) * 0.01;
+        let threshold = crate::readouts::skill_activation_chance(wit);
         roll <= threshold
     }
 
