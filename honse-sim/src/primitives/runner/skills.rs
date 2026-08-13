@@ -1108,6 +1108,7 @@ mod tests {
                     effect_type: 27, // TargetSpeed
                     value_usage: None,
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 }],
             }],
         }
@@ -1131,6 +1132,7 @@ mod tests {
                         effect_type: 5, // Wisdom Up (modeled)
                         value_usage: Some(1),
                         value_level_usage: Some(1),
+                        pre_applied_multiplier: None,
                     },
                     RawSkillEffect {
                         modifier: 100000.0,
@@ -1138,6 +1140,7 @@ mod tests {
                         effect_type: 8, // vision (unmodeled)
                         value_usage: Some(1),
                         value_level_usage: Some(1),
+                        pre_applied_multiplier: None,
                     },
                 ],
             }],
@@ -1160,6 +1163,7 @@ mod tests {
                     effect_type: 6,
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 }],
             }],
         }
@@ -1315,6 +1319,7 @@ mod tests {
                     effect_type,
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 }],
             }],
         };
@@ -1337,6 +1342,7 @@ mod tests {
                             effect_type: 27,
                             value_usage: Some(1),
                             value_level_usage: None,
+                            pre_applied_multiplier: None,
                         },
                         RawSkillEffect {
                             modifier: 500.0,
@@ -1344,6 +1350,7 @@ mod tests {
                             effect_type: 27,
                             value_usage: Some(14),
                             value_level_usage: None,
+                            pre_applied_multiplier: None,
                         },
                         RawSkillEffect {
                             modifier: 500.0,
@@ -1351,6 +1358,7 @@ mod tests {
                             effect_type: 31,
                             value_usage: Some(14),
                             value_level_usage: None,
+                            pre_applied_multiplier: None,
                         },
                     ],
                 }],
@@ -1372,6 +1380,7 @@ mod tests {
                             effect_type: 5,
                             value_usage: Some(1),
                             value_level_usage: Some(1),
+                            pre_applied_multiplier: None,
                         },
                         RawSkillEffect {
                             modifier: 50000.0,
@@ -1379,6 +1388,7 @@ mod tests {
                             effect_type: 8,
                             value_usage: Some(1),
                             value_level_usage: Some(1),
+                            pre_applied_multiplier: None,
                         },
                     ],
                 }],
@@ -1413,6 +1423,7 @@ mod tests {
                     effect_type,
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 }],
             }],
         };
@@ -1639,6 +1650,7 @@ mod tests {
                     effect_type: 31, // CurrentSpeed
                     value_usage: None,
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 }],
             }],
         }
@@ -1831,6 +1843,7 @@ mod tests {
                         effect_type: 27, // TargetSpeed (self buff)
                         value_usage: None,
                         value_level_usage: None,
+                        pre_applied_multiplier: None,
                     },
                     RawSkillEffect {
                         modifier: -1500.0,
@@ -1838,6 +1851,7 @@ mod tests {
                         effect_type: 21, // CurrentSpeed (opponent debuff)
                         value_usage: None,
                         value_level_usage: None,
+                        pre_applied_multiplier: None,
                     },
                 ],
             }],
@@ -1883,6 +1897,7 @@ mod tests {
                     effect_type: 9,
                     value_usage: None,
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 }],
             }],
         };

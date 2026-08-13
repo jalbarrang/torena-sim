@@ -1030,6 +1030,7 @@ mod tests {
                     effect_type: 21, // Current Speed
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 }],
             }],
         }];

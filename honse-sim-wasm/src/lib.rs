@@ -110,9 +110,11 @@ pub fn known_condition_tokens_wasm() -> Vec<String> {
 ///
 /// The engine drops effects it cannot model rather than rejecting the skill —
 /// an unmapped effect `type` (what it does), `valueUsage` (how much), or `target`
-/// (who receives it) — so a simulation always runs, but a dropped effect makes
-/// that skill's contribution understated. Exposed so a consumer can say which
-/// skills are affected instead of presenting partial results as complete.
+/// (who receives it), or a tiered usage that did not state the
+/// `preAppliedMultiplier` already folded into its modifier — so a simulation
+/// always runs, but a dropped effect makes that skill's contribution understated.
+/// Exposed so a consumer can say which skills are affected instead of presenting
+/// partial results as complete.
 ///
 /// The answer is a property of the skill data alone, so call it once per skill
 /// pool rather than per simulation. It accepts a whole pool: no unmapped code in

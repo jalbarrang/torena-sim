@@ -128,6 +128,7 @@ mod tests {
             effect_type,
             value_usage: None,
             value_level_usage: None,
+            pre_applied_multiplier: None,
         }
     }
 

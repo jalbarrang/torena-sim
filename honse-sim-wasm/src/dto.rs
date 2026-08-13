@@ -425,6 +425,16 @@ pub struct WasmRawEffect {
     /// Optional level-usage discriminator.
     #[serde(default)]
     pub value_level_usage: Option<i32>,
+    /// The value-scaling tier multiplier already applied to `modifier`, when the
+    /// data layer applied one.
+    ///
+    /// Required for the tiered usages (2, 3-7, 10, 12, 13, 24); ignored
+    /// otherwise. Pre-application is gated per *skill* upstream, not per usage,
+    /// so the engine cannot infer it from `valueUsage` — an effect that omits
+    /// this is dropped rather than assumed, and reported as
+    /// `missingPreAppliedMultiplier`.
+    #[serde(default)]
+    pub pre_applied_multiplier: Option<f64>,
 }
 
 impl WasmRawEffect {
@@ -436,6 +446,7 @@ impl WasmRawEffect {
             effect_type: self.effect_type,
             value_usage: self.value_usage,
             value_level_usage: self.value_level_usage,
+            pre_applied_multiplier: self.pre_applied_multiplier,
         })
     }
 }
@@ -567,6 +578,11 @@ pub enum WasmUnmodeledReason {
     /// The effect's `target` code has no engine mapping — who receives it is
     /// unknown.
     UnmodeledTarget,
+    /// The effect uses a tiered `valueUsage` but did not state the
+    /// `preAppliedMultiplier` already folded into its modifier, so which tier it
+    /// carries is unknown. Fixed by the data stating the multiplier, not by the
+    /// engine adding a policy.
+    MissingPreAppliedMultiplier,
 }
 
 /// One effect the engine drops, located in the submitted skill payload.
@@ -663,6 +679,9 @@ pub fn build_skill_support_report(
                     }
                     UnmodeledEffect::ValueUsage(usage) => {
                         (WasmUnmodeledReason::UnsupportedValueUsage, usage)
+                    }
+                    UnmodeledEffect::MissingPreAppliedMultiplier(usage) => {
+                        (WasmUnmodeledReason::MissingPreAppliedMultiplier, usage)
                     }
                 };
                 dropped_effects.push(WasmDroppedEffect {
@@ -1694,9 +1713,9 @@ mod tests {
                     "baseDuration": 50000,
                     "condition": "phase>=2",
                     "effects": [
-                        { "modifier": 3000, "target": 1, "type": 27, "valueUsage": 10 },
-                        { "modifier": 3600, "target": 1, "type": 31, "valueUsage": 10 },
-                        { "modifier": 420, "target": 1, "type": 27, "valueUsage": 10 }
+                        { "modifier": 3000, "target": 1, "type": 27, "valueUsage": 10, "preAppliedMultiplier": 1.2 },
+                        { "modifier": 3600, "target": 1, "type": 31, "valueUsage": 10, "preAppliedMultiplier": 1.2 },
+                        { "modifier": 420, "target": 1, "type": 27, "valueUsage": 10, "preAppliedMultiplier": 1.2 }
                     ]
                 }]
             }"#,
@@ -1711,7 +1730,7 @@ mod tests {
         let effects = build_skill_effects(&skill.alternatives[0]);
         assert_eq!(effects.len(), 3, "no climax effect is dropped");
         for effect in &effects {
-            assert_eq!(effect.value_scaling, ValueScalingPolicy::PreAppliedBestTier);
+            assert_eq!(effect.value_scaling, ValueScalingPolicy::PreAppliedTier);
         }
         // Stored modifiers pass through untouched — multiplying by the tier again
         // here would double-count what the extract already applied.
@@ -1722,8 +1741,8 @@ mod tests {
 
     #[test]
     fn skill_input_drops_unsupported_value_usage_effect_and_keeps_the_skill() {
-        // Usage 12 (career fans) has no tier table we can cite, so it stays
-        // unmodeled. It must cost only its own effect: rejecting the skill took
+        // Usage 19 has no tier table we can cite, so it stays unmodeled. It must
+        // cost only its own effect: rejecting the skill took
         // the whole payload down with it, and an r5 unique is force-included in
         // its runner's set, so a runner whose unique carried one could never be
         // simulated at all.
@@ -1736,6 +1755,38 @@ mod tests {
                     "condition": "phase>=2",
                     "effects": [
                         { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 19 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let skill = dto.into_domain().expect("210081 converts despite usage 19");
+        let effects = build_skill_effects(&skill.alternatives[0]);
+        assert_eq!(effects.len(), 1, "only the usage-19 effect is dropped");
+        // The kept effect is the base 0.25, never the unmodeled component folded
+        // in: coercing an unmapped usage to Direct would invent a tier we cannot
+        // cite, which is worse than omitting the effect.
+        assert_eq!(effects[0].modifier, 0.25);
+        assert_eq!(effects[0].value_scaling, ValueScalingPolicy::Direct);
+    }
+
+    #[test]
+    fn tiered_usage_is_modeled_only_when_it_states_the_tier_it_carries() {
+        // Forger of Legends (210351) carries usage 12 but is not a scenario skill,
+        // so its modifier ships raw while other usage-12 effects ship pre-scaled.
+        // Pre-application is gated per skill upstream, so the engine cannot infer
+        // it from the usage: without the multiplier the effect must drop, or the
+        // simulation understates it by 1.2x with nothing to notice.
+        let raw: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "210351",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 30000,
+                    "condition": "phase>=2",
+                    "effects": [
                         { "modifier": 500, "target": 1, "type": 27, "valueUsage": 12 }
                     ]
                 }]
@@ -1743,14 +1794,43 @@ mod tests {
         )
         .expect("skill input deserializes");
 
-        let skill = dto.into_domain().expect("210081 converts despite usage 12");
-        let effects = build_skill_effects(&skill.alternatives[0]);
-        assert_eq!(effects.len(), 1, "only the usage-12 effect is dropped");
-        // The kept effect is the base 0.25, never the unmodeled component folded
-        // in: coercing an unmapped usage to Direct would invent a tier we cannot
-        // cite, which is worse than omitting the effect.
-        assert_eq!(effects[0].modifier, 0.25);
-        assert_eq!(effects[0].value_scaling, ValueScalingPolicy::Direct);
+        assert!(
+            build_skill_effects(&raw.clone().into_domain().expect("converts").alternatives[0])
+                .is_empty(),
+            "an unannotated tiered effect is dropped, never assumed"
+        );
+        let report = build_skill_support_report(std::slice::from_ref(&raw)).expect("report builds");
+        assert!(report[0].fully_unmodeled);
+        assert_eq!(
+            report[0].dropped_effects[0].reason,
+            WasmUnmodeledReason::MissingPreAppliedMultiplier,
+            "the fix is for the data to state its multiplier, not for the engine \
+             to add a policy — so this must not read as an unsupported usage"
+        );
+
+        // The same effect, once it declares the tier already folded in, models.
+        let annotated: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "210351",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 30000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 600, "target": 1, "type": 27, "valueUsage": 12,
+                          "preAppliedMultiplier": 1.2 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let effects =
+            build_skill_effects(&annotated.into_domain().expect("converts").alternatives[0]);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].value_scaling, ValueScalingPolicy::PreAppliedTier);
+        // Passes through: the 1.2x is already in the stored 600.
+        assert_eq!(effects[0].modifier, 0.06);
     }
 
     #[test]
@@ -1868,7 +1948,7 @@ mod tests {
             vec![WasmDroppedEffect {
                 alternative_index: 0,
                 effect_index: 1,
-                reason: WasmUnmodeledReason::UnsupportedValueUsage,
+                reason: WasmUnmodeledReason::MissingPreAppliedMultiplier,
                 value: 12,
             }]
         );
@@ -1922,7 +2002,7 @@ mod tests {
                 WasmDroppedEffect {
                     alternative_index: 0,
                     effect_index: 2,
-                    reason: WasmUnmodeledReason::UnsupportedValueUsage,
+                    reason: WasmUnmodeledReason::MissingPreAppliedMultiplier,
                     value: 12,
                 },
             ],

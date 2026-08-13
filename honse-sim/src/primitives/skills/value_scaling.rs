@@ -16,28 +16,35 @@ pub enum ValueScalingPolicy {
     Direct,
     /// The effect is multiplied by one random 0×/0.02×/0.04× roll.
     MultiplyRandom,
-    /// A tiered multiplier whose **best tier the data extract has already
-    /// applied** to the stored modifier, so this policy resolves to that
-    /// modifier unchanged.
+    /// A tiered multiplier the data extract has **already applied** to the
+    /// stored modifier, so this policy resolves to that modifier unchanged.
     ///
     /// Covers every basis whose tiers top out at 1.2×:
     ///
-    /// | usage | basis | baked-in assumption |
+    /// | usage | basis | tier at 1.2× |
     /// |---|---|---|
     /// | 2 | learned-skill count | `min(1 + 0.01 × skills, 1.2)` saturated (20+ skills) |
     /// | 3–7 | Aoharu team stats | ≥3600 combined base stat |
     /// | 10 | climax races won | ≥25 training races won |
+    /// | 12 | career fans | ≥160,000 fans |
     /// | 13 | highest raw stat | ≥1100 in the best stat |
+    /// | 24 | overseas aptitude | ≥20 summed aptitude |
     ///
-    /// The extract multiplies the best tier into the stored modifier
-    /// (`patchModifier`, inherited from the original umalator), so applying a
-    /// multiplier here as well would double-count it. A runner below the top
-    /// tier receives a smaller effect in-game than the simulator models — the
-    /// optimistic assumption is a property of the data, not a default this
-    /// policy chooses. Modeling any of these for real means dividing the
-    /// pre-applied 1.2× back out first. See docs/mechanics/README.md
-    /// § "Value Scaling, Ability Value Usage".
-    PreAppliedBestTier,
+    /// Applying a multiplier here as well would double-count what the extract
+    /// baked in, so the stored value passes through. A runner below the applied
+    /// tier receives a smaller effect in-game than the simulator models — that
+    /// optimism is a property of the data, not a default this policy chooses.
+    ///
+    /// **This policy requires `pre_applied_multiplier`**
+    /// ([`crate::skills::model::RawSkillEffect::pre_applied_multiplier`]).
+    /// Pre-application is gated per
+    /// *skill*, not per usage, so the same usage arrives pre-scaled on one skill
+    /// and raw on another — usage 12 does exactly that today. An effect that does
+    /// not say which tier was applied is dropped rather than assumed, because
+    /// assuming would understate it by up to 1.2× with nothing to notice.
+    /// Modeling any of these for real means dividing that multiplier back out
+    /// first. See docs/mechanics/README.md § "Value Scaling, Ability Value Usage".
+    PreAppliedTier,
     /// Reserved for usage 14, enabled once activated-tag state exists.
     MultiplyActivatedTaggedSkillCount,
 }
@@ -66,7 +73,7 @@ impl ValueScalingPolicy {
     pub fn from_value_usage(value_usage: Option<i32>) -> Result<Self, UnsupportedValueUsage> {
         match value_usage {
             None | Some(1) => Ok(Self::Direct),
-            Some(2 | 3..=7 | 10 | 13) => Ok(Self::PreAppliedBestTier),
+            Some(2 | 3..=7 | 10 | 12 | 13 | 24) => Ok(Self::PreAppliedTier),
             Some(8 | 9) => Ok(Self::MultiplyRandom),
             Some(14) => Ok(Self::MultiplyActivatedTaggedSkillCount),
             Some(value) => Err(UnsupportedValueUsage(value)),
@@ -77,9 +84,9 @@ impl ValueScalingPolicy {
     pub fn supports_effect_type(self, effect_type: SkillType) -> bool {
         match self {
             Self::Direct => true,
-            // Resolves as the direct (pre-applied best-tier) value; no type
+            // Resolves as the direct (pre-applied tier) value; no type
             // restriction (Ignited Spirit scales Acceleration).
-            Self::PreAppliedBestTier => true,
+            Self::PreAppliedTier => true,
             Self::MultiplyRandom => effect_type == SkillType::Recovery,
             // Usage 14 is a generic count-based value multiplier (Copano Rickey
             // scales Target Speed and Acceleration); not restricted by type.
@@ -176,8 +183,8 @@ pub fn resolve_modifier(
 ) -> Result<f64, ResolveError> {
     match effect.value_scaling {
         ValueScalingPolicy::Direct => Ok(effect.modifier),
-        // Best tier (1.2×) is pre-applied at extraction; see the variant doc comment.
-        ValueScalingPolicy::PreAppliedBestTier => Ok(effect.modifier),
+        // The tier is pre-applied at extraction; see the variant doc comment.
+        ValueScalingPolicy::PreAppliedTier => Ok(effect.modifier),
         ValueScalingPolicy::MultiplyRandom => {
             if effect.effect_type != SkillType::Recovery {
                 return Err(ResolveError::UnsupportedForEffect(
@@ -229,22 +236,22 @@ mod tests {
             ValueScalingPolicy::from_value_usage(Some(14)),
             Ok(ValueScalingPolicy::MultiplyActivatedTaggedSkillCount)
         );
-        // Every basis the extract pre-applies the best (1.2×) tier to.
-        for usage in [2, 3, 4, 5, 6, 7, 10, 13] {
+        // Every tiered basis, all topping out at 1.2×.
+        for usage in [2, 3, 4, 5, 6, 7, 10, 12, 13, 24] {
             assert_eq!(
                 ValueScalingPolicy::from_value_usage(Some(usage)),
-                Ok(ValueScalingPolicy::PreAppliedBestTier),
+                Ok(ValueScalingPolicy::PreAppliedTier),
                 "usage {usage} is pre-applied at extraction"
             );
         }
         // Usages with no tier table we can point at stay unsupported.
         assert_eq!(
-            ValueScalingPolicy::from_value_usage(Some(12)),
-            Err(UnsupportedValueUsage(12))
+            ValueScalingPolicy::from_value_usage(Some(19)),
+            Err(UnsupportedValueUsage(19))
         );
         assert_eq!(
-            ValueScalingPolicy::from_value_usage(Some(24)),
-            Err(UnsupportedValueUsage(24))
+            ValueScalingPolicy::from_value_usage(Some(22)),
+            Err(UnsupportedValueUsage(22))
         );
     }
 
@@ -298,14 +305,10 @@ mod tests {
         // scaling applies in TT/CM, but the extract already multiplied the
         // stored modifier by the best tier (1.2×), so the engine passes it
         // through unchanged. Multiplying again here would double-count.
-        let effect = spec(
-            SkillType::Accel,
-            0.2,
-            ValueScalingPolicy::PreAppliedBestTier,
-        );
+        let effect = spec(SkillType::Accel, 0.2, ValueScalingPolicy::PreAppliedTier);
         let mut ctx = EffectResolutionContext::new(None);
         assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(0.2));
-        assert!(ValueScalingPolicy::PreAppliedBestTier.supports_effect_type(SkillType::Accel));
+        assert!(ValueScalingPolicy::PreAppliedTier.supports_effect_type(SkillType::Accel));
     }
 
     #[test]
@@ -318,7 +321,7 @@ mod tests {
             let effect = spec(
                 SkillType::TargetSpeed,
                 modifier,
-                ValueScalingPolicy::PreAppliedBestTier,
+                ValueScalingPolicy::PreAppliedTier,
             );
             let mut ctx = EffectResolutionContext::new(None);
             assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(modifier));
@@ -404,6 +407,7 @@ mod tests {
                     effect_type: 27, // Target Speed, Direct
                     value_usage: Some(1),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: 500.0,
@@ -411,6 +415,7 @@ mod tests {
                     effect_type: 27, // Target Speed, usage 14
                     value_usage: Some(14),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: 500.0,
@@ -418,6 +423,7 @@ mod tests {
                     effect_type: 31, // Acceleration, usage 14
                     value_usage: Some(14),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
             ],
         };

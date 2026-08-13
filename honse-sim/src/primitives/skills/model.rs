@@ -38,6 +38,18 @@ pub struct RawSkillEffect {
     /// Optional level-usage discriminator.
     #[serde(default)]
     pub value_level_usage: Option<i32>,
+    /// The value-scaling tier multiplier the data extract has **already applied**
+    /// to `modifier`, when it did.
+    ///
+    /// Only meaningful for the tiered usages ([`ValueScalingPolicy::PreAppliedTier`]).
+    /// Its presence is the authority on whether pre-application happened: the
+    /// extract gates that per *skill*, not per usage, so the same usage can arrive
+    /// pre-scaled on one skill and raw on another. Absent on a tiered usage means
+    /// the tier is unknown and the effect is dropped — the engine never assumes a
+    /// tier it was not told about, because assuming would understate the effect by
+    /// up to 1.2x with no way to notice.
+    #[serde(default)]
+    pub pre_applied_multiplier: Option<f64>,
 }
 
 /// A single alternative (condition branch) of a skill's effect data.
@@ -114,8 +126,8 @@ pub struct ResolvedSkillEffect {
 
 /// Why the engine cannot faithfully model a raw effect, and so drops it.
 ///
-/// Both variants mean "this effect does not participate in the simulation at
-/// all". Neither is coerced to a stand-in value: an unmodeled effect contributes
+/// Every variant means "this effect does not participate in the simulation at
+/// all". None is coerced to a stand-in value: an unmodeled effect contributes
 /// nothing rather than contributing a guess.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnmodeledEffect {
@@ -125,6 +137,14 @@ pub enum UnmodeledEffect {
     /// The `value_usage` has no [`ValueScalingPolicy`] mapping, so the runtime
     /// value cannot be derived. Carries the raw usage.
     ValueUsage(i32),
+    /// A [`ValueScalingPolicy::PreAppliedTier`] usage arrived without a
+    /// `pre_applied_multiplier`, so which tier (if any) is baked into `modifier`
+    /// is unknown. Carries the raw usage.
+    ///
+    /// Distinct from [`Self::ValueUsage`]: the engine models this usage, and the
+    /// fix is for the data to state the multiplier it applied rather than for the
+    /// engine to add a policy.
+    MissingPreAppliedMultiplier(i32),
 }
 
 /// Classify one raw effect: the built spec, or why it cannot be modeled.
@@ -144,6 +164,17 @@ fn classify_effect(
         .map_err(|_| UnmodeledEffect::EffectType(effect.effect_type))?;
     let value_scaling = ValueScalingPolicy::from_value_usage(effect.value_usage)
         .map_err(|e| UnmodeledEffect::ValueUsage(e.0))?;
+    // A tiered value is only trustworthy when the data says which tier it already
+    // carries. Passing an unannotated modifier through would silently understate
+    // the effect by up to 1.2x, which is worse than dropping it: a plausible
+    // wrong number instead of an obviously missing one.
+    if value_scaling == ValueScalingPolicy::PreAppliedTier
+        && effect.pre_applied_multiplier.is_none()
+    {
+        return Err(UnmodeledEffect::MissingPreAppliedMultiplier(
+            effect.value_usage.unwrap_or_default(),
+        ));
+    }
     Ok(SkillEffectSpec {
         target: effect.target,
         effect_type,
@@ -171,7 +202,7 @@ fn classify_effect(
 /// Dropping loses a contribution; coercing an unsupported `value_usage` to
 /// `Direct` would instead invent one, applying a tier we cannot cite as though it
 /// were the measured value. So dropping is deliberate, and a usage only becomes
-/// [`ValueScalingPolicy::PreAppliedBestTier`] when the mechanics reference
+/// [`ValueScalingPolicy::PreAppliedTier`] when the mechanics reference
 /// documents the tier the extract bakes in. [`unmodeled_effects`] reports what
 /// was lost.
 pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffectSpec> {
@@ -349,6 +380,7 @@ mod tests {
                     effect_type: 27,
                     value_usage: None,
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: -10000.0,
@@ -356,6 +388,7 @@ mod tests {
                     effect_type: 9,
                     value_usage: Some(8),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
             ],
         };
@@ -387,6 +420,7 @@ mod tests {
                     effect_type: 5, // Wisdom Up (modeled)
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: 100000.0,
@@ -394,6 +428,7 @@ mod tests {
                     effect_type: 8, // vision (unmodeled)
                     value_usage: Some(1),
                     value_level_usage: Some(1),
+                    pre_applied_multiplier: None,
                 },
             ],
         };
@@ -405,10 +440,11 @@ mod tests {
 
     #[test]
     fn unmodeled_effects_reports_exactly_what_build_drops() {
-        // A modeled Direct effect, an unsupported value usage (12, career fans —
-        // no tier table we can cite), and an unmodeled effect type (8). The
-        // report and the builder must partition the same list — anything else
-        // means a consumer is told something the simulation does not do.
+        // One effect per drop reason plus a modeled Direct one: an unsupported
+        // usage (19), a tiered usage that never said which tier it carries (12),
+        // and an unmodeled effect type (8). The report and the builder must
+        // partition the same list — anything else means a consumer is told
+        // something the simulation does not do.
         let alt = SkillAlternative {
             base_duration: 50000.0,
             cooldown_time: None,
@@ -421,6 +457,7 @@ mod tests {
                     effect_type: 27,
                     value_usage: Some(1),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: 500.0,
@@ -428,6 +465,7 @@ mod tests {
                     effect_type: 27,
                     value_usage: Some(12),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
                 RawSkillEffect {
                     modifier: 500.0,
@@ -435,6 +473,15 @@ mod tests {
                     effect_type: 8,
                     value_usage: Some(1),
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
+                },
+                RawSkillEffect {
+                    modifier: 500.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 27,
+                    value_usage: Some(19),
+                    value_level_usage: None,
+                    pre_applied_multiplier: None,
                 },
             ],
         };
@@ -442,8 +489,9 @@ mod tests {
         assert_eq!(
             unmodeled_effects(&alt),
             vec![
-                (1, UnmodeledEffect::ValueUsage(12)),
+                (1, UnmodeledEffect::MissingPreAppliedMultiplier(12)),
                 (2, UnmodeledEffect::EffectType(8)),
+                (3, UnmodeledEffect::ValueUsage(19)),
             ]
         );
         assert_eq!(
@@ -466,6 +514,7 @@ mod tests {
                 effect_type: 27,
                 value_usage: None,
                 value_level_usage: None,
+                pre_applied_multiplier: None,
             }],
         };
         assert!(unmodeled_effects(&alt).is_empty());
@@ -484,6 +533,7 @@ mod tests {
                 effect_type: 999,
                 value_usage: None,
                 value_level_usage: None,
+                pre_applied_multiplier: None,
             }],
         };
         assert!(build_skill_effects(&alt).is_empty());
@@ -510,6 +560,7 @@ mod tests {
                     effect_type: 27,
                     value_usage: None,
                     value_level_usage: None,
+                    pre_applied_multiplier: None,
                 }],
             }],
         };

@@ -755,6 +755,8 @@ This scaling also applies outside the Aoharu scenario: in Team Trials and Champi
 
 The supplied data extract pre-applies the best tier (1.2x) to these skills' stored modifiers (`patchModifier`, inherited from the original umalator), so the simulator always runs the >= 3600-total assumption. A racing team below that threshold receives a smaller effect in-game than the simulator models.
 
+**Pre-application is gated per skill, not per value usage.** `patchModifier` applies the multiplier only for skills in the extract's scenario-skill set, so the same usage can arrive pre-scaled on one skill and raw on another — usage 12 does exactly that (see below). The simulator therefore does not infer pre-application from the usage: an effect must state the multiplier already folded into its modifier (`preAppliedMultiplier`), and one that does not is dropped rather than assumed. Assuming would understate the effect by up to 1.2x with nothing to signal it.
+
 ### Multiply Random (8, 9\) {#multiply-random-(8,-9)}
 
 Type 1 (ID=8) and Type 2 (ID=9) are identical.
@@ -781,6 +783,20 @@ In Global, this scaling is now relevant through **Trackblazer: Start of the Clim
 
 As with the Aoharu skills above, the supplied data extract pre-applies the best tier (1.2x) to these skills' stored modifiers, so the simulator always runs the >= 25 races-won assumption. A runner below that threshold receives a smaller effect in-game than the simulator models. Verified across the torena-hub extract (2026-08): `modifier == estimate.raw * estimate.multiplier` holds for all 6 usage-10 effects, and Radiant Star's three effects store `2500 x 1.2 = 3000`, `3000 x 1.2 = 3600`, and `350 x 1.2 = 420`.
 
+### MultiplyCareerFans (12) {#multiplycareerfans-(12)}
+
+The effectiveness scales with the runner's end-of-career total fans. The tier is fixed when the career ends, so it is constant for a whole race rather than resolved per activation.
+
+| Career fans               | Effectiveness |
+| :------------------------ | :------------ |
+| Fans \< 20,000            | 0.8x          |
+| 20,000 \<= Fans \< 50,000 | 0.9x          |
+| 50,000 \<= Fans \< 100,000 | 1.0x         |
+| 100,000 \<= Fans \< 160,000 | 1.1x        |
+| 160,000 \<= Fans          | 1.2x          |
+
+Not every usage-12 effect is pre-scaled: as of the 2026-08 torena-hub extract, 4 of 5 carry a pre-applied 1.2x and **Forger of Legends (`210351`) ships raw**, because it is not in the extract's scenario-skill set. This is the concrete case behind the per-skill gating note above.
+
 ### MultiplyMaximumRawStatus (13) {#multiplymaximumrawstatus-(13)}
 
 The effectiveness scales with the maximum raw stat of all 5 stats.
@@ -792,6 +808,16 @@ The effectiveness scales with the maximum raw stat of all 5 stats.
 | 800 \<= Stat \< 1000  | 1.0x          |
 | 1000 \<= Stat \< 1100 | 1.1x          |
 | 1100 \<= Stat         | 1.2x          |
+
+### MultiplyOverseasAptitude (24) {#multiplyoverseasaptitude-(24)}
+
+From **Reach for the Stars: Project L'Arc**. The effectiveness scales with the runner's summed Overseas Aptitude. Note this is three bands rather than five, and the floor is 1.0x: L'Arc aptitude can only improve the effect, never reduce it.
+
+| Summed Overseas Aptitude | Effectiveness |
+| :----------------------- | :------------ |
+| Aptitude \< 10           | 1.0x          |
+| 10 \<= Aptitude \< 20    | 1.1x          |
+| 20 \<= Aptitude          | 1.2x          |
 
 ### MultiplyActivateSpecificTagSkillCount (14) {#multiplyactivatespecifictagskillcount-(14)}
 

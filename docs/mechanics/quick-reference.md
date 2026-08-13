@@ -90,16 +90,20 @@ The closed forms above — `MaxHP = 0.8 * StrategyCoefficient * Stamina + Distan
 
 ### Value Scaling Types
 
+The tiered usages (2, 3-7, 10, 12, 13, 24) all top out at 1.2×, and the extract pre-applies that tier — but **per skill, not per usage**. Each effect must declare the multiplier already folded into its modifier (`preAppliedMultiplier`); one that does not is dropped rather than assumed. See README § "Value Scaling, Ability Value Usage".
+
 - ✅ `Direct` (1)
-- ✅ `MultiplySkillNum` (2) — extract pre-applies the best tier (1.2×), so the sim assumes 20+ learned skills
-- ✅ `Aoharu` skills (3-7) — team-stat tiers apply in TT/CM; extract pre-applies the best tier (1.2×), so the sim assumes a ≥3600-total team
+- ✅ `MultiplySkillNum` (2) — tier 1.2× at 20+ learned skills
+- ✅ `Aoharu` skills (3-7) — team-stat tiers apply in TT/CM; tier 1.2× at a ≥3600-total team
 - ✅ `MultiplyRandom` (8, 9)
-- ✅ `Climax` skills (10) — extract pre-applies the best tier (1.2×), so the sim assumes ≥25 training races won
-- ✅ `MultiplyMaximumRawStatus` (13) — extract pre-applies the best tier (1.2×), so the sim assumes ≥1100 in the best stat
+- ✅ `Climax` skills (10) — tier 1.2× at ≥25 training races won
+- ✅ `MultiplyCareerFans` (12) — tier 1.2× at ≥160,000 career fans
+- ✅ `MultiplyMaximumRawStatus` (13) — tier 1.2× at ≥1100 in the best stat
 - ✅ `MultiplyActivateSpecificTagSkillCount` (14) — counts activated green (601–615) skills: `0–2 → 0×`, `3–4 → 1×`, `5 → 2×`, `6+ → 3×`
 - ❌ `AddDistanceDiffTop` (19)
 - ❌ `MultiplyBlockedSideMaxContinueTime` (20)
 - ❌ `MultiplySpeed` (22, 23)
+- ✅ `MultiplyOverseasAptitude` (24) — tier 1.2× at ≥20 summed Overseas Aptitude
 - ❌ `MultiplyArcGlobalPotentialLevel` (24) - Not in Global yet
 - ❌ `MultiplyTopLeadAmount` (25) - Not in Global yet
 
