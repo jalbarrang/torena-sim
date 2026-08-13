@@ -162,18 +162,18 @@ fn classify_effect(
 /// Effects the engine cannot model are **skipped**, not fatal — see
 /// [`UnmodeledEffect`] for the two reasons. The game bundles unmodeled effects
 /// alongside ones we do model — e.g. every Savvy skill carries Wisdom Up (`5`)
-/// *and* a vision effect (`8`), and Radiant Star (`210061`) carries a Direct
-/// Target Speed *and* a climax-scaled (`value_usage` 10) one. Rejecting the whole
-/// alternative silently killed the entire skill (no trigger, no stat bonus, no
-/// proc). Dropping only the unmodeled effect keeps the known ones live. An
-/// alternative whose effects are *all* unmodeled yields an empty list, which
-/// `build_skill_data` treats as "no trigger" (correct — there is nothing to
-/// simulate).
+/// *and* a vision effect (`8`). Rejecting the whole alternative silently killed
+/// the entire skill (no trigger, no stat bonus, no proc). Dropping only the
+/// unmodeled effect keeps the known ones live. An alternative whose effects are
+/// *all* unmodeled yields an empty list, which `build_skill_data` treats as "no
+/// trigger" (correct — there is nothing to simulate).
 ///
 /// Dropping loses a contribution; coercing an unsupported `value_usage` to
-/// `Direct` would instead invent one (Radiant Star's climax component would apply
-/// as though every climax race had been won), so dropping is deliberate.
-/// [`unmodeled_effects`] reports what was lost.
+/// `Direct` would instead invent one, applying a tier we cannot cite as though it
+/// were the measured value. So dropping is deliberate, and a usage only becomes
+/// [`ValueScalingPolicy::PreAppliedBestTier`] when the mechanics reference
+/// documents the tier the extract bakes in. [`unmodeled_effects`] reports what
+/// was lost.
 pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffectSpec> {
     let base_duration = alt.base_duration / 10000.0;
     alt.effects
@@ -405,10 +405,10 @@ mod tests {
 
     #[test]
     fn unmodeled_effects_reports_exactly_what_build_drops() {
-        // Radiant Star-shaped: a modeled Direct effect, an unsupported value
-        // usage (10), and an unmodeled effect type (8). The report and the
-        // builder must partition the same list — anything else means a consumer
-        // is told something the simulation does not do.
+        // A modeled Direct effect, an unsupported value usage (12, career fans —
+        // no tier table we can cite), and an unmodeled effect type (8). The
+        // report and the builder must partition the same list — anything else
+        // means a consumer is told something the simulation does not do.
         let alt = SkillAlternative {
             base_duration: 50000.0,
             cooldown_time: None,
@@ -426,7 +426,7 @@ mod tests {
                     modifier: 500.0,
                     target: SkillTarget::SelfTarget,
                     effect_type: 27,
-                    value_usage: Some(10),
+                    value_usage: Some(12),
                     value_level_usage: None,
                 },
                 RawSkillEffect {
@@ -442,7 +442,7 @@ mod tests {
         assert_eq!(
             unmodeled_effects(&alt),
             vec![
-                (1, UnmodeledEffect::ValueUsage(10)),
+                (1, UnmodeledEffect::ValueUsage(12)),
                 (2, UnmodeledEffect::EffectType(8)),
             ]
         );

@@ -108,16 +108,19 @@ pub fn known_condition_tokens_wasm() -> Vec<String> {
 /// effects and whether the skill is left inert; a fully modeled skill is omitted,
 /// so an empty array means full coverage.
 ///
-/// The engine drops effects it cannot model rather than rejecting the skill (an
-/// unmapped effect `type`, or a `valueUsage` with no scaling policy), so a
-/// simulation always runs — but a dropped effect makes that skill's contribution
-/// understated. Exposed so a consumer can say which skills are affected instead
-/// of presenting partial results as complete. The answer is a property of the
-/// skill data alone, so call it once per skill pool rather than per simulation.
+/// The engine drops effects it cannot model rather than rejecting the skill —
+/// an unmapped effect `type` (what it does), `valueUsage` (how much), or `target`
+/// (who receives it) — so a simulation always runs, but a dropped effect makes
+/// that skill's contribution understated. Exposed so a consumer can say which
+/// skills are affected instead of presenting partial results as complete.
+///
+/// The answer is a property of the skill data alone, so call it once per skill
+/// pool rather than per simulation. It accepts a whole pool: no unmapped code in
+/// any submitted skill can make this throw.
 #[wasm_bindgen(js_name = skillSupportReport)]
 pub fn skill_support_report_wasm(skills: JsValue) -> Result<JsValue, JsError> {
     let dto: Vec<dto::WasmSkillInput> = from_js(skills)?;
-    let report = dto::build_skill_support_report(dto).map_err(|e| JsError::new(&e.to_string()))?;
+    let report = dto::build_skill_support_report(&dto).map_err(|e| JsError::new(&e.to_string()))?;
     to_js(&report)
 }
 

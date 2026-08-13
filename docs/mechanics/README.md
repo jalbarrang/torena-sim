@@ -779,6 +779,8 @@ The effectiveness of climax skills scales with the number of races won during tr
 
 In Global, this scaling is now relevant through **Trackblazer: Start of the Climax** scenario skills, such as **Glittering Star** / **Radiant Star**.
 
+As with the Aoharu skills above, the supplied data extract pre-applies the best tier (1.2x) to these skills' stored modifiers, so the simulator always runs the >= 25 races-won assumption. A runner below that threshold receives a smaller effect in-game than the simulator models. Verified across the torena-hub extract (2026-08): `modifier == estimate.raw * estimate.multiplier` holds for all 6 usage-10 effects, and Radiant Star's three effects store `2500 x 1.2 = 3000`, `3000 x 1.2 = 3600`, and `350 x 1.2 = 420`.
+
 ### MultiplyMaximumRawStatus (13) {#multiplymaximumrawstatus-(13)}
 
 The effectiveness scales with the maximum raw stat of all 5 stats.

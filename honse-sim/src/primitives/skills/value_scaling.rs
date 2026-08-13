@@ -16,14 +16,28 @@ pub enum ValueScalingPolicy {
     Direct,
     /// The effect is multiplied by one random 0×/0.02×/0.04× roll.
     MultiplyRandom,
-    /// Aoharu team-stats scaling (usages 3–7). The multiplier tier (0.8×–1.2×)
-    /// is computed at race time from the racing team's combined base stat and
-    /// applies in TT/CM as well as in-scenario. The data extract pre-applies
-    /// the best tier (1.2×) to the stored modifier (`patchModifier` in
-    /// extract-skills.ts), so this policy resolves to the direct modifier —
-    /// the ≥3600-total-team assumption is baked into the data. See
-    /// docs/mechanics/README.md § "Aoharu Skills (3-7)".
-    MultiplyAoharuTeamStats,
+    /// A tiered multiplier whose **best tier the data extract has already
+    /// applied** to the stored modifier, so this policy resolves to that
+    /// modifier unchanged.
+    ///
+    /// Covers every basis whose tiers top out at 1.2×:
+    ///
+    /// | usage | basis | baked-in assumption |
+    /// |---|---|---|
+    /// | 2 | learned-skill count | `min(1 + 0.01 × skills, 1.2)` saturated (20+ skills) |
+    /// | 3–7 | Aoharu team stats | ≥3600 combined base stat |
+    /// | 10 | climax races won | ≥25 training races won |
+    /// | 13 | highest raw stat | ≥1100 in the best stat |
+    ///
+    /// The extract multiplies the best tier into the stored modifier
+    /// (`patchModifier`, inherited from the original umalator), so applying a
+    /// multiplier here as well would double-count it. A runner below the top
+    /// tier receives a smaller effect in-game than the simulator models — the
+    /// optimistic assumption is a property of the data, not a default this
+    /// policy chooses. Modeling any of these for real means dividing the
+    /// pre-applied 1.2× back out first. See docs/mechanics/README.md
+    /// § "Value Scaling, Ability Value Usage".
+    PreAppliedBestTier,
     /// Reserved for usage 14, enabled once activated-tag state exists.
     MultiplyActivatedTaggedSkillCount,
 }
@@ -52,7 +66,7 @@ impl ValueScalingPolicy {
     pub fn from_value_usage(value_usage: Option<i32>) -> Result<Self, UnsupportedValueUsage> {
         match value_usage {
             None | Some(1) => Ok(Self::Direct),
-            Some(3..=7) => Ok(Self::MultiplyAoharuTeamStats),
+            Some(2 | 3..=7 | 10 | 13) => Ok(Self::PreAppliedBestTier),
             Some(8 | 9) => Ok(Self::MultiplyRandom),
             Some(14) => Ok(Self::MultiplyActivatedTaggedSkillCount),
             Some(value) => Err(UnsupportedValueUsage(value)),
@@ -63,9 +77,9 @@ impl ValueScalingPolicy {
     pub fn supports_effect_type(self, effect_type: SkillType) -> bool {
         match self {
             Self::Direct => true,
-            // Resolves as the direct (pre-fudged best-tier) value; no type
+            // Resolves as the direct (pre-applied best-tier) value; no type
             // restriction (Ignited Spirit scales Acceleration).
-            Self::MultiplyAoharuTeamStats => true,
+            Self::PreAppliedBestTier => true,
             Self::MultiplyRandom => effect_type == SkillType::Recovery,
             // Usage 14 is a generic count-based value multiplier (Copano Rickey
             // scales Target Speed and Acceleration); not restricted by type.
@@ -163,7 +177,7 @@ pub fn resolve_modifier(
     match effect.value_scaling {
         ValueScalingPolicy::Direct => Ok(effect.modifier),
         // Best tier (1.2×) is pre-applied at extraction; see the variant doc comment.
-        ValueScalingPolicy::MultiplyAoharuTeamStats => Ok(effect.modifier),
+        ValueScalingPolicy::PreAppliedBestTier => Ok(effect.modifier),
         ValueScalingPolicy::MultiplyRandom => {
             if effect.effect_type != SkillType::Recovery {
                 return Err(ResolveError::UnsupportedForEffect(
@@ -215,15 +229,22 @@ mod tests {
             ValueScalingPolicy::from_value_usage(Some(14)),
             Ok(ValueScalingPolicy::MultiplyActivatedTaggedSkillCount)
         );
-        for usage in 3..=7 {
+        // Every basis the extract pre-applies the best (1.2×) tier to.
+        for usage in [2, 3, 4, 5, 6, 7, 10, 13] {
             assert_eq!(
                 ValueScalingPolicy::from_value_usage(Some(usage)),
-                Ok(ValueScalingPolicy::MultiplyAoharuTeamStats)
+                Ok(ValueScalingPolicy::PreAppliedBestTier),
+                "usage {usage} is pre-applied at extraction"
             );
         }
+        // Usages with no tier table we can point at stay unsupported.
         assert_eq!(
-            ValueScalingPolicy::from_value_usage(Some(13)),
-            Err(UnsupportedValueUsage(13))
+            ValueScalingPolicy::from_value_usage(Some(12)),
+            Err(UnsupportedValueUsage(12))
+        );
+        assert_eq!(
+            ValueScalingPolicy::from_value_usage(Some(24)),
+            Err(UnsupportedValueUsage(24))
         );
     }
 
@@ -272,19 +293,36 @@ mod tests {
     }
 
     #[test]
-    fn aoharu_team_stats_resolves_stored_modifier_as_direct() {
+    fn pre_applied_best_tier_resolves_stored_modifier_as_direct() {
         // Ignited Spirit (210031/210032): Acceleration with usage 5. The tier
         // scaling applies in TT/CM, but the extract already multiplied the
         // stored modifier by the best tier (1.2×), so the engine passes it
-        // through unchanged.
+        // through unchanged. Multiplying again here would double-count.
         let effect = spec(
             SkillType::Accel,
             0.2,
-            ValueScalingPolicy::MultiplyAoharuTeamStats,
+            ValueScalingPolicy::PreAppliedBestTier,
         );
         let mut ctx = EffectResolutionContext::new(None);
         assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(0.2));
-        assert!(ValueScalingPolicy::MultiplyAoharuTeamStats.supports_effect_type(SkillType::Accel));
+        assert!(ValueScalingPolicy::PreAppliedBestTier.supports_effect_type(SkillType::Accel));
+    }
+
+    #[test]
+    fn radiant_star_climax_effects_resolve_to_their_stored_modifiers() {
+        // Radiant Star (210061): all three effects carry usage 10, so the skill
+        // was inert before usage 10 mapped to a policy. The extract stores
+        // raw × 1.2 (the 25+ training-races-won tier), so each resolves to the
+        // stored value — 3000/10000 and 3600/10000 and 420/10000.
+        for modifier in [0.3, 0.36, 0.042] {
+            let effect = spec(
+                SkillType::TargetSpeed,
+                modifier,
+                ValueScalingPolicy::PreAppliedBestTier,
+            );
+            let mut ctx = EffectResolutionContext::new(None);
+            assert_eq!(resolve_modifier(&effect, &mut ctx), Ok(modifier));
+        }
     }
 
     #[test]

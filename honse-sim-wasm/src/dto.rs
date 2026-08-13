@@ -195,23 +195,30 @@ fn to_rarity(v: i32) -> Result<SkillRarity, DtoError> {
     }
 }
 
-fn to_target(v: i32) -> Result<SkillTarget, DtoError> {
+/// Map a raw target code, or `None` when the engine has no routing for it.
+///
+/// `None` drops the effect rather than failing the skill: an unmapped target
+/// means "we do not know who receives this", which is the same kind of gap as an
+/// unmapped effect type ("what it does") or value usage ("how much"). Inventing
+/// a route would be worse than omitting the effect. This is the only place a
+/// target code is interpreted, so it is the authority the support report reads.
+fn map_target(v: i32) -> Option<SkillTarget> {
     match v {
         // The source data uses 0 for plain self-targeted effects.
-        0..=1 => Ok(SkillTarget::SelfTarget),
-        2 => Ok(SkillTarget::All),
-        4 => Ok(SkillTarget::InFov),
-        7 => Ok(SkillTarget::AheadOfPosition),
-        9 => Ok(SkillTarget::AheadOfSelf),
-        10 => Ok(SkillTarget::BehindSelf),
-        11 => Ok(SkillTarget::AllAllies),
-        18 => Ok(SkillTarget::EnemyStrategy),
-        19 => Ok(SkillTarget::KakariAhead),
-        20 => Ok(SkillTarget::KakariBehind),
-        21 => Ok(SkillTarget::KakariStrategy),
-        22 => Ok(SkillTarget::UmaId),
-        23 => Ok(SkillTarget::UsedRecovery),
-        _ => Err(invalid("skillTarget", v)),
+        0..=1 => Some(SkillTarget::SelfTarget),
+        2 => Some(SkillTarget::All),
+        4 => Some(SkillTarget::InFov),
+        7 => Some(SkillTarget::AheadOfPosition),
+        9 => Some(SkillTarget::AheadOfSelf),
+        10 => Some(SkillTarget::BehindSelf),
+        11 => Some(SkillTarget::AllAllies),
+        18 => Some(SkillTarget::EnemyStrategy),
+        19 => Some(SkillTarget::KakariAhead),
+        20 => Some(SkillTarget::KakariBehind),
+        21 => Some(SkillTarget::KakariStrategy),
+        22 => Some(SkillTarget::UmaId),
+        23 => Some(SkillTarget::UsedRecovery),
+        _ => None,
     }
 }
 
@@ -421,10 +428,11 @@ pub struct WasmRawEffect {
 }
 
 impl WasmRawEffect {
-    fn into_domain(self) -> Result<RawSkillEffect, DtoError> {
-        Ok(RawSkillEffect {
+    /// `None` when the target code has no engine routing, which drops the effect.
+    fn to_domain(&self) -> Option<RawSkillEffect> {
+        Some(RawSkillEffect {
             modifier: self.modifier,
-            target: to_target(self.target)?,
+            target: map_target(self.target)?,
             effect_type: self.effect_type,
             value_usage: self.value_usage,
             value_level_usage: self.value_level_usage,
@@ -474,20 +482,22 @@ impl WasmSkillInput {
             .into_iter()
             .enumerate()
             .map(|(alternative_index, alternative)| {
-                let effects = alternative
-                    .effects
-                    .into_iter()
-                    .enumerate()
-                    .map(|(effect_index, effect)| {
-                        validate_effect_value_usage(
-                            &skill_id,
-                            alternative_index,
-                            effect_index,
-                            &effect,
-                        )?;
-                        effect.into_domain()
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                let mut effects = Vec::with_capacity(alternative.effects.len());
+                for (effect_index, effect) in alternative.effects.iter().enumerate() {
+                    // Target first: an effect the engine cannot route is dropped
+                    // before anything else inspects it, so a dropped effect can
+                    // never fail the payload it was dropped from.
+                    let Some(raw) = effect.to_domain() else {
+                        continue;
+                    };
+                    validate_effect_value_usage(
+                        &skill_id,
+                        alternative_index,
+                        effect_index,
+                        effect,
+                    )?;
+                    effects.push(raw);
+                }
                 Ok(SkillAlternative {
                     base_duration: alternative.base_duration,
                     cooldown_time: alternative.cooldown_time,
@@ -548,11 +558,15 @@ fn validate_effect_value_usage(
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum WasmUnmodeledReason {
-    /// The effect's raw `type` id has no engine mapping.
+    /// The effect's raw `type` id has no engine mapping — what it does is
+    /// unknown.
     UnmodeledEffectType,
-    /// The effect's `valueUsage` has no engine mapping, so its runtime value
-    /// cannot be derived.
+    /// The effect's `valueUsage` has no engine mapping — how much it does is
+    /// unknown.
     UnsupportedValueUsage,
+    /// The effect's `target` code has no engine mapping — who receives it is
+    /// unknown.
+    UnmodeledTarget,
 }
 
 /// One effect the engine drops, located in the submitted skill payload.
@@ -565,8 +579,8 @@ pub struct WasmDroppedEffect {
     pub effect_index: usize,
     /// Which mapping was missing.
     pub reason: WasmUnmodeledReason,
-    /// The unmapped raw value: the effect `type` id for `unmodeledEffectType`,
-    /// the `valueUsage` for `unsupportedValueUsage`.
+    /// The unmapped raw value, per `reason`: the effect `type` id, the
+    /// `valueUsage`, or the `target` code.
     pub value: i32,
 }
 
@@ -594,40 +608,79 @@ pub struct WasmSkillSupportEntry {
 ///
 /// Fully modeled skills are omitted, so an empty result means full coverage.
 /// Errors only on the same contradictory data a simulation would reject.
+///
+/// Classification runs over the *submitted* effects rather than the converted
+/// ones, so every `effectIndex` addresses the payload the caller sent even where
+/// conversion dropped an earlier effect in the same alternative.
 pub fn build_skill_support_report(
-    skills: Vec<WasmSkillInput>,
+    skills: &[WasmSkillInput],
 ) -> Result<Vec<WasmSkillSupportEntry>, DtoError> {
     use honse_sim::skills::model::{build_skill_effects, unmodeled_effects, UnmodeledEffect};
 
     let mut report = Vec::new();
     for input in skills {
-        let skill = input.into_domain()?;
         let mut dropped_effects = Vec::new();
         let mut modeled = 0usize;
-        for (alternative_index, alternative) in skill.alternatives.iter().enumerate() {
-            modeled += build_skill_effects(alternative).len();
-            dropped_effects.extend(unmodeled_effects(alternative).into_iter().map(
-                |(effect_index, reason)| {
-                    let (reason, value) = match reason {
-                        UnmodeledEffect::EffectType(id) => {
-                            (WasmUnmodeledReason::UnmodeledEffectType, id)
-                        }
-                        UnmodeledEffect::ValueUsage(usage) => {
-                            (WasmUnmodeledReason::UnsupportedValueUsage, usage)
-                        }
-                    };
-                    WasmDroppedEffect {
+
+        for (alternative_index, alternative) in input.alternatives.iter().enumerate() {
+            // Mirrors `into_domain`: targets resolve here, so an unroutable
+            // effect never reaches the core classifier. Keep the raw positions of
+            // the survivors to translate the core's indices back afterwards.
+            let mut kept_raw_indices = Vec::with_capacity(alternative.effects.len());
+            let mut kept = Vec::with_capacity(alternative.effects.len());
+            for (effect_index, effect) in alternative.effects.iter().enumerate() {
+                let Some(raw) = effect.to_domain() else {
+                    dropped_effects.push(WasmDroppedEffect {
                         alternative_index,
                         effect_index,
-                        reason,
-                        value,
+                        reason: WasmUnmodeledReason::UnmodeledTarget,
+                        value: effect.target,
+                    });
+                    continue;
+                };
+                validate_effect_value_usage(
+                    &input.skill_id,
+                    alternative_index,
+                    effect_index,
+                    effect,
+                )?;
+                kept_raw_indices.push(effect_index);
+                kept.push(raw);
+            }
+
+            let domain = SkillAlternative {
+                base_duration: alternative.base_duration,
+                cooldown_time: alternative.cooldown_time,
+                condition: alternative.condition.clone(),
+                precondition: alternative.precondition.clone(),
+                effects: kept,
+            };
+            modeled += build_skill_effects(&domain).len();
+            for (domain_index, reason) in unmodeled_effects(&domain) {
+                let (reason, value) = match reason {
+                    UnmodeledEffect::EffectType(id) => {
+                        (WasmUnmodeledReason::UnmodeledEffectType, id)
                     }
-                },
-            ));
+                    UnmodeledEffect::ValueUsage(usage) => {
+                        (WasmUnmodeledReason::UnsupportedValueUsage, usage)
+                    }
+                };
+                dropped_effects.push(WasmDroppedEffect {
+                    alternative_index,
+                    effect_index: kept_raw_indices[domain_index],
+                    reason,
+                    value,
+                });
+            }
         }
+
         if !dropped_effects.is_empty() {
+            // Target drops accumulate ahead of the core's type/usage drops, so
+            // restore submitted order for a consumer reading them positionally.
+            dropped_effects
+                .sort_by_key(|dropped| (dropped.alternative_index, dropped.effect_index));
             report.push(WasmSkillSupportEntry {
-                skill_id: skill.skill_id.0,
+                skill_id: input.skill_id.clone(),
                 dropped_effects,
                 fully_unmodeled: modeled == 0,
             });
@@ -1628,12 +1681,11 @@ mod tests {
     }
 
     #[test]
-    fn skill_input_drops_unsupported_value_usage_effect_and_keeps_the_skill() {
-        // Radiant Star (210061): a Direct Target Speed bundled with a
-        // climax-scaled (usage 10) one. An unmodeled usage must cost only its own
-        // effect. Rejecting the skill took the whole payload down with it, and an
-        // r5 unique is force-included in its runner's set — so a runner whose
-        // unique carried one could never be simulated at all.
+    fn radiant_star_is_fully_modeled_once_climax_usage_maps() {
+        // Radiant Star (210061): all three effects carry usage 10, so the skill
+        // converted but was completely inert. The extract stores raw × 1.2 (the
+        // 25+ training-races-won tier), so each effect resolves to its stored
+        // modifier and nothing is dropped.
         let dto: WasmSkillInput = serde_json::from_str(
             r#"{
                 "skillId": "210061",
@@ -1642,21 +1694,92 @@ mod tests {
                     "baseDuration": 50000,
                     "condition": "phase>=2",
                     "effects": [
-                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
-                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 10 }
+                        { "modifier": 3000, "target": 1, "type": 27, "valueUsage": 10 },
+                        { "modifier": 3600, "target": 1, "type": 31, "valueUsage": 10 },
+                        { "modifier": 420, "target": 1, "type": 27, "valueUsage": 10 }
                     ]
                 }]
             }"#,
         )
         .expect("skill input deserializes");
 
-        let skill = dto.into_domain().expect("210061 converts despite usage 10");
+        let report = build_skill_support_report(std::slice::from_ref(&dto))
+            .expect("report builds for 210061");
+        assert!(report.is_empty(), "210061 is fully modeled: {report:?}");
+
+        let skill = dto.into_domain().expect("210061 converts");
         let effects = build_skill_effects(&skill.alternatives[0]);
-        assert_eq!(effects.len(), 1, "only the usage-10 effect is dropped");
-        // The kept effect is the base 0.25, never the climax component folded in:
-        // coercing usage 10 to Direct would apply it as if every climax race was won.
+        assert_eq!(effects.len(), 3, "no climax effect is dropped");
+        for effect in &effects {
+            assert_eq!(effect.value_scaling, ValueScalingPolicy::PreAppliedBestTier);
+        }
+        // Stored modifiers pass through untouched — multiplying by the tier again
+        // here would double-count what the extract already applied.
+        assert_eq!(effects[0].modifier, 0.3);
+        assert_eq!(effects[1].modifier, 0.36);
+        assert_eq!(effects[2].modifier, 0.042);
+    }
+
+    #[test]
+    fn skill_input_drops_unsupported_value_usage_effect_and_keeps_the_skill() {
+        // Usage 12 (career fans) has no tier table we can cite, so it stays
+        // unmodeled. It must cost only its own effect: rejecting the skill took
+        // the whole payload down with it, and an r5 unique is force-included in
+        // its runner's set, so a runner whose unique carried one could never be
+        // simulated at all.
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "210081",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 12 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let skill = dto.into_domain().expect("210081 converts despite usage 12");
+        let effects = build_skill_effects(&skill.alternatives[0]);
+        assert_eq!(effects.len(), 1, "only the usage-12 effect is dropped");
+        // The kept effect is the base 0.25, never the unmodeled component folded
+        // in: coercing an unmapped usage to Direct would invent a tier we cannot
+        // cite, which is worse than omitting the effect.
         assert_eq!(effects[0].modifier, 0.25);
         assert_eq!(effects[0].value_scaling, ValueScalingPolicy::Direct);
+    }
+
+    #[test]
+    fn skill_input_drops_unroutable_target_effect_and_keeps_the_skill() {
+        // Target 24 ("Spirited Cheers!", 109402111) has no engine routing. It used
+        // to fail the whole conversion, which also made `skillSupportReport`
+        // unusable on a full skill pool — the one call it is designed for.
+        let dto: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "109402111",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 30000,
+                    "condition": "phase>=1",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 24, "type": 27, "valueUsage": 1 }
+                    ]
+                }]
+            }"#,
+        )
+        .expect("skill input deserializes");
+
+        let skill = dto
+            .into_domain()
+            .expect("target 24 no longer fails the skill");
+        let effects = build_skill_effects(&skill.alternatives[0]);
+        assert_eq!(effects.len(), 1, "only the target-24 effect is dropped");
+        assert_eq!(effects[0].modifier, 0.25);
     }
 
     #[test]
@@ -1700,7 +1823,7 @@ mod tests {
                         "condition": "phase>=2",
                         "effects": [
                             { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
-                            { "modifier": 500, "target": 1, "type": 27, "valueUsage": 13 }
+                            { "modifier": 500, "target": 1, "type": 27, "valueUsage": 12 }
                         ]
                     }]
                 },
@@ -1730,7 +1853,7 @@ mod tests {
         )
         .expect("skill inputs deserialize");
 
-        let report = build_skill_support_report(skills).expect("report builds");
+        let report = build_skill_support_report(&skills).expect("report builds");
 
         assert_eq!(
             report.len(),
@@ -1746,7 +1869,7 @@ mod tests {
                 alternative_index: 0,
                 effect_index: 1,
                 reason: WasmUnmodeledReason::UnsupportedValueUsage,
-                value: 13,
+                value: 12,
             }]
         );
 
@@ -1763,32 +1886,81 @@ mod tests {
     }
 
     #[test]
-    fn skill_support_report_serializes_as_camel_case_for_js() {
+    fn skill_support_report_indexes_against_the_submitted_payload() {
+        // A target drop ahead of a value-usage drop in the same alternative. The
+        // target effect never reaches the core classifier, so the core reports the
+        // usage drop at its own index 1 — but the caller submitted it at index 2.
+        // Reporting the core's index would point a consumer at the wrong effect.
         let skills: Vec<WasmSkillInput> = serde_json::from_str(
             r#"[{
-                "skillId": "210061",
+                "skillId": "mixed-drops",
                 "rarity": 3,
                 "alternatives": [{
-                    "baseDuration": 50000,
-                    "condition": "phase>=2",
+                    "baseDuration": 30000,
+                    "condition": "phase>=1",
                     "effects": [
-                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
-                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 10 }
+                        { "modifier": 500, "target": 24, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 12 }
                     ]
                 }]
             }]"#,
         )
         .expect("skill inputs deserialize");
 
-        let report = build_skill_support_report(skills).expect("report builds");
+        let report = build_skill_support_report(&skills).expect("report builds");
+        assert_eq!(report.len(), 1);
+        assert_eq!(
+            report[0].dropped_effects,
+            vec![
+                WasmDroppedEffect {
+                    alternative_index: 0,
+                    effect_index: 0,
+                    reason: WasmUnmodeledReason::UnmodeledTarget,
+                    value: 24,
+                },
+                WasmDroppedEffect {
+                    alternative_index: 0,
+                    effect_index: 2,
+                    reason: WasmUnmodeledReason::UnsupportedValueUsage,
+                    value: 12,
+                },
+            ],
+            "indices address the submitted payload, in submitted order"
+        );
+        assert!(!report[0].fully_unmodeled, "the middle effect survives");
+    }
+
+    #[test]
+    fn skill_support_report_serializes_as_camel_case_for_js() {
+        let skills: Vec<WasmSkillInput> = serde_json::from_str(
+            r#"[{
+                "skillId": "109402111",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 24, "type": 27, "valueUsage": 1 }
+                    ]
+                }]
+            }]"#,
+        )
+        .expect("skill inputs deserialize");
+
+        let report = build_skill_support_report(&skills).expect("report builds");
         let json = serde_json::to_string(&report).expect("serialize");
 
-        assert!(json.contains("\"skillId\":\"210061\""), "json was: {json}");
+        assert!(
+            json.contains("\"skillId\":\"109402111\""),
+            "json was: {json}"
+        );
         assert!(json.contains("\"droppedEffects\":"));
         assert!(json.contains("\"alternativeIndex\":0"));
         assert!(json.contains("\"effectIndex\":1"));
-        assert!(json.contains("\"reason\":\"unsupportedValueUsage\""));
-        assert!(json.contains("\"value\":10"));
+        assert!(json.contains("\"reason\":\"unmodeledTarget\""));
+        assert!(json.contains("\"value\":24"));
         assert!(json.contains("\"fullyUnmodeled\":false"));
     }
 

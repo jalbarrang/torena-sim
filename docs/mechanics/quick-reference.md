@@ -91,11 +91,11 @@ The closed forms above — `MaxHP = 0.8 * StrategyCoefficient * Stamina + Distan
 ### Value Scaling Types
 
 - ✅ `Direct` (1)
-- ❌ `MultiplySkillNum` (2)
+- ✅ `MultiplySkillNum` (2) — extract pre-applies the best tier (1.2×), so the sim assumes 20+ learned skills
 - ✅ `Aoharu` skills (3-7) — team-stat tiers apply in TT/CM; extract pre-applies the best tier (1.2×), so the sim assumes a ≥3600-total team
 - ✅ `MultiplyRandom` (8, 9)
-- ❌ `Climax` skills (10)
-- ❌ `MultiplyMaximumRawStatus` (13)
+- ✅ `Climax` skills (10) — extract pre-applies the best tier (1.2×), so the sim assumes ≥25 training races won
+- ✅ `MultiplyMaximumRawStatus` (13) — extract pre-applies the best tier (1.2×), so the sim assumes ≥1100 in the best stat
 - ✅ `MultiplyActivateSpecificTagSkillCount` (14) — counts activated green (601–615) skills: `0–2 → 0×`, `3–4 → 1×`, `5 → 2×`, `6+ → 3×`
 - ❌ `AddDistanceDiffTop` (19)
 - ❌ `MultiplyBlockedSideMaxContinueTime` (20)
