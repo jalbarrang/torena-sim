@@ -101,6 +101,26 @@ pub fn known_condition_tokens_wasm() -> Vec<String> {
     tokens
 }
 
+/// Which of the submitted skills this engine models only partially.
+///
+/// `skills` is an array of the same skill objects a simulation takes. Returns one
+/// entry per skill that loses at least one effect, each listing the dropped
+/// effects and whether the skill is left inert; a fully modeled skill is omitted,
+/// so an empty array means full coverage.
+///
+/// The engine drops effects it cannot model rather than rejecting the skill (an
+/// unmapped effect `type`, or a `valueUsage` with no scaling policy), so a
+/// simulation always runs — but a dropped effect makes that skill's contribution
+/// understated. Exposed so a consumer can say which skills are affected instead
+/// of presenting partial results as complete. The answer is a property of the
+/// skill data alone, so call it once per skill pool rather than per simulation.
+#[wasm_bindgen(js_name = skillSupportReport)]
+pub fn skill_support_report_wasm(skills: JsValue) -> Result<JsValue, JsError> {
+    let dto: Vec<dto::WasmSkillInput> = from_js(skills)?;
+    let report = dto::build_skill_support_report(dto).map_err(|e| JsError::new(&e.to_string()))?;
+    to_js(&report)
+}
+
 /// Resolve a game strategy id (1-5) into the domain enum.
 fn strategy_from_id(strategy: u8) -> Result<Strategy, JsError> {
     match strategy {

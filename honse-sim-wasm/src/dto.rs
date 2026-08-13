@@ -507,30 +507,133 @@ impl WasmSkillInput {
     }
 }
 
+/// Reject an effect whose value scaling contradicts its effect type.
+///
+/// Deliberately *not* fatal: an unsupported `value_usage`. That is a coverage
+/// gap, and `build_skill_effects` already drops exactly that one effect while the
+/// rest of the skill simulates — the same degradation an unmodeled effect type
+/// gets. Failing the conversion instead rejected the whole payload, so a single
+/// unmodeled usage anywhere in a skill pool took every other skill down with it
+/// (and a runner whose unique carries one could never be simulated at all). The
+/// `skillSupportReport` export reports what was dropped so the gap is visible
+/// rather than silent.
+///
+/// Still fatal: a *supported* usage on an effect type it cannot scale (e.g.
+/// Recovery-only `MultiplyRandom` on a Target Speed effect). That is data
+/// contradicting itself rather than a gap in our modeling, and dropping the
+/// effect would paper over it. Only checked for types the engine models, since
+/// unmodeled types are dropped regardless.
 fn validate_effect_value_usage(
     skill_id: &str,
     alternative_index: usize,
     effect_index: usize,
     effect: &WasmRawEffect,
 ) -> Result<(), DtoError> {
-    let usage = effect.value_usage.unwrap_or(1);
-    let policy = ValueScalingPolicy::from_value_usage(effect.value_usage).map_err(|_| {
-        DtoError(format!(
-            "skill {skill_id} alternative {alternative_index} effect {effect_index}: unsupported value usage {usage}"
-        ))
-    })?;
-    // Unmodeled effect types are intentionally dropped by `build_skill_effects`.
-    // Validate supported usages before this branch, but only validate a
-    // policy/type combination when the engine can model that type.
+    let Ok(policy) = ValueScalingPolicy::from_value_usage(effect.value_usage) else {
+        return Ok(());
+    };
     if let Ok(effect_type) = honse_sim::skills::effect::SkillType::try_from(effect.effect_type) {
         if !policy.supports_effect_type(effect_type) {
             return Err(DtoError(format!(
-                "skill {skill_id} alternative {alternative_index} effect {effect_index}: value usage {usage} is invalid for effect type {}",
+                "skill {skill_id} alternative {alternative_index} effect {effect_index}: value usage {} is invalid for effect type {}",
+                effect.value_usage.unwrap_or(1),
                 effect.effect_type
             )));
         }
     }
     Ok(())
+}
+
+/// Why one effect is not simulated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WasmUnmodeledReason {
+    /// The effect's raw `type` id has no engine mapping.
+    UnmodeledEffectType,
+    /// The effect's `valueUsage` has no engine mapping, so its runtime value
+    /// cannot be derived.
+    UnsupportedValueUsage,
+}
+
+/// One effect the engine drops, located in the submitted skill payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmDroppedEffect {
+    /// Index into the skill's `alternatives`.
+    pub alternative_index: usize,
+    /// Index into that alternative's `effects`.
+    pub effect_index: usize,
+    /// Which mapping was missing.
+    pub reason: WasmUnmodeledReason,
+    /// The unmapped raw value: the effect `type` id for `unmodeledEffectType`,
+    /// the `valueUsage` for `unsupportedValueUsage`.
+    pub value: i32,
+}
+
+/// A submitted skill the engine models only partially.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmSkillSupportEntry {
+    /// Skill id as submitted.
+    pub skill_id: String,
+    /// Every dropped effect across all alternatives. Never empty — fully modeled
+    /// skills are omitted from the report entirely.
+    pub dropped_effects: Vec<WasmDroppedEffect>,
+    /// No alternative retains a modeled effect, so the skill converts but can
+    /// never affect a race. Distinguishes "lost one component" (a modifier is
+    /// understated) from "inert" (the skill is decoration), which a consumer
+    /// will usually want to surface differently.
+    pub fully_unmodeled: bool,
+}
+
+/// Report which of `skills` the engine models only partially, and what it drops.
+///
+/// A pure query over the skill data — the answer depends on the payload alone,
+/// not on any race — so a consumer can call it once when it loads a skill pool
+/// and cache the result rather than re-deriving it per simulation.
+///
+/// Fully modeled skills are omitted, so an empty result means full coverage.
+/// Errors only on the same contradictory data a simulation would reject.
+pub fn build_skill_support_report(
+    skills: Vec<WasmSkillInput>,
+) -> Result<Vec<WasmSkillSupportEntry>, DtoError> {
+    use honse_sim::skills::model::{build_skill_effects, unmodeled_effects, UnmodeledEffect};
+
+    let mut report = Vec::new();
+    for input in skills {
+        let skill = input.into_domain()?;
+        let mut dropped_effects = Vec::new();
+        let mut modeled = 0usize;
+        for (alternative_index, alternative) in skill.alternatives.iter().enumerate() {
+            modeled += build_skill_effects(alternative).len();
+            dropped_effects.extend(unmodeled_effects(alternative).into_iter().map(
+                |(effect_index, reason)| {
+                    let (reason, value) = match reason {
+                        UnmodeledEffect::EffectType(id) => {
+                            (WasmUnmodeledReason::UnmodeledEffectType, id)
+                        }
+                        UnmodeledEffect::ValueUsage(usage) => {
+                            (WasmUnmodeledReason::UnsupportedValueUsage, usage)
+                        }
+                    };
+                    WasmDroppedEffect {
+                        alternative_index,
+                        effect_index,
+                        reason,
+                        value,
+                    }
+                },
+            ));
+        }
+        if !dropped_effects.is_empty() {
+            report.push(WasmSkillSupportEntry {
+                skill_id: skill.skill_id.0,
+                dropped_effects,
+                fully_unmodeled: modeled == 0,
+            });
+        }
+    }
+    Ok(report)
 }
 
 /// Reject an injected debuff whose skill carries a caster-context value policy
@@ -1525,8 +1628,12 @@ mod tests {
     }
 
     #[test]
-    fn skill_input_rejects_unsupported_value_usage_with_coordinates() {
-        // Usage 10 (Climax) is still unsupported and must reject with coordinates.
+    fn skill_input_drops_unsupported_value_usage_effect_and_keeps_the_skill() {
+        // Radiant Star (210061): a Direct Target Speed bundled with a
+        // climax-scaled (usage 10) one. An unmodeled usage must cost only its own
+        // effect. Rejecting the skill took the whole payload down with it, and an
+        // r5 unique is force-included in its runner's set — so a runner whose
+        // unique carried one could never be simulated at all.
         let dto: WasmSkillInput = serde_json::from_str(
             r#"{
                 "skillId": "210061",
@@ -1543,12 +1650,13 @@ mod tests {
         )
         .expect("skill input deserializes");
 
-        assert_eq!(
-            dto.into_domain(),
-            Err(DtoError(
-                "skill 210061 alternative 0 effect 1: unsupported value usage 10".to_owned()
-            ))
-        );
+        let skill = dto.into_domain().expect("210061 converts despite usage 10");
+        let effects = build_skill_effects(&skill.alternatives[0]);
+        assert_eq!(effects.len(), 1, "only the usage-10 effect is dropped");
+        // The kept effect is the base 0.25, never the climax component folded in:
+        // coercing usage 10 to Direct would apply it as if every climax race was won.
+        assert_eq!(effects[0].modifier, 0.25);
+        assert_eq!(effects[0].value_scaling, ValueScalingPolicy::Direct);
     }
 
     #[test]
@@ -1578,29 +1686,110 @@ mod tests {
     }
 
     #[test]
-    fn skill_input_rejects_alternative_mixing_direct_and_usage_13() {
-        let dto: WasmSkillInput = serde_json::from_str(
-            r#"{
-                "skillId": "210081",
-                "rarity": 3,
-                "alternatives": [{
-                    "baseDuration": 30000,
-                    "condition": "phase>=2",
-                    "effects": [
-                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
-                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 13 }
-                    ]
-                }]
-            }"#,
+    fn skill_support_report_locates_drops_and_flags_inert_skills() {
+        // The report must separate three cases the planner treats differently:
+        // a partially modeled skill (still useful, understated), a skill left
+        // with nothing to simulate, and a fully modeled skill (not reported).
+        let skills: Vec<WasmSkillInput> = serde_json::from_str(
+            r#"[
+                {
+                    "skillId": "210081",
+                    "rarity": 3,
+                    "alternatives": [{
+                        "baseDuration": 30000,
+                        "condition": "phase>=2",
+                        "effects": [
+                            { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 },
+                            { "modifier": 500, "target": 1, "type": 27, "valueUsage": 13 }
+                        ]
+                    }]
+                },
+                {
+                    "skillId": "vision-only",
+                    "rarity": 1,
+                    "alternatives": [{
+                        "baseDuration": 10000,
+                        "condition": "phase>=1",
+                        "effects": [
+                            { "modifier": 500, "target": 1, "type": 8, "valueUsage": 1 }
+                        ]
+                    }]
+                },
+                {
+                    "skillId": "fully-modeled",
+                    "rarity": 1,
+                    "alternatives": [{
+                        "baseDuration": 10000,
+                        "condition": "phase>=1",
+                        "effects": [
+                            { "modifier": 500, "target": 1, "type": 27, "valueUsage": 1 }
+                        ]
+                    }]
+                }
+            ]"#,
         )
-        .expect("skill input deserializes");
+        .expect("skill inputs deserialize");
+
+        let report = build_skill_support_report(skills).expect("report builds");
 
         assert_eq!(
-            dto.into_domain(),
-            Err(DtoError(
-                "skill 210081 alternative 0 effect 1: unsupported value usage 13".to_owned()
-            ))
+            report.len(),
+            2,
+            "the fully modeled skill is omitted from the report"
         );
+
+        assert_eq!(report[0].skill_id, "210081");
+        assert!(!report[0].fully_unmodeled, "the Direct effect survives");
+        assert_eq!(
+            report[0].dropped_effects,
+            vec![WasmDroppedEffect {
+                alternative_index: 0,
+                effect_index: 1,
+                reason: WasmUnmodeledReason::UnsupportedValueUsage,
+                value: 13,
+            }]
+        );
+
+        assert_eq!(report[1].skill_id, "vision-only");
+        assert!(
+            report[1].fully_unmodeled,
+            "nothing is left to simulate once the vision effect is dropped"
+        );
+        assert_eq!(
+            report[1].dropped_effects[0].reason,
+            WasmUnmodeledReason::UnmodeledEffectType
+        );
+        assert_eq!(report[1].dropped_effects[0].value, 8);
+    }
+
+    #[test]
+    fn skill_support_report_serializes_as_camel_case_for_js() {
+        let skills: Vec<WasmSkillInput> = serde_json::from_str(
+            r#"[{
+                "skillId": "210061",
+                "rarity": 3,
+                "alternatives": [{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        { "modifier": 2500, "target": 1, "type": 27, "valueUsage": 1 },
+                        { "modifier": 500, "target": 1, "type": 27, "valueUsage": 10 }
+                    ]
+                }]
+            }]"#,
+        )
+        .expect("skill inputs deserialize");
+
+        let report = build_skill_support_report(skills).expect("report builds");
+        let json = serde_json::to_string(&report).expect("serialize");
+
+        assert!(json.contains("\"skillId\":\"210061\""), "json was: {json}");
+        assert!(json.contains("\"droppedEffects\":"));
+        assert!(json.contains("\"alternativeIndex\":0"));
+        assert!(json.contains("\"effectIndex\":1"));
+        assert!(json.contains("\"reason\":\"unsupportedValueUsage\""));
+        assert!(json.contains("\"value\":10"));
+        assert!(json.contains("\"fullyUnmodeled\":false"));
     }
 
     #[test]

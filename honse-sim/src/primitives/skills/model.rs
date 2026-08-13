@@ -112,41 +112,91 @@ pub struct ResolvedSkillEffect {
     pub modifier: f64,
 }
 
+/// Why the engine cannot faithfully model a raw effect, and so drops it.
+///
+/// Both variants mean "this effect does not participate in the simulation at
+/// all". Neither is coerced to a stand-in value: an unmodeled effect contributes
+/// nothing rather than contributing a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnmodeledEffect {
+    /// The raw type id has no [`SkillType`] mapping (vision `8`, temptation
+    /// `13`, carnival/event `502`/`503`, ...). Carries the raw id.
+    EffectType(i32),
+    /// The `value_usage` has no [`ValueScalingPolicy`] mapping, so the runtime
+    /// value cannot be derived. Carries the raw usage.
+    ValueUsage(i32),
+}
+
+/// Classify one raw effect: the built spec, or why it cannot be modeled.
+///
+/// The single decision point behind both [`build_skill_effects`] (which keeps
+/// the `Ok`s) and [`unmodeled_effects`] (which reports the `Err`s), so a
+/// consumer-facing support report can never disagree with what the simulation
+/// actually runs.
+///
+/// Effect type is checked before value usage, so an effect failing both is
+/// reported as [`UnmodeledEffect::EffectType`].
+fn classify_effect(
+    effect: &RawSkillEffect,
+    base_duration: f64,
+) -> Result<SkillEffectSpec, UnmodeledEffect> {
+    let effect_type = SkillType::try_from(effect.effect_type)
+        .map_err(|_| UnmodeledEffect::EffectType(effect.effect_type))?;
+    let value_scaling = ValueScalingPolicy::from_value_usage(effect.value_usage)
+        .map_err(|e| UnmodeledEffect::ValueUsage(e.0))?;
+    Ok(SkillEffectSpec {
+        target: effect.target,
+        effect_type,
+        base_duration,
+        modifier: effect.modifier / 10000.0,
+        value_scaling,
+        value_level_usage: effect.value_level_usage,
+    })
+}
+
 /// Build the scaled [`SkillEffectSpec`]s for one alternative.
 ///
 /// Port of `buildSkillEffects`: `base_duration` and every `modifier` are divided
 /// by `10000`, and the raw type id is resolved to a [`SkillType`].
 ///
-/// Effects whose raw type id has no [`SkillType`] mapping are **skipped**, not
-/// fatal. The game bundles unmodeled effects (vision `8`, temptation `13`,
-/// carnival/event `502`/`503`, ...) alongside ones we do model — e.g. every
-/// Savvy skill carries Wisdom Up (`5`) *and* a vision effect (`8`). Rejecting the
-/// whole alternative on the unknown type silently killed the entire skill (no
-/// trigger, no stat bonus, no proc). Dropping only the unmodeled effect keeps the
-/// known ones (the wit bonus) live. An alternative whose effects are *all*
-/// unmapped yields an empty list, which `build_skill_data` treats as "no trigger"
-/// (correct — there is nothing to simulate).
+/// Effects the engine cannot model are **skipped**, not fatal — see
+/// [`UnmodeledEffect`] for the two reasons. The game bundles unmodeled effects
+/// alongside ones we do model — e.g. every Savvy skill carries Wisdom Up (`5`)
+/// *and* a vision effect (`8`), and Radiant Star (`210061`) carries a Direct
+/// Target Speed *and* a climax-scaled (`value_usage` 10) one. Rejecting the whole
+/// alternative silently killed the entire skill (no trigger, no stat bonus, no
+/// proc). Dropping only the unmodeled effect keeps the known ones live. An
+/// alternative whose effects are *all* unmodeled yields an empty list, which
+/// `build_skill_data` treats as "no trigger" (correct — there is nothing to
+/// simulate).
 ///
-/// The value-scaling policy is resolved from `value_usage` here; an unsupported
-/// usage is not silently coerced to Direct — the effect is dropped (the
-/// TypeScript preflight and WASM DTO backstop already reject the whole skill
-/// before it reaches this point, so a dropped effect is only reachable through a
-/// direct native construction that bypassed both gates).
+/// Dropping loses a contribution; coercing an unsupported `value_usage` to
+/// `Direct` would instead invent one (Radiant Star's climax component would apply
+/// as though every climax race had been won), so dropping is deliberate.
+/// [`unmodeled_effects`] reports what was lost.
 pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffectSpec> {
     let base_duration = alt.base_duration / 10000.0;
     alt.effects
         .iter()
-        .filter_map(|effect| {
-            let effect_type = SkillType::try_from(effect.effect_type).ok()?;
-            let value_scaling = ValueScalingPolicy::from_value_usage(effect.value_usage).ok()?;
-            Some(SkillEffectSpec {
-                target: effect.target,
-                effect_type,
-                base_duration,
-                modifier: effect.modifier / 10000.0,
-                value_scaling,
-                value_level_usage: effect.value_level_usage,
-            })
+        .filter_map(|effect| classify_effect(effect, base_duration).ok())
+        .collect()
+}
+
+/// The effects of `alt` that [`build_skill_effects`] drops, as
+/// `(effect_index, reason)` over the alternative's raw effect list.
+///
+/// Empty means the alternative is modeled in full. Exposed so a consumer can
+/// tell a user that a skill is only partially simulated instead of letting the
+/// gap pass unnoticed.
+pub fn unmodeled_effects(alt: &SkillAlternative) -> Vec<(usize, UnmodeledEffect)> {
+    let base_duration = alt.base_duration / 10000.0;
+    alt.effects
+        .iter()
+        .enumerate()
+        .filter_map(|(index, effect)| {
+            classify_effect(effect, base_duration)
+                .err()
+                .map(|reason| (index, reason))
         })
         .collect()
 }
@@ -351,6 +401,74 @@ mod tests {
         assert_eq!(effects.len(), 1, "the unmodeled type-8 effect is dropped");
         assert_eq!(effects[0].effect_type, SkillType::WisdomUp);
         assert_eq!(effects[0].modifier, 60.0);
+    }
+
+    #[test]
+    fn unmodeled_effects_reports_exactly_what_build_drops() {
+        // Radiant Star-shaped: a modeled Direct effect, an unsupported value
+        // usage (10), and an unmodeled effect type (8). The report and the
+        // builder must partition the same list — anything else means a consumer
+        // is told something the simulation does not do.
+        let alt = SkillAlternative {
+            base_duration: 50000.0,
+            cooldown_time: None,
+            condition: "phase>=2".to_owned(),
+            precondition: None,
+            effects: vec![
+                RawSkillEffect {
+                    modifier: 2500.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 27,
+                    value_usage: Some(1),
+                    value_level_usage: None,
+                },
+                RawSkillEffect {
+                    modifier: 500.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 27,
+                    value_usage: Some(10),
+                    value_level_usage: None,
+                },
+                RawSkillEffect {
+                    modifier: 500.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 8,
+                    value_usage: Some(1),
+                    value_level_usage: None,
+                },
+            ],
+        };
+
+        assert_eq!(
+            unmodeled_effects(&alt),
+            vec![
+                (1, UnmodeledEffect::ValueUsage(10)),
+                (2, UnmodeledEffect::EffectType(8)),
+            ]
+        );
+        assert_eq!(
+            build_skill_effects(&alt).len() + unmodeled_effects(&alt).len(),
+            alt.effects.len(),
+            "every raw effect is either built or reported, never both or neither"
+        );
+    }
+
+    #[test]
+    fn unmodeled_effects_is_empty_for_a_fully_modeled_alternative() {
+        let alt = SkillAlternative {
+            base_duration: 30000.0,
+            cooldown_time: None,
+            condition: "phase>=2".to_owned(),
+            precondition: None,
+            effects: vec![RawSkillEffect {
+                modifier: 4500.0,
+                target: SkillTarget::SelfTarget,
+                effect_type: 27,
+                value_usage: None,
+                value_level_usage: None,
+            }],
+        };
+        assert!(unmodeled_effects(&alt).is_empty());
     }
 
     #[test]

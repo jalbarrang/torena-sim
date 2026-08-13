@@ -22,12 +22,15 @@ Carry parsed numeric `skill_data.tag_id` values through the extracted TypeScript
 
 Value scaling is separate from duration scaling (`abilityTimeUsage`), skill-level scaling (`valueLevelUsage`), and additional-activation or lifecycle behavior. Those policy families retain their own seams.
 
-Only implemented value policies are simulatable. Unsupported policies reject the entire skill in TypeScript preflight and at the WASM DTO boundary; they never fall back to Direct behavior.
+Only implemented value policies are simulatable. Unsupported policies never fall back to Direct behavior.
+
+> **Amendment (unsupported-usage severity):** An unsupported usage originally rejected the entire skill at the WASM DTO boundary. It now drops only the offending effect, matching how an unmodeled effect *type* has always degraded, and the skill still simulates. Rejecting the skill failed the whole DTO conversion, so one unmodeled usage anywhere in a skill pool took every other skill down with it — and because a runner's unique is force-included in its obtained set, a runner whose unique carried one (Radiant Star `210061`, and most of the r5 uniques among the 35 affected skills) could not be simulated at all. The no-fallback-to-Direct rule is unchanged and is why the effect is dropped rather than coerced: coercing Radiant Star's usage-10 component to Direct would apply it as though every climax race had been won, inventing a value instead of omitting one. A *supported* usage on an effect type it cannot scale stays fatal — that is data contradicting itself, not a gap in our modeling.
 
 ## Consequences
 
 - A mixed-policy skill preserves each effect's independent semantics.
 - Resolved effects cannot be accidentally re-resolved by a routed target.
 - `uma-sim-primitives` owns the resolver so race and vacuum engines share the same mechanics, preserving ADR-0005's dependency direction.
-- Adding a new value usage requires an explicit policy, capability-gate update, and DTO validation rather than a numeric special case.
-- The consuming app's runtime simulatability gate (torena-hub, `openspec/specs/skill-simulatability`) now includes unsupported effect policies as well as unknown condition tokens.
+- Adding a new value usage requires an explicit policy and capability-gate update rather than a numeric special case. It widens what is modeled; it is not needed to keep a skill loadable.
+- A skill carrying an unsupported usage is simulatable but *understated* — it contributes everything except the dropped effect. The `skillSupportReport` export names the affected skills and what each one lost, so a consumer can surface partial modeling rather than present incomplete results as complete.
+- The consuming app's runtime simulatability gate (torena-hub, `openspec/specs/skill-simulatability`) treats an unsupported effect policy as a partial-modeling warning, not an exclusion; unknown condition tokens remain a hard gate.
