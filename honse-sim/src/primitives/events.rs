@@ -13,6 +13,7 @@
 //! by a projection in the application layer (t-018), not emitted here.
 
 use crate::shared_kernel::ids::RunnerId;
+use crate::stamina::ledger::StaminaLedger;
 
 // `ActiveEffectView` is a pure projection value object; it was extracted into
 // the shared primitives module (ADR-0005 step 4) alongside the effect-log reconciliation
@@ -100,6 +101,10 @@ pub trait RunnerObservation {
     /// Current absolute HP.
     fn current_health(&self) -> f64 {
         0.0
+    }
+    /// Where this runner's HP went, when the stamina policy records it.
+    fn stamina_ledger(&self) -> Option<StaminaLedger> {
+        None
     }
     /// The runner's start delay in seconds.
     fn start_delay(&self) -> f64 {

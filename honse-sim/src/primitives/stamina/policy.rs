@@ -9,6 +9,7 @@
 
 use crate::shared_kernel::language::{Phase, Strategy};
 use crate::skills::effect::PositionKeepState;
+use crate::stamina::ledger::StaminaLedger;
 
 /// The slice of live runner state the stamina policy needs each tick.
 ///
@@ -75,6 +76,14 @@ pub trait StaminaPolicy {
     fn is_max_spurt(&self) -> bool;
     /// Current absolute HP.
     fn current_health(&self) -> f64;
+    /// Where this runner's HP went, if the policy records it.
+    ///
+    /// `None` means the policy does not model HP at all, which is different
+    /// from a race in which nothing happened. Consumers report it as
+    /// unavailable rather than as zeros.
+    fn ledger(&self) -> Option<&StaminaLedger> {
+        None
+    }
 }
 
 /// A no-op policy: infinite HP, never spurts. Mirrors `NoopHpPolicy`.
@@ -136,5 +145,6 @@ mod tests {
         assert_eq!(policy.health_ratio_remaining(), 1.0);
         assert_eq!(policy.get_last_spurt_pair(&state, 25.0, 20.0), (-1.0, 25.0));
         assert!(!policy.is_max_spurt());
+        assert!(policy.ledger().is_none());
     }
 }

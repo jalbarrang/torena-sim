@@ -9,7 +9,7 @@ use crate::course::phase::phase_start;
 use crate::readouts::{guts_hp_burn_multiplier, max_hp};
 use crate::shared_kernel::language::{GroundCondition, Phase, Strategy};
 use crate::shared_kernel::rng::Prng;
-use crate::skills::effect::PositionKeepState;
+use crate::stamina::ledger::{StaminaLedger, StatusCause};
 use crate::stamina::policy::{RaceStateSlice, StaminaPolicy, StaminaStats};
 use crate::stamina::spurt::get_ground_consumption_coef;
 
@@ -18,6 +18,13 @@ const SPURT_BUFFER_METERS: f64 = 60.0;
 /// The runner's wisdom roll is compared against `subpar_accept_chance` out of
 /// this denominator.
 const WIT_ROLL_DENOMINATOR: u32 = 100_000;
+/// Every cause `status_modifier` composes, in the order the ledger reports them.
+const STATUS_CAUSES: [StatusCause; 4] = [
+    StatusCause::Downhill,
+    StatusCause::Rushed,
+    StatusCause::SpotStruggle,
+    StatusCause::PaceDown,
+];
 
 /// HP-budget policy implementing the live-game stamina model.
 pub struct GameStaminaPolicy {
@@ -30,6 +37,7 @@ pub struct GameStaminaPolicy {
     guts_modifier: f64,
     subpar_accept_chance: f64,
     achieved_max_spurt: bool,
+    ledger: StaminaLedger,
 }
 
 impl GameStaminaPolicy {
@@ -47,28 +55,42 @@ impl GameStaminaPolicy {
             guts_modifier: 1.0,
             subpar_accept_chance: 0.0,
             achieved_max_spurt: false,
+            ledger: StaminaLedger::default(),
         }
     }
 
     fn status_modifier(&self, state: &RaceStateSlice) -> f64 {
+        self.status_modifier_without(state, None)
+    }
+
+    /// `status_modifier` with one cause forced inactive, for ledger
+    /// counterfactuals. Passing `None` reproduces the applied case exactly,
+    /// including the order the factors are multiplied in.
+    fn status_modifier_without(
+        &self,
+        state: &RaceStateSlice,
+        suppress: Option<StatusCause>,
+    ) -> f64 {
+        let active = |cause: StatusCause| cause.is_active_in(state) && suppress != Some(cause);
+
         let mut modifier = 1.0;
 
-        if state.is_downhill_mode {
+        if active(StatusCause::Downhill) {
             modifier *= 0.4;
         }
 
-        if state.in_spot_struggle {
+        if active(StatusCause::SpotStruggle) {
             let is_runaway = state.pos_keep_strategy == Some(Strategy::Runaway);
-            if state.is_rushed {
+            if active(StatusCause::Rushed) {
                 modifier *= if is_runaway { 7.7 } else { 3.6 };
             } else {
                 modifier *= if is_runaway { 3.5 } else { 1.4 };
             }
-        } else if state.is_rushed {
+        } else if active(StatusCause::Rushed) {
             modifier *= 1.6;
         }
 
-        if state.position_keep_state == PositionKeepState::PaceDown {
+        if active(StatusCause::PaceDown) {
             modifier *= 0.6;
         }
 
@@ -76,13 +98,22 @@ impl GameStaminaPolicy {
     }
 
     fn hp_per_second(&self, state: &RaceStateSlice, velocity: f64) -> f64 {
+        self.hp_per_second_at(state, velocity, self.status_modifier(state))
+    }
+
+    /// `hp_per_second` with `modifier` substituted for the status modifier.
+    ///
+    /// The arithmetic is written in the same order as the applied case, so
+    /// `hp_per_second_at(state, v, self.status_modifier(state))` is bit-identical
+    /// to the original expression. Seeded races must reproduce exactly.
+    fn hp_per_second_at(&self, state: &RaceStateSlice, velocity: f64, modifier: f64) -> f64 {
         let guts_modifier = if state.phase.index() >= 2 {
             self.guts_modifier
         } else {
             1.0
         };
         (20.0 * (velocity - self.base_speed + 12.0).powi(2) / 144.0)
-            * self.status_modifier(state)
+            * modifier
             * self.ground_modifier
             * guts_modifier
     }
@@ -150,10 +181,28 @@ impl StaminaPolicy for GameStaminaPolicy {
         self.guts_modifier = guts_hp_burn_multiplier(stats.guts);
         self.subpar_accept_chance = ((15.0 + 0.05 * stats.wit) * 1000.0).round();
         self.achieved_max_spurt = false;
+        self.ledger.reset(self.max_hp);
     }
 
     fn tick(&mut self, state: &RaceStateSlice, dt: f64) {
-        self.current_health -= self.hp_per_second(state, state.current_speed) * dt;
+        let applied = self.status_modifier(state);
+        let drain = self.hp_per_second_at(state, state.current_speed, applied) * dt;
+
+        // Price every active cause against this same tick with that cause off.
+        // An inactive cause contributed nothing, so skip the arithmetic.
+        for cause in STATUS_CAUSES {
+            if !cause.is_active_in(state) {
+                continue;
+            }
+            let without = self.status_modifier_without(state, Some(cause));
+            let amount = drain - self.hp_per_second_at(state, state.current_speed, without) * dt;
+            self.ledger.add_cause(cause, amount);
+        }
+
+        self.ledger.baseline_spent += self.hp_per_second_at(state, state.current_speed, 1.0) * dt;
+        self.ledger.total_spent += drain;
+
+        self.current_health -= drain;
     }
 
     fn has_remaining_health(&self) -> bool {
@@ -165,9 +214,11 @@ impl StaminaPolicy for GameStaminaPolicy {
     }
 
     fn recover(&mut self, modifier: f64) {
+        let before = self.current_health;
         self.current_health = self
             .max_hp
             .min(self.current_health + self.max_hp * modifier);
+        self.ledger.record_recovery(self.current_health - before);
     }
 
     fn get_last_spurt_pair(
@@ -197,6 +248,10 @@ impl StaminaPolicy for GameStaminaPolicy {
     fn current_health(&self) -> f64 {
         self.current_health
     }
+
+    fn ledger(&self) -> Option<&StaminaLedger> {
+        Some(&self.ledger)
+    }
 }
 
 #[cfg(test)]
@@ -205,6 +260,7 @@ mod tests {
     use crate::course::model::CourseData;
     use crate::shared_kernel::language::{DistanceType, Orientation, Surface};
     use crate::shared_kernel::rng::Xoshiro256StarStar;
+    use crate::skills::effect::PositionKeepState;
 
     fn course() -> CourseData {
         CourseData {

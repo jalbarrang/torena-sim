@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::events::{RaceObservation, RaceObserver, RunnerObservation};
+use crate::stamina::ledger::StaminaLedger;
 // Projection primitives (effect-log reconciliation + value objects) live in
 // the shared primitives module (ADR-0005 step 4). Re-exported below so existing
 // `application::collectors::{SkillEffectLog, EffectPerspective}` paths (and the
@@ -68,6 +69,9 @@ pub struct CompareRoundData {
     pub non_full_spurt_delay_distance: Option<f64>,
     /// Whether the runner held first entering late race.
     pub first_position_in_late_race: bool,
+    /// Where this runner's HP went, when the stamina policy records it.
+    /// `None` means the policy does not model HP, not that nothing happened.
+    pub stamina_ledger: Option<StaminaLedger>,
     /// Ids of skills used this round (in activation order).
     pub used_skills: Vec<String>,
     /// Whether the runner finished.
@@ -377,6 +381,7 @@ impl RaceObserver for CompareObserver {
         d.non_full_spurt_velocity_diff = runner.non_full_spurt_velocity_diff();
         d.non_full_spurt_delay_distance = runner.non_full_spurt_delay_distance();
         d.first_position_in_late_race = runner.first_position_in_late_race();
+        d.stamina_ledger = runner.stamina_ledger();
         d.finished = true;
         d.finish_position = position;
     }
