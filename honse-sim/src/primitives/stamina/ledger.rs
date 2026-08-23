@@ -24,14 +24,21 @@ use crate::stamina::policy::RaceStateSlice;
 /// engine dueling changes speed and position, not HP burn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusCause {
-    /// Downhill mode, which multiplies drain by `0.4`.
+    /// Downhill mode: multiplies drain by `0.4` and adds speed.
     Downhill,
-    /// Rushed (temptation).
+    /// Rushed (temptation): multiplies drain by `1.6`.
     Rushed,
-    /// Spot-struggle, harsher for Runaway and harsher again while rushed.
+    /// Spot-struggle: multiplies drain and adds speed.
     SpotStruggle,
-    /// Position-keep pace-down, which multiplies drain by `0.6`.
+    /// Position-keep pace-down: multiplies drain by `0.6` and removes speed.
     PaceDown,
+    /// Position keeping that raises speed — pace-up, speed-up, overtake, and
+    /// pace-up-ex. Touches no consumption multiplier, so its whole cost is the
+    /// extra speed it asks for.
+    PaceUp,
+    /// Dueling. Like pace-up it has no consumption multiplier; it burns HP
+    /// purely by making the runner go faster.
+    Dueling,
 }
 
 impl StatusCause {
@@ -43,6 +50,30 @@ impl StatusCause {
             StatusCause::Rushed => state.is_rushed,
             StatusCause::SpotStruggle => state.in_spot_struggle,
             StatusCause::PaceDown => state.position_keep_state == PositionKeepState::PaceDown,
+            // Every position-keep state except pace-down raises speed; the
+            // contribution is zero when none is active, so read it directly.
+            StatusCause::PaceUp => {
+                state.position_keep_state != PositionKeepState::PaceDown
+                    && state.speed_contributions.position_keep != 0.0
+            }
+            StatusCause::Dueling => state.speed_contributions.dueling != 0.0,
+        }
+    }
+
+    /// The speed this cause is supplying on `state`, in m/s.
+    ///
+    /// Removing the cause means removing this speed too, which is how a
+    /// mechanic with no consumption multiplier still gets priced.
+    pub(crate) fn speed_in(self, state: &RaceStateSlice) -> f64 {
+        let contributions = &state.speed_contributions;
+        match self {
+            StatusCause::Downhill => contributions.downhill,
+            // Rushed forces position keeping rather than adding speed itself,
+            // so charging it for that speed would double-count against pace-up.
+            StatusCause::Rushed => 0.0,
+            StatusCause::SpotStruggle => contributions.spot_struggle,
+            StatusCause::PaceDown | StatusCause::PaceUp => contributions.position_keep,
+            StatusCause::Dueling => contributions.dueling,
         }
     }
 }
@@ -53,9 +84,9 @@ impl StatusCause {
 /// render either raw HP or a percentage of the bar.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct StaminaLedger {
-    /// HP the runner would have spent had no status mechanic ever been active,
-    /// at the speeds it actually ran. The reference point every cause is
-    /// measured against.
+    /// HP the runner would have spent with no status mechanic active at all —
+    /// neither their consumption multipliers nor the speed they supplied. The
+    /// reference point every cause is measured against.
     pub baseline_spent: f64,
     /// HP actually drained across every tick.
     pub total_spent: f64,
@@ -67,6 +98,11 @@ pub struct StaminaLedger {
     pub spot_struggle: f64,
     /// Counterfactual amount attributed to pace-down. Negative: a saving.
     pub pace_down: f64,
+    /// Counterfactual amount attributed to speed-raising position keeping
+    /// (pace-up, speed-up, overtake, pace-up-ex).
+    pub pace_up: f64,
+    /// Counterfactual amount attributed to dueling.
+    pub dueling: f64,
     /// HP restored by recovery effects, measured as the clamped delta so a heal
     /// into a nearly full bar is not overcounted.
     pub total_recovered: f64,
@@ -95,6 +131,8 @@ impl StaminaLedger {
             StatusCause::Rushed => self.rushed += amount,
             StatusCause::SpotStruggle => self.spot_struggle += amount,
             StatusCause::PaceDown => self.pace_down += amount,
+            StatusCause::PaceUp => self.pace_up += amount,
+            StatusCause::Dueling => self.dueling += amount,
         }
     }
 

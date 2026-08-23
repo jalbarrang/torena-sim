@@ -29,7 +29,7 @@ use crate::skills::condition::language::ConditionParser;
 use crate::skills::condition::ConditionResolution;
 use crate::skills::effect::PositionKeepState;
 use crate::skills::model::Skill;
-use crate::stamina::policy::{StaminaPolicy, StaminaStats};
+use crate::stamina::policy::{SpeedContributions, StaminaPolicy, StaminaStats};
 
 use super::physics::SpeedModifiers;
 use super::stats::{build_adjusted_stats, build_base_stats};
@@ -290,6 +290,7 @@ impl Runner {
             stamina_drain_overrides: HashMap::new(),
             position_keep_state: PositionKeepState::None,
             pos_keep_speed_coef: 1.0,
+            speed_contributions: SpeedContributions::default(),
             pos_keep_next_timer: Timer::new(0.0),
             pos_keep_exit_distance: 0.0,
             pos_keep_exit_position: 0.0,

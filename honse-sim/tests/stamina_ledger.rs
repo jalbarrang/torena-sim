@@ -25,7 +25,7 @@ use honse_sim::shared_kernel::params::{RaceParameters, StatLine};
 use honse_sim::shared_kernel::rng::Xoshiro256StarStar;
 use honse_sim::skills::effect::PositionKeepState;
 use honse_sim::stamina::game_policy::GameStaminaPolicy;
-use honse_sim::stamina::policy::{RaceStateSlice, StaminaPolicy, StaminaStats};
+use honse_sim::stamina::policy::{RaceStateSlice, SpeedContributions, StaminaPolicy, StaminaStats};
 
 const FRAME_DT: f64 = 1.0 / 15.0;
 const SEED: u64 = 575_032;
@@ -139,6 +139,7 @@ fn neutral_state() -> RaceStateSlice {
         pos_keep_strategy: None,
         pos: 500.0,
         current_speed: 20.0,
+        speed_contributions: SpeedContributions::default(),
     }
 }
 
@@ -202,6 +203,153 @@ fn a_downhill_only_race_saves_sixty_percent_of_its_baseline() {
         ledger.downhill < 0.0,
         "a saving is negative, got {}",
         ledger.downhill
+    );
+}
+
+#[test]
+fn dueling_costs_hp_even_though_it_touches_no_consumption_multiplier() {
+    let mut policy = policy();
+    // Dueling adds speed and nothing else. Drain is quadratic in speed, so the
+    // extra burn is real and must not read as zero.
+    let state = RaceStateSlice {
+        speed_contributions: SpeedContributions {
+            dueling: 0.35,
+            ..SpeedContributions::default()
+        },
+        ..neutral_state()
+    };
+
+    for _ in 0..300 {
+        policy.tick(&state, FRAME_DT);
+    }
+
+    let ledger = policy.ledger().expect("game policy records a ledger");
+
+    assert!(
+        ledger.dueling > 0.0,
+        "dueling should cost HP through speed, got {}",
+        ledger.dueling
+    );
+    // No multiplier is involved, so the whole gap between what was spent and the
+    // neutral baseline is the speed it asked for.
+    assert_close(
+        ledger.dueling,
+        ledger.total_spent - ledger.baseline_spent,
+        "dueling is the entire excess",
+    );
+    assert_eq!(ledger.rushed, 0.0);
+    assert_eq!(ledger.spot_struggle, 0.0);
+}
+
+#[test]
+fn pacing_up_costs_hp_and_pacing_down_saves_it() {
+    let up = {
+        let mut policy = policy();
+        let state = RaceStateSlice {
+            position_keep_state: PositionKeepState::PaceUp,
+            speed_contributions: SpeedContributions {
+                position_keep: 0.8,
+                ..SpeedContributions::default()
+            },
+            ..neutral_state()
+        };
+        for _ in 0..300 {
+            policy.tick(&state, FRAME_DT);
+        }
+        *policy.ledger().expect("ledger")
+    };
+
+    assert!(
+        up.pace_up > 0.0,
+        "pacing up burns extra HP, got {}",
+        up.pace_up
+    );
+    assert_eq!(up.pace_down, 0.0, "pace-up must not be booked as pace-down");
+
+    let down = {
+        let mut policy = policy();
+        // Pace-down both slows the runner and applies a 0.6 consumption
+        // multiplier; the contribution is negative because it removes speed.
+        let state = RaceStateSlice {
+            position_keep_state: PositionKeepState::PaceDown,
+            speed_contributions: SpeedContributions {
+                position_keep: -0.9,
+                ..SpeedContributions::default()
+            },
+            ..neutral_state()
+        };
+        for _ in 0..300 {
+            policy.tick(&state, FRAME_DT);
+        }
+        *policy.ledger().expect("ledger")
+    };
+
+    assert!(
+        down.pace_down < 0.0,
+        "pacing down saves HP, got {}",
+        down.pace_down
+    );
+    assert_eq!(down.pace_up, 0.0, "pace-down must not be booked as pace-up");
+}
+
+#[test]
+fn a_mechanic_with_both_channels_is_priced_for_both_at_once() {
+    let mut policy = policy();
+    // Spot-struggle multiplies drain by 1.4 AND adds speed. One counterfactual
+    // removes the whole mechanic, so its amount exceeds the multiplier alone.
+    let state = RaceStateSlice {
+        in_spot_struggle: true,
+        speed_contributions: SpeedContributions {
+            spot_struggle: 0.5,
+            ..SpeedContributions::default()
+        },
+        ..neutral_state()
+    };
+
+    for _ in 0..300 {
+        policy.tick(&state, FRAME_DT);
+    }
+
+    let ledger = policy.ledger().expect("game policy records a ledger");
+    let multiplier_only = ledger.baseline_spent * (1.4 - 1.0);
+
+    assert!(
+        ledger.spot_struggle > multiplier_only,
+        "the speed boost must be priced too: {} should exceed {}",
+        ledger.spot_struggle,
+        multiplier_only
+    );
+}
+
+#[test]
+fn the_baseline_excludes_speed_that_mechanics_supplied() {
+    let mut with_bonus = policy();
+    let bonus_state = RaceStateSlice {
+        speed_contributions: SpeedContributions {
+            dueling: 0.6,
+            ..SpeedContributions::default()
+        },
+        ..neutral_state()
+    };
+    for _ in 0..300 {
+        with_bonus.tick(&bonus_state, FRAME_DT);
+    }
+
+    let mut without = policy();
+    let plain = RaceStateSlice {
+        current_speed: neutral_state().current_speed - 0.6,
+        ..neutral_state()
+    };
+    for _ in 0..300 {
+        without.tick(&plain, FRAME_DT);
+    }
+
+    // "What you would have spent with no mechanic at all" must not silently
+    // include the speed a mechanic handed you.
+    assert_close(
+        with_bonus.ledger().expect("ledger").baseline_spent,
+        without.ledger().expect("ledger").total_spent,
+        "baseline strips mechanic speed",
     );
 }
 

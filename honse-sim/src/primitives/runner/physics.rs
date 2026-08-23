@@ -29,7 +29,7 @@ use crate::skills::condition::approximate::{
     ApproximateConditionState,
 };
 use crate::skills::effect::PositionKeepState;
-use crate::stamina::policy::RaceStateSlice;
+use crate::stamina::policy::{RaceStateSlice, SpeedContributions};
 
 /// Per-tick accumulators for skill-driven speed / acceleration modifiers.
 ///
@@ -259,6 +259,7 @@ impl Runner {
             pos_keep_strategy: Some(self.position_keep_strategy),
             pos: self.position,
             current_speed: self.current_speed,
+            speed_contributions: self.speed_contributions,
         }
     }
 
@@ -375,6 +376,10 @@ impl Runner {
     /// (mechanics § Target Speed): applied when the runner is more than
     /// `0.12 * course_width` from the inner fence and the inside is open.
     fn update_target_speed(&mut self, side_blocked: bool, course_width: f64) {
+        // Cleared every tick: a mechanic that ended must stop being charged for
+        // speed it is no longer supplying.
+        self.speed_contributions = SpeedContributions::default();
+
         if !self.health_policy.has_remaining_health() {
             self.target_speed = self.min_speed;
         } else if self.is_last_spurt {
@@ -384,6 +389,9 @@ impl Runner {
             let mut t = self.base_target_speed_per_phase[phase];
             let section = (self.position / self.section_length).floor() as usize;
             t += self.section_modifiers[section.min(self.section_modifiers.len() - 1)];
+            // The coefficient scales only this much of the target, so the speed
+            // position keeping is responsible for is the delta it introduces.
+            self.speed_contributions.position_keep = t * (self.pos_keep_speed_coef - 1.0);
             t *= self.pos_keep_speed_coef;
             self.target_speed = t;
         }
@@ -391,17 +399,22 @@ impl Runner {
         self.target_speed += self.modifiers.target_speed.total();
 
         if self.is_downhill_mode {
-            self.target_speed += 0.3 + self.slope_per / 100_000.0;
+            self.speed_contributions.downhill = 0.3 + self.slope_per / 100_000.0;
+            self.target_speed += self.speed_contributions.downhill;
         } else if self.current_hill_index != -1 && self.slope_per > 0.0 {
             self.target_speed -= (self.slope_per / 10_000.0) * 200.0 / self.adjusted_stats.power;
             self.target_speed = self.target_speed.max(self.min_speed);
         }
 
         if self.is_dueling {
-            self.target_speed += (200.0 * self.adjusted_stats.guts).powf(0.708) * 0.0001;
+            self.speed_contributions.dueling =
+                (200.0 * self.adjusted_stats.guts).powf(0.708) * 0.0001;
+            self.target_speed += self.speed_contributions.dueling;
         }
         if self.in_spot_struggle {
-            self.target_speed += (500.0 * self.adjusted_stats.guts).powf(0.6) * 0.0001;
+            self.speed_contributions.spot_struggle =
+                (500.0 * self.adjusted_stats.guts).powf(0.6) * 0.0001;
+            self.target_speed += self.speed_contributions.spot_struggle;
         }
         if self.lane_change_speed > 0.0 && !self.lane_movement_skills_active.is_empty() {
             self.target_speed += (0.0002 * self.adjusted_stats.power).sqrt();

@@ -18,12 +18,18 @@ const SPURT_BUFFER_METERS: f64 = 60.0;
 /// The runner's wisdom roll is compared against `subpar_accept_chance` out of
 /// this denominator.
 const WIT_ROLL_DENOMINATOR: u32 = 100_000;
-/// Every cause `status_modifier` composes, in the order the ledger reports them.
-const STATUS_CAUSES: [StatusCause; 4] = [
+/// Every cause the ledger prices, in the order it reports them.
+///
+/// Wider than what `status_modifier` composes: HP drain is quadratic in speed,
+/// so a mechanic that only makes the runner faster still burns HP. Pace-up and
+/// dueling are here for exactly that reason.
+const STATUS_CAUSES: [StatusCause; 6] = [
     StatusCause::Downhill,
     StatusCause::Rushed,
     StatusCause::SpotStruggle,
     StatusCause::PaceDown,
+    StatusCause::PaceUp,
+    StatusCause::Dueling,
 ];
 
 /// HP-budget policy implementing the live-game stamina model.
@@ -185,21 +191,35 @@ impl StaminaPolicy for GameStaminaPolicy {
     }
 
     fn tick(&mut self, state: &RaceStateSlice, dt: f64) {
+        let speed = state.current_speed;
         let applied = self.status_modifier(state);
-        let drain = self.hp_per_second_at(state, state.current_speed, applied) * dt;
+        let drain = self.hp_per_second_at(state, speed, applied) * dt;
 
-        // Price every active cause against this same tick with that cause off.
-        // An inactive cause contributed nothing, so skip the arithmetic.
+        // Price every active cause against this same tick with that cause gone
+        // entirely — both the consumption multiplier it applied and the speed it
+        // supplied. Removing only the multiplier would report dueling and
+        // pace-up as free, which they are not: drain is quadratic in speed.
+        //
+        // The speed half assumes the contribution landed one-for-one in
+        // `current_speed`. It is a target-speed term and the runner converges on
+        // its target, so this holds except mid-acceleration, where it slightly
+        // overstates. Pricing it exactly would mean re-simulating the race
+        // without the mechanic, which is the same thing design Decision 2 ruled
+        // out for the multiplier channel.
         for cause in STATUS_CAUSES {
             if !cause.is_active_in(state) {
                 continue;
             }
-            let without = self.status_modifier_without(state, Some(cause));
-            let amount = drain - self.hp_per_second_at(state, state.current_speed, without) * dt;
+            let without_modifier = self.status_modifier_without(state, Some(cause));
+            let without_speed = speed - cause.speed_in(state);
+            let amount = drain - self.hp_per_second_at(state, without_speed, without_modifier) * dt;
             self.ledger.add_cause(cause, amount);
         }
 
-        self.ledger.baseline_spent += self.hp_per_second_at(state, state.current_speed, 1.0) * dt;
+        // The reference point: no multiplier, and none of the speed any mechanic
+        // supplied.
+        let neutral_speed = speed - state.speed_contributions.total();
+        self.ledger.baseline_spent += self.hp_per_second_at(state, neutral_speed, 1.0) * dt;
         self.ledger.total_spent += drain;
 
         self.current_health -= drain;
@@ -261,6 +281,7 @@ mod tests {
     use crate::shared_kernel::language::{DistanceType, Orientation, Surface};
     use crate::shared_kernel::rng::Xoshiro256StarStar;
     use crate::skills::effect::PositionKeepState;
+    use crate::stamina::policy::SpeedContributions;
 
     fn course() -> CourseData {
         CourseData {
@@ -295,6 +316,7 @@ mod tests {
             pos_keep_strategy: None,
             pos: 0.0,
             current_speed: speed,
+            speed_contributions: SpeedContributions::default(),
         }
     }
 

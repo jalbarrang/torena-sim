@@ -613,6 +613,7 @@ impl Runner {
                 pos_keep_strategy: Some(self.position_keep_strategy),
                 pos: self.position,
                 current_speed: self.current_speed,
+                speed_contributions: self.speed_contributions,
             };
             let late_race_target_speed = self.base_target_speed_per_phase[2];
             let (transition, speed) = self.health_policy.get_last_spurt_pair(

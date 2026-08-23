@@ -1495,9 +1495,11 @@ fn skill_activation_map_to_wasm(
 /// Where a runner's HP went, crossing back to JS.
 ///
 /// Every cause amount is a **counterfactual**: the HP the race actually cost
-/// minus what it would have cost with that cause inactive. Negative is a
-/// saving. The causes do not sum to `totalSpent - baselineSpent`; overlapping
-/// mechanics are each priced against a baseline where the other still applies.
+/// minus what it would have cost with that cause gone — both the consumption
+/// multiplier it applied and the speed it supplied, since drain is quadratic in
+/// speed. Negative is a saving. The causes do not sum to
+/// `totalSpent - baselineSpent`; overlapping mechanics are each priced against
+/// a baseline where the other still applies.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WasmStaminaLedger {
@@ -1513,6 +1515,11 @@ pub struct WasmStaminaLedger {
     pub spot_struggle: f64,
     /// Amount attributed to pace-down (negative: a saving).
     pub pace_down: f64,
+    /// Amount attributed to speed-raising position keeping. No consumption
+    /// multiplier is involved; the cost is purely the extra speed.
+    pub pace_up: f64,
+    /// Amount attributed to dueling, likewise entirely through speed.
+    pub dueling: f64,
     /// HP restored by recovery effects, as the clamped delta.
     pub total_recovered: f64,
     /// HP removed by negative-modifier effects (HP-drain debuffs).
@@ -1532,6 +1539,8 @@ impl From<&StaminaLedger> for WasmStaminaLedger {
             rushed: l.rushed,
             spot_struggle: l.spot_struggle,
             pace_down: l.pace_down,
+            pace_up: l.pace_up,
+            dueling: l.dueling,
             total_recovered: l.total_recovered,
             total_drained_by_effects: l.total_drained_by_effects,
             recovery_procs: l.recovery_procs,
