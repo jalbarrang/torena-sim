@@ -31,6 +31,7 @@ use honse_sim::shared_kernel::params::{RaceParameters, StatLine};
 use honse_sim::skills::effect::{SkillRarity, SkillTarget};
 use honse_sim::skills::model::{RawSkillEffect, Skill, SkillAlternative};
 use honse_sim::skills::value_scaling::ValueScalingPolicy;
+use honse_sim::stamina::ledger::StaminaLedger;
 use honse_sim::vacuum::collectors::{CompareData, CompareRoundData};
 use honse_sim::vacuum::simulation::CompareSimParams;
 use honse_sim::vacuum::SimulationSettings as VacuumSettings;
@@ -1491,6 +1492,63 @@ fn skill_activation_map_to_wasm(
         .collect()
 }
 
+/// Where a runner's HP went, crossing back to JS.
+///
+/// Every cause amount is a **counterfactual**: the HP the race actually cost
+/// minus what it would have cost with that cause gone — both the consumption
+/// multiplier it applied and the speed it supplied, since drain is quadratic in
+/// speed. Negative is a saving. The causes do not sum to
+/// `totalSpent - baselineSpent`; overlapping mechanics are each priced against
+/// a baseline where the other still applies.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmStaminaLedger {
+    /// HP the runner would have spent with no status mechanic active.
+    pub baseline_spent: f64,
+    /// HP actually drained.
+    pub total_spent: f64,
+    /// Amount attributed to downhill mode (negative: a saving).
+    pub downhill: f64,
+    /// Amount attributed to being rushed.
+    pub rushed: f64,
+    /// Amount attributed to spot-struggle.
+    pub spot_struggle: f64,
+    /// Amount attributed to pace-down (negative: a saving).
+    pub pace_down: f64,
+    /// Amount attributed to speed-raising position keeping. No consumption
+    /// multiplier is involved; the cost is purely the extra speed.
+    pub pace_up: f64,
+    /// Amount attributed to dueling, likewise entirely through speed.
+    pub dueling: f64,
+    /// HP restored by recovery effects, as the clamped delta.
+    pub total_recovered: f64,
+    /// HP removed by negative-modifier effects (HP-drain debuffs).
+    pub total_drained_by_effects: f64,
+    /// Number of recovery effects that actually restored HP.
+    pub recovery_procs: u32,
+    /// Max HP for this run.
+    pub max_hp: f64,
+}
+
+impl From<&StaminaLedger> for WasmStaminaLedger {
+    fn from(l: &StaminaLedger) -> Self {
+        WasmStaminaLedger {
+            baseline_spent: l.baseline_spent,
+            total_spent: l.total_spent,
+            downhill: l.downhill,
+            rushed: l.rushed,
+            spot_struggle: l.spot_struggle,
+            pace_down: l.pace_down,
+            pace_up: l.pace_up,
+            dueling: l.dueling,
+            total_recovered: l.total_recovered,
+            total_drained_by_effects: l.total_drained_by_effects,
+            recovery_procs: l.recovery_procs,
+            max_hp: l.max_hp,
+        }
+    }
+}
+
 /// Rich per-runner, per-round compare data crossing back to JS.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1546,6 +1604,10 @@ pub struct WasmCompareRoundData {
     pub non_full_spurt_delay_distance: Option<f64>,
     /// Whether the runner held first entering late race.
     pub first_position_in_late_race: bool,
+    /// Where this runner's HP went. Absent on engines without the ledger, which
+    /// consumers must report as unavailable rather than as zeros.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stamina_ledger: Option<WasmStaminaLedger>,
     /// Ids of skills used this round (in activation order).
     pub used_skills: Vec<String>,
     /// Whether the runner finished.
@@ -1579,6 +1641,7 @@ impl From<&CompareRoundData> for WasmCompareRoundData {
             non_full_spurt_velocity_diff: d.non_full_spurt_velocity_diff,
             non_full_spurt_delay_distance: d.non_full_spurt_delay_distance,
             first_position_in_late_race: d.first_position_in_late_race,
+            stamina_ledger: d.stamina_ledger.as_ref().map(WasmStaminaLedger::from),
             used_skills: d.used_skills.clone(),
             finished: d.finished,
             finish_position: d.finish_position,

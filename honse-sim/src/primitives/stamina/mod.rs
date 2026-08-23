@@ -4,5 +4,6 @@
 //! last-spurt / spurt-distance **domain service**.
 
 pub mod game_policy;
+pub mod ledger;
 pub mod policy;
 pub mod spurt;

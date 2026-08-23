@@ -7,6 +7,7 @@
 use crate::events::{ActiveEffectView, RunnerObservation, StaticEffectView, UsedTargetedView};
 use crate::runner::Runner;
 use crate::shared_kernel::ids::RunnerId;
+use crate::stamina::ledger::StaminaLedger;
 
 /// Read-only observation view of a [`Runner`] (the `RunnerObservation` port).
 impl RunnerObservation for Runner {
@@ -27,6 +28,9 @@ impl RunnerObservation for Runner {
     }
     fn current_health(&self) -> f64 {
         self.health_policy.current_health()
+    }
+    fn stamina_ledger(&self) -> Option<StaminaLedger> {
+        self.health_policy.ledger().copied()
     }
     fn start_delay(&self) -> f64 {
         self.start_delay

@@ -9,6 +9,36 @@
 
 use crate::shared_kernel::language::{Phase, Strategy};
 use crate::skills::effect::PositionKeepState;
+use crate::stamina::ledger::StaminaLedger;
+
+/// Each mechanic's additive contribution to this tick's target speed, in m/s.
+///
+/// HP drain is quadratic in speed, so a mechanic that only makes the runner go
+/// faster still burns HP even when it touches no consumption multiplier. These
+/// are what let the ledger price that channel.
+///
+/// Sign follows the effect: pace-down is negative because it slows the runner.
+/// Position keep is stored as a delta rather than its coefficient because the
+/// coefficient multiplies only the phase-base plus section modifier, not the
+/// whole target speed (`physics.rs` — `update_target_speed`).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct SpeedContributions {
+    /// `(phase base + section modifier) * (pos_keep_speed_coef - 1)`.
+    pub position_keep: f64,
+    /// Downhill mode's `0.3 + slopePer/100000`.
+    pub downhill: f64,
+    /// Dueling's `(200 * guts)^0.708 * 1e-4`.
+    pub dueling: f64,
+    /// Spot-struggle's `(500 * guts)^0.6 * 1e-4`.
+    pub spot_struggle: f64,
+}
+
+impl SpeedContributions {
+    /// Every contribution together — the speed the runner owes to mechanics.
+    pub fn total(&self) -> f64 {
+        self.position_keep + self.downhill + self.dueling + self.spot_struggle
+    }
+}
 
 /// The slice of live runner state the stamina policy needs each tick.
 ///
@@ -31,6 +61,8 @@ pub struct RaceStateSlice {
     pub pos: f64,
     /// Current speed in m/s.
     pub current_speed: f64,
+    /// What each mechanic added to this tick's target speed.
+    pub speed_contributions: SpeedContributions,
 }
 
 /// The stats the policy reads at [`init`](StaminaPolicy::init) time (post-green
@@ -75,6 +107,14 @@ pub trait StaminaPolicy {
     fn is_max_spurt(&self) -> bool;
     /// Current absolute HP.
     fn current_health(&self) -> f64;
+    /// Where this runner's HP went, if the policy records it.
+    ///
+    /// `None` means the policy does not model HP at all, which is different
+    /// from a race in which nothing happened. Consumers report it as
+    /// unavailable rather than as zeros.
+    fn ledger(&self) -> Option<&StaminaLedger> {
+        None
+    }
 }
 
 /// A no-op policy: infinite HP, never spurts. Mirrors `NoopHpPolicy`.
@@ -130,11 +170,13 @@ mod tests {
             pos_keep_strategy: None,
             pos: 0.0,
             current_speed: 20.0,
+            speed_contributions: SpeedContributions::default(),
         };
         policy.tick(&state, 1.0);
         assert!(policy.has_remaining_health());
         assert_eq!(policy.health_ratio_remaining(), 1.0);
         assert_eq!(policy.get_last_spurt_pair(&state, 25.0, 20.0), (-1.0, 25.0));
         assert!(!policy.is_max_spurt());
+        assert!(policy.ledger().is_none());
     }
 }

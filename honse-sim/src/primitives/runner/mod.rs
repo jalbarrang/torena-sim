@@ -33,7 +33,7 @@ use crate::skills::effect::{PositionKeepState, SkillTarget, SkillType};
 use crate::skills::model::{
     ActiveSkill, ActiveTargetedSkill, PendingSkill, PendingTargetedSkill, Skill,
 };
-use crate::stamina::policy::StaminaPolicy;
+use crate::stamina::policy::{SpeedContributions, StaminaPolicy};
 
 use self::lifecycle::RunnerAptitudes;
 use self::physics::{Hill, SpeedModifiers};
@@ -464,6 +464,9 @@ pub struct Runner {
     pub position_keep_state: PositionKeepState,
     /// Speed coefficient applied by the current state.
     pub pos_keep_speed_coef: f64,
+    /// What each mechanic added to this tick's target speed (m/s), for the
+    /// stamina ledger's speed-channel attribution.
+    pub speed_contributions: SpeedContributions,
     /// Cooldown timer gating re-entry into a state.
     pub pos_keep_next_timer: Timer,
     /// Behind-distance threshold at which a pace-up/down state exits.
