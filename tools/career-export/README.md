@@ -29,16 +29,43 @@ a disagreement is reported in the import dialog.
 
 ## Usage
 
+Needs Python 3.10 or newer and the `frida` package.
+
+With plain Python:
+
+```bash
+pip install frida
+python3 career_export.py --out career-export.json
+```
+
+On Windows use `py -3` if `python3` is not on PATH. If `pip install frida` hits
+a permissions error, add `--user`, or work in a venv:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate           # Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install frida
+python3 career_export.py --out career-export.json
+```
+
+With [uv](https://docs.astral.sh/uv/), which reads the dependency header at the
+top of the script and needs no install step:
+
 ```bash
 uv run career_export.py --out career-export.json
 ```
 
-Start it, then open the skill-learning screen of a **running career**. The hook
+Start it, then open the skill-learning screen of a running career. The hook
 fires on `BeginView`, the file is written, and the script exits. Add `--debug`
 to write `career_export.log`.
 
-The script refuses to write a file when the career read is incomplete. A JSON with zeroed stats looks valid to the planner and would
-silently produce a wrong plan, which is worse than no file at all.
+If it says the career object is not latched yet, leave the skill screen and
+open it again. `WorkSingleModeData` goes quiet while a screen sits idle, so the
+pointer it needs only appears once a career screen redraws.
+
+The script refuses to write a file when the career read is incomplete. A JSON
+with zeroed stats looks valid to whatever reads it and would silently produce a
+wrong plan, which is worse than no file at all.
 
 ## How it reads
 
