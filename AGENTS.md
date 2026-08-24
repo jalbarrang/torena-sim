@@ -31,7 +31,7 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 
 ## Rules
 
-- **Rust-only boundary:** Keep frontend code, Node application tooling, application state, game-data extraction, and deployment outside this workspace. npm commands in this repository only package the generated WASM artifact.
+- **Rust-only boundary:** Keep frontend code, Node application tooling, application state, and deployment outside this workspace. npm commands in this repository only package the generated WASM artifact. The one exception is `tools/`, which holds standalone capture utilities that produce inputs for downstream consumers; nothing in the Rust workspace may depend on it.
 - **Crate publication:** Publish only `honse-sim` to crates.io. Keep `honse-sim-wasm` configured with `publish = false`.
 - **Contribution licensing:** Do not accept external code contributions until the project has an approved contributor agreement with relicensing permission.
 - **Shared version:** Use `workspace.package.version` for the Rust crate, WASM adapter, npm package, Git tag, and GitHub Release.
@@ -55,6 +55,7 @@ honse-sim-wasm/            external DTO and WebAssembly adapter
 docs/mechanics/            mechanics evidence, formulas, and limitations
 docs/simulation/           engine design patterns
 scripts/                   local quality, package, release, and hook scripts
+tools/                     standalone capture utilities, outside the Rust workspace
 ```
 
 ## Gotchas

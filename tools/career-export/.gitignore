@@ -1,0 +1,5 @@
+# Captured career data and run artefacts. Exports describe a real player's
+# account, so they stay out of the repository.
+*.json
+*.log
+__pycache__/
