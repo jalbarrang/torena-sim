@@ -120,6 +120,29 @@ fn uma_id_from_outfit(outfit_id: &str) -> String {
     outfit_id.chars().take(4).collect()
 }
 
+/// Order a runner's skills by ascending skill id.
+///
+/// The game checks skill activations in id order, so a lower-id skill can
+/// trigger a higher-id one on the same frame but not the reverse (mechanics
+/// § activate_count_x). The step kernel walks this vector to build triggers,
+/// and draws each trigger's random activation region from the shared skill
+/// PRNG as it goes, so the vector's order fixes both the check order and which
+/// skill consumes which random draw. Sorting here makes the documented rule
+/// hold for every caller rather than leaving it an unstated precondition.
+///
+/// Ids are compared numerically: they vary in length, so a lexicographic
+/// compare would order `100602211` before `920671`. Variant-suffixed ids
+/// (`200331-2`) sort on their base and tie-break on the full id.
+fn sort_skills_by_id(mut skills: Vec<Skill>) -> Vec<Skill> {
+    skills.sort_by(|a, b| {
+        let left = a.skill_id.base().parse::<u64>().unwrap_or(u64::MAX);
+        let right = b.skill_id.base().parse::<u64>().unwrap_or(u64::MAX);
+        left.cmp(&right)
+            .then_with(|| a.skill_id.as_str().cmp(b.skill_id.as_str()))
+    });
+    skills
+}
+
 impl Runner {
     /// Build a runner from its input DTO, deriving base + adjusted stats for the
     /// given course/ground. Runtime state is placeholder until
@@ -155,7 +178,7 @@ impl Runner {
             adjusted_stats,
             pristine_base_stats: base_stats,
             pristine_adjusted_stats: adjusted_stats,
-            skills: props.skills,
+            skills: sort_skills_by_id(props.skills),
             forced_positions: props.forced_positions,
             injected_debuffs: props.injected_debuffs,
             forced_rushed_regions: props.forced_rushed_regions,
