@@ -8,6 +8,7 @@ use crate::contested::collectors::{
     CollectedData, RaceEventLog, RaceEventLogCollector, RaceSimDataCollector,
 };
 use crate::contested::race::{Race, SimulationSettings};
+use crate::contested::replay::{RaceReplay, RaceReplayCollector};
 use uma_sim_primitives::compare::{CompareData, CompareDataCollector};
 use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::mob::{generate_mob_runners, CONTESTED_FILL_MOB_STATS};
@@ -94,6 +95,8 @@ pub struct RaceSimResult {
     pub collected: CollectedData,
     /// Per-round logged race events (state-transition projection).
     pub event_logs: RaceEventLog,
+    /// Per-round replays in the game's own result shape.
+    pub replays: Vec<RaceReplay>,
 }
 
 /// Errors raised validating / running a simulation.
@@ -165,6 +168,8 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
     race.subscribe(collector.handle());
     let event_log = RaceEventLogCollector::new();
     race.subscribe(event_log.handle());
+    let replay = RaceReplayCollector::new();
+    race.subscribe(replay.handle());
 
     let mut finish_orders: Vec<Vec<FinishEntry>> = Vec::with_capacity(params.nsamples);
     for i in 0..params.nsamples {
@@ -177,6 +182,7 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
         finish_orders,
         collected: collector.result(),
         event_logs: event_log.result(),
+        replays: replay.result(),
     })
 }
 
@@ -382,6 +388,33 @@ mod tests {
         assert_eq!(result.collected.rounds.len(), 3);
         assert_eq!(result.collected.rounds[0].focus.len(), 1);
         assert!(!result.collected.rounds[0].focus[0].samples.is_empty());
+    }
+
+    #[test]
+    fn replay_matches_the_finish_order_and_covers_the_whole_field() {
+        let distance = params(1).course.distance as f32;
+        let result = run_race_sim(params(1)).expect("sim runs");
+        let replay = &result.replays[0];
+        let order = &result.finish_orders[0];
+
+        assert_eq!(replay.results.len(), DEFAULT_FIELD_SIZE);
+        for frame in &replay.frames {
+            assert_eq!(frame.horses.len(), DEFAULT_FIELD_SIZE);
+        }
+        // The winner's row says 0, and its raw time is the finish time.
+        let winner = replay.results[order[0].runner_id.0 as usize];
+        assert_eq!(winner.finish_order, 0);
+        assert!((f64::from(winner.finish_time_raw) - order[0].finish_time).abs() < 1e-3);
+        assert_eq!(winner.finish_diff_time, 0.0);
+        // Every gate finishes at the line in the last frame.
+        let last = replay.frames.last().expect("frames");
+        for horse in &last.horses {
+            assert_eq!(horse.distance, distance);
+        }
+        // A nine-horse field has ranks 0..=8 for guts.
+        let mut ranks: Vec<u8> = replay.results.iter().map(|r| r.guts_order).collect();
+        ranks.sort_unstable();
+        assert_eq!(ranks, (0..DEFAULT_FIELD_SIZE as u8).collect::<Vec<_>>());
     }
 
     #[test]

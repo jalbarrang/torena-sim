@@ -35,6 +35,15 @@ impl RunnerObservation for Runner {
     fn start_delay(&self) -> f64 {
         self.start_delay
     }
+    fn running_style(&self) -> i64 {
+        self.strategy as i64
+    }
+    fn guts_stat(&self) -> i64 {
+        i64::from(self.stats.guts)
+    }
+    fn wit_stat(&self) -> i64 {
+        i64::from(self.stats.wit)
+    }
     fn finished(&self) -> bool {
         self.finished
     }

@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use honse_sim::contested::collectors::{
     CollectedData, RaceEventLog, RaceLogEvent, RaceLogEventKind,
 };
+use honse_sim::contested::replay::{
+    RaceReplay, ReplayEvent, ReplayFrame, ReplayHorseFrame, ReplayHorseResult,
+};
 use honse_sim::contested::simulation::{
     ContestedCompareParams, FinishEntry, RaceSimParams, RaceSimResult,
 };
@@ -1385,6 +1388,149 @@ fn event_logs_to_wasm(logs: &RaceEventLog) -> Vec<Vec<WasmRaceEvent>> {
         .collect()
 }
 
+/// One gate's sample within a replay frame, in the game's units.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmReplayHorseFrame {
+    /// Meters from the start.
+    pub distance: f32,
+    /// 0 at the inner rail, 9999 at the outer.
+    pub lane_position: u16,
+    /// Meters per second, times 100.
+    pub speed: u16,
+    /// Remaining HP.
+    pub hp: u16,
+    /// 0 when calm; the rushed style otherwise.
+    pub temptation_mode: i8,
+    /// Gate index of the runner blocking in front, or -1.
+    pub block_front_horse_index: i8,
+}
+
+impl From<&ReplayHorseFrame> for WasmReplayHorseFrame {
+    fn from(h: &ReplayHorseFrame) -> Self {
+        WasmReplayHorseFrame {
+            distance: h.distance,
+            lane_position: h.lane_position,
+            speed: h.speed,
+            hp: h.hp,
+            temptation_mode: h.temptation_mode,
+            block_front_horse_index: h.block_front_horse_index,
+        }
+    }
+}
+
+/// One tick of a replay, every gate sampled.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmReplayFrame {
+    /// Raw seconds since the gates opened.
+    pub time: f32,
+    /// One per gate, in gate order.
+    pub horse_frame: Vec<WasmReplayHorseFrame>,
+}
+
+impl From<&ReplayFrame> for WasmReplayFrame {
+    fn from(f: &ReplayFrame) -> Self {
+        WasmReplayFrame {
+            time: f.time,
+            horse_frame: f.horses.iter().map(WasmReplayHorseFrame::from).collect(),
+        }
+    }
+}
+
+/// One gate's result row in a replay.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmReplayHorseResult {
+    /// 0 is the winner.
+    pub finish_order: i32,
+    /// Displayed (scaled) finish time.
+    pub finish_time: f32,
+    /// Displayed gap to the runner one place ahead.
+    pub finish_diff_time: f32,
+    /// Seconds lost at the gate.
+    pub start_delay_time: f32,
+    /// 0-based guts rank in the field.
+    pub guts_order: u8,
+    /// 0-based wit rank in the field.
+    pub wiz_order: u8,
+    /// Where the last spurt began; 0 when it never did.
+    pub last_spurt_start_distance: f32,
+    /// NIGE 1, SENKO 2, SASHI 3, OIKOMI 4.
+    pub running_style: u8,
+    /// Carried for shape parity.
+    pub defeat: i32,
+    /// Raw finish time in seconds.
+    pub finish_time_raw: f32,
+}
+
+impl From<&ReplayHorseResult> for WasmReplayHorseResult {
+    fn from(r: &ReplayHorseResult) -> Self {
+        WasmReplayHorseResult {
+            finish_order: r.finish_order,
+            finish_time: r.finish_time,
+            finish_diff_time: r.finish_diff_time,
+            start_delay_time: r.start_delay_time,
+            guts_order: r.guts_order,
+            wiz_order: r.wiz_order,
+            last_spurt_start_distance: r.last_spurt_start_distance,
+            running_style: r.running_style,
+            defeat: r.defeat,
+            finish_time_raw: r.finish_time_raw,
+        }
+    }
+}
+
+/// A point event in a replay.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmReplayEvent {
+    /// Raw seconds since the gates opened.
+    pub frame_time: f32,
+    /// `SimulateEventType` discriminant.
+    #[serde(rename = "type")]
+    pub kind: i8,
+    /// Event-specific parameters.
+    pub param: Vec<i32>,
+}
+
+impl From<&ReplayEvent> for WasmReplayEvent {
+    fn from(e: &ReplayEvent) -> Self {
+        WasmReplayEvent {
+            frame_time: e.frame_time,
+            kind: e.kind,
+            param: e.params.clone(),
+        }
+    }
+}
+
+/// One round in the game's `RaceSimulateData` shape. Field names follow the
+/// replay viewers' decoded form (`frame`, `horseFrame`, `horseResult`,
+/// `event`) so a consumer can hand it to code written for a capture.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmRaceReplay {
+    /// Widest leader-to-tail gap seen in any frame, in meters.
+    pub distance_diff_max: f32,
+    /// Every tick, in order.
+    pub frame: Vec<WasmReplayFrame>,
+    /// One per gate, in gate order.
+    pub horse_result: Vec<WasmReplayHorseResult>,
+    /// Chronological.
+    pub event: Vec<WasmReplayEvent>,
+}
+
+impl From<&RaceReplay> for WasmRaceReplay {
+    fn from(r: &RaceReplay) -> Self {
+        WasmRaceReplay {
+            distance_diff_max: r.distance_diff_max,
+            frame: r.frames.iter().map(WasmReplayFrame::from).collect(),
+            horse_result: r.results.iter().map(WasmReplayHorseResult::from).collect(),
+            event: r.events.iter().map(WasmReplayEvent::from).collect(),
+        }
+    }
+}
+
 /// The serialized simulation result.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1395,6 +1541,8 @@ pub struct WasmRaceSimResult {
     pub collected: Vec<WasmRoundData>,
     /// Per-round logged race events.
     pub event_logs: Vec<Vec<WasmRaceEvent>>,
+    /// Per-round replays in the game's own result shape.
+    pub replays: Vec<WasmRaceReplay>,
 }
 
 impl WasmRaceSimResult {
@@ -1408,6 +1556,7 @@ impl WasmRaceSimResult {
                 .collect(),
             collected: collected_to_wasm(&result.collected),
             event_logs: event_logs_to_wasm(&result.event_logs),
+            replays: result.replays.iter().map(WasmRaceReplay::from).collect(),
         }
     }
 }
