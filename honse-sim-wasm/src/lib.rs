@@ -262,6 +262,7 @@ impl WasmRaceSimulator {
             finish_orders,
             collected: Vec::new(),
             event_logs: Vec::new(),
+            replays: Vec::new(),
         };
         to_js(&result)
     }

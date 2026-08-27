@@ -6,9 +6,13 @@
 
 pub mod collectors;
 pub mod race;
+pub mod replay;
 pub mod simulation;
 
 pub use race::{Race, SimulationSettings};
+pub use replay::{
+    RaceReplay, RaceReplayCollector, ReplayEvent, ReplayFrame, ReplayHorseFrame, ReplayHorseResult,
+};
 pub use simulation::{
     run_contested_compare, run_race_sim, ContestedCompareParams, FinishEntry, RaceSimParams,
     RaceSimResult, SimError, DEFAULT_FIELD_SIZE, MAX_FIELD_SIZE, MIN_FIELD_SIZE,

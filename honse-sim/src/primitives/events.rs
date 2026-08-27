@@ -70,6 +70,10 @@ pub trait RaceObservation {
     fn accumulated_time(&self) -> f64 {
         0.0
     }
+    /// Widest lateral offset a runner can reach, in meters (the outer rail).
+    fn max_lane_distance(&self) -> f64 {
+        0.0
+    }
 }
 
 /// Read-only view of a `Runner` entity exposed to observers.
@@ -109,6 +113,18 @@ pub trait RunnerObservation {
     /// The runner's start delay in seconds.
     fn start_delay(&self) -> f64 {
         0.0
+    }
+    /// Running style as its numeric discriminant (1 Front Runner .. 5 Runaway).
+    fn running_style(&self) -> i64 {
+        0
+    }
+    /// Raw guts stat as entered.
+    fn guts_stat(&self) -> i64 {
+        0
+    }
+    /// Raw wit stat as entered.
+    fn wit_stat(&self) -> i64 {
+        0
     }
     /// Whether the runner has finished the round.
     fn finished(&self) -> bool {

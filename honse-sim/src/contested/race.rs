@@ -153,6 +153,9 @@ impl RaceObservation for Race {
     fn accumulated_time(&self) -> f64 {
         self.accumulated_time
     }
+    fn max_lane_distance(&self) -> f64 {
+        self.course.max_lane_distance
+    }
 }
 
 impl Race {
