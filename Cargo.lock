@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "honse-sim"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "rand_core",
  "rand_xoshiro",
@@ -50,7 +50,7 @@ dependencies = [
 
 [[package]]
 name = "honse-sim-wasm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "honse-sim",
  "js-sys",
