@@ -1185,7 +1185,7 @@ pub struct WasmRaceSimParams {
     /// Optional settings.
     #[serde(default)]
     pub settings: WasmSettings,
-    /// The 9 runners.
+    /// The field to race (2..=12 runners).
     pub runners: Vec<WasmCreateRunner>,
     /// Number of rounds.
     pub nsamples: usize,

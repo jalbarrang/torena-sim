@@ -11,5 +11,5 @@ pub mod simulation;
 pub use race::{Race, SimulationSettings};
 pub use simulation::{
     run_contested_compare, run_race_sim, ContestedCompareParams, FinishEntry, RaceSimParams,
-    RaceSimResult, SimError, FIELD_SIZE, MAX_CONTESTED_FIELD,
+    RaceSimResult, SimError, DEFAULT_FIELD_SIZE, MAX_FIELD_SIZE, MIN_FIELD_SIZE,
 };

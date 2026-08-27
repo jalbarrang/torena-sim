@@ -16,11 +16,14 @@ use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::{GroundCondition, Strategy};
 use uma_sim_primitives::shared_kernel::params::RaceParameters;
 
-/// The number of runners a standard race expects.
-pub const FIELD_SIZE: usize = 9;
+/// The smallest field a race can be run with.
+pub const MIN_FIELD_SIZE: usize = 2;
 
-/// The maximum field size for a contested compare (compared runners + mobs).
-pub const MAX_CONTESTED_FIELD: usize = 12;
+/// The largest field a race can be run with.
+pub const MAX_FIELD_SIZE: usize = 12;
+
+/// The field size a standard race uses when the caller has no preference.
+pub const DEFAULT_FIELD_SIZE: usize = 9;
 
 /// Inputs to [`run_race_sim`].
 pub struct RaceSimParams {
@@ -32,7 +35,7 @@ pub struct RaceSimParams {
     pub parameters: RaceParameters,
     /// Simulation settings (mode, toggles, sample budget).
     pub settings: SimulationSettings,
-    /// The 9 runners to race.
+    /// The field to race, [`MIN_FIELD_SIZE`]..=[`MAX_FIELD_SIZE`] runners.
     pub runners: Vec<CreateRunner>,
     /// Number of rounds to simulate.
     pub nsamples: usize,
@@ -55,7 +58,7 @@ pub struct ContestedCompareParams {
     /// Compared runners, added first and captured by the compare collector.
     pub runners: Vec<CreateRunner>,
     /// When `Some(n)`, pad the field with generated mobs to exactly `n`
-    /// runners (`runners.len()..=MAX_CONTESTED_FIELD`; `n == runners.len()` is
+    /// runners (`runners.len()..=MAX_FIELD_SIZE`; `n == runners.len()` is
     /// an accepted no-op). `None` runs only the compared runners.
     pub fill_to: Option<usize>,
     /// Flat stat line for fill mobs. `None` uses
@@ -98,11 +101,11 @@ pub struct RaceSimResult {
 pub enum SimError {
     /// `nsamples` must be a positive integer.
     InvalidSamples,
-    /// The field must contain exactly [`FIELD_SIZE`] runners.
+    /// The field must hold [`MIN_FIELD_SIZE`]..=[`MAX_FIELD_SIZE`] runners.
     WrongRunnerCount(usize),
-    /// Contested compare requires 2..=[`MAX_CONTESTED_FIELD`] compared runners.
+    /// Contested compare requires [`MIN_FIELD_SIZE`]..=[`MAX_FIELD_SIZE`] compared runners.
     ContestedRunnerCount(usize),
-    /// `fill_to` must be within `runners.len()..=MAX_CONTESTED_FIELD`.
+    /// `fill_to` must be within `runners.len()..=MAX_FIELD_SIZE`.
     ContestedFillTo {
         /// The rejected `fill_to` value.
         fill_to: usize,
@@ -118,16 +121,16 @@ impl std::fmt::Display for SimError {
             SimError::WrongRunnerCount(n) => {
                 write!(
                     f,
-                    "run_race_sim expects exactly {FIELD_SIZE} runners, got {n}"
+                    "run_race_sim expects {MIN_FIELD_SIZE}..={MAX_FIELD_SIZE} runners, got {n}"
                 )
             }
             SimError::ContestedRunnerCount(n) => write!(
                 f,
-                "run_contested_compare expects 2..={MAX_CONTESTED_FIELD} compared runners, got {n}"
+                "run_contested_compare expects {MIN_FIELD_SIZE}..={MAX_FIELD_SIZE} compared runners, got {n}"
             ),
             SimError::ContestedFillTo { fill_to, runners } => write!(
                 f,
-                "fill_to must be within {runners}..={MAX_CONTESTED_FIELD} (compared runners..=max field), got {fill_to}"
+                "fill_to must be within {runners}..={MAX_FIELD_SIZE} (compared runners..=max field), got {fill_to}"
             ),
         }
     }
@@ -144,7 +147,7 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
     if params.nsamples == 0 {
         return Err(SimError::InvalidSamples);
     }
-    if params.runners.len() != FIELD_SIZE {
+    if !(MIN_FIELD_SIZE..=MAX_FIELD_SIZE).contains(&params.runners.len()) {
         return Err(SimError::WrongRunnerCount(params.runners.len()));
     }
 
@@ -205,11 +208,11 @@ pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareDa
 /// Validate contested params and construct the race field: compared runners
 /// first (their ids become the compare focus), then mob padding to `fill_to`.
 fn build_contested_race(params: ContestedCompareParams) -> Result<(Race, Vec<RunnerId>), SimError> {
-    if !(2..=MAX_CONTESTED_FIELD).contains(&params.runners.len()) {
+    if !(MIN_FIELD_SIZE..=MAX_FIELD_SIZE).contains(&params.runners.len()) {
         return Err(SimError::ContestedRunnerCount(params.runners.len()));
     }
     if let Some(fill_to) = params.fill_to {
-        if !(params.runners.len()..=MAX_CONTESTED_FIELD).contains(&fill_to) {
+        if !(params.runners.len()..=MAX_FIELD_SIZE).contains(&fill_to) {
             return Err(SimError::ContestedFillTo {
                 fill_to,
                 runners: params.runners.len(),
@@ -338,13 +341,33 @@ mod tests {
     }
 
     #[test]
-    fn rejects_wrong_runner_count() {
-        let mut p = params(1);
-        p.runners.pop();
+    fn rejects_field_sizes_outside_the_supported_range() {
+        let mut too_small = params(1);
+        too_small.runners.truncate(MIN_FIELD_SIZE - 1);
         assert!(matches!(
-            run_race_sim(p),
-            Err(SimError::WrongRunnerCount(8))
+            run_race_sim(too_small),
+            Err(SimError::WrongRunnerCount(1))
         ));
+
+        let mut too_large = params(1);
+        let extra = too_large.runners[0].clone();
+        too_large.runners.resize(MAX_FIELD_SIZE + 1, extra);
+        assert!(matches!(
+            run_race_sim(too_large),
+            Err(SimError::WrongRunnerCount(13))
+        ));
+    }
+
+    #[test]
+    fn races_any_field_size_within_the_supported_range() {
+        for size in [MIN_FIELD_SIZE, DEFAULT_FIELD_SIZE, MAX_FIELD_SIZE] {
+            let mut p = params(1);
+            let extra = p.runners[0].clone();
+            p.runners.resize(size, extra);
+            let result = run_race_sim(p)
+                .unwrap_or_else(|err| panic!("field of {size} should race, got {err}"));
+            assert_eq!(result.finish_orders[0].len(), size);
+        }
     }
 
     #[test]
@@ -352,7 +375,7 @@ mod tests {
         let result = run_race_sim(params(3)).expect("sim runs");
         assert_eq!(result.finish_orders.len(), 3);
         for order in &result.finish_orders {
-            assert_eq!(order.len(), FIELD_SIZE);
+            assert_eq!(order.len(), DEFAULT_FIELD_SIZE);
             assert!(order[0].finish_time > 0.0);
         }
         // Focus runner 0 traced over each round.
@@ -529,7 +552,7 @@ mod tests {
                 runner_props("a", Strategy::FrontRunner),
                 runner_props("b", Strategy::FrontRunner),
             ],
-            Some(FIELD_SIZE),
+            Some(DEFAULT_FIELD_SIZE),
         ))
         .expect("contested compare runs");
 
