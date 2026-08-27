@@ -39,9 +39,9 @@ impl std::error::Error for SimError {}
 ///
 /// The compare family races a small vacuum field (typically a single runner)
 /// over `nsamples` rounds and projects the rich per-runner [`CompareData`]
-/// read-model. Unlike [`crate::contested::run_race_sim`] there is no [`crate::contested::FIELD_SIZE`] requirement —
-/// the orchestration runs each contestant in its own vacuum race and diffs the
-/// collected telemetry on the TS side.
+/// read-model. Unlike [`crate::contested::run_race_sim`] there is no field-size
+/// requirement — the orchestration runs each contestant in its own vacuum race
+/// and diffs the collected telemetry on the TS side.
 pub struct CompareSimParams {
     /// The course to race.
     pub course: CourseData,
