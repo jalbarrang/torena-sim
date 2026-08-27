@@ -20,7 +20,7 @@ The engine does these steps for each tick:
 6. Coordinate dueling and spot struggle.
 7. Send lifecycle events to observers.
 
-The standard race use case uses nine runners. The contested comparison use case accepts 2 to 12 runners and can add generated mob runners.
+The standard race and contested comparison use cases accept 2 to 12 runners. The default standard field has nine runners, and contested comparison can add generated mob runners.
 
 Primary code:
 
