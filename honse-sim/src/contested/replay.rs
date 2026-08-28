@@ -233,7 +233,7 @@ impl RaceObserver for ReplayObserver {
     }
 
     fn on_debuff_routed(&mut self, source: RunnerId, target: RunnerId, skill_id: &SkillId) {
-        let target_bit = 1_i32.checked_shl(target.0).unwrap_or(0);
+        let target_bit = 1_i32 << target.0;
         let mut inner = self.inner.borrow_mut();
         *inner
             .target_masks
@@ -272,10 +272,7 @@ impl RaceObserver for ReplayObserver {
                 .round()
                 .clamp(0.0, f64::from(u16::MAX)) as u16,
             temptation_mode: temptation_mode(runner.is_rushed(), running_style),
-            block_front_horse_index: runner
-                .front_blocker()
-                .and_then(|id| i8::try_from(id.0).ok())
-                .unwrap_or(NO_BLOCKER),
+            block_front_horse_index: runner.front_blocker().map_or(NO_BLOCKER, |id| id.0 as i8),
         };
 
         let newly_used: Vec<String> = {

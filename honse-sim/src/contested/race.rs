@@ -896,8 +896,6 @@ fn resolve_field_inputs<'a>(
 ) -> FieldInputs<'a> {
     let front_blocker = front_blocking_runner(runner, snapshots, horse_lane);
     FieldInputs {
-        // Preserve the lane-drift behavior that previously used the same
-        // front-runner approximation as a boolean.
         side_blocked: front_blocker.is_some(),
         front_blocker,
         overtaking: is_overtaking_runner(runner, snapshots, horse_lane),
