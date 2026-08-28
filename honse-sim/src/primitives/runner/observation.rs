@@ -90,6 +90,9 @@ impl RunnerObservation for Runner {
     fn is_side_blocked(&self) -> bool {
         self.is_side_blocked
     }
+    fn front_blocker(&self) -> Option<RunnerId> {
+        self.front_blocker
+    }
     fn used_skills(&self) -> Vec<&str> {
         self.used_skills.iter().map(String::as_str).collect()
     }

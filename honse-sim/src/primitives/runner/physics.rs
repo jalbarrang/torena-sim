@@ -149,6 +149,8 @@ pub struct SkillTriggerInputs<'a> {
 pub struct FieldInputs<'a> {
     /// Whether a runner blocks this one to the side (caps inward lane drift).
     pub side_blocked: bool,
+    /// Runner blocking this one in front, when a live field can identify it.
+    pub front_blocker: Option<RunnerId>,
     /// Whether this runner is overtaking (pushes the target lane outward).
     pub overtaking: bool,
     /// Resolved dueling input (coordinated vs synthetic).
@@ -516,6 +518,7 @@ impl Runner {
         }
 
         self.is_side_blocked = side_blocked;
+        self.front_blocker = field_inputs.front_blocker;
         self.is_overtaking = overtake;
     }
 
@@ -602,6 +605,7 @@ impl Runner {
         self.extra_move_lane = -1.0;
         self.force_in_speed = 0.0;
         self.is_side_blocked = false;
+        self.front_blocker = None;
         self.is_overtaking = false;
     }
 
@@ -839,6 +843,7 @@ mod tests {
     fn test_field_inputs(field: &FieldView) -> FieldInputs<'_> {
         FieldInputs {
             side_blocked: false,
+            front_blocker: None,
             overtaking: false,
             dueling: DuelingInput::Coordinated,
             position_keep: PositionKeepContext {

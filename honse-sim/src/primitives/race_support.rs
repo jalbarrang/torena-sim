@@ -282,22 +282,34 @@ pub fn resolve_debuff_targets(
         .collect()
 }
 
-/// Whether another runner blocks `runner` to the side (caps inward lane drift).
-/// A contested-field producer reads this from the live proximity snapshot.
+/// The closest runner matching the engine's front-block approximation.
+///
+/// The current lane-drift behavior also treats this as side-blocked. Keeping
+/// that boolean derived from this result preserves the existing simulation.
+pub fn front_blocking_runner(
+    runner: &Runner,
+    snapshots: &[RunnerSnapshot],
+    horse_lane: f64,
+) -> Option<RunnerId> {
+    snapshots
+        .iter()
+        .filter(|snapshot| snapshot.id != runner.id)
+        .filter(|snapshot| {
+            let lane_delta = (snapshot.current_lane - runner.current_lane).abs();
+            let distance_ahead = snapshot.position - runner.position;
+            lane_delta <= horse_lane && distance_ahead > 0.0 && distance_ahead <= 5.0
+        })
+        .min_by(|a, b| (a.position - runner.position).total_cmp(&(b.position - runner.position)))
+        .map(|snapshot| snapshot.id)
+}
+
+/// Whether the lane-drift approximation considers this runner blocked.
 pub fn has_side_blocking_runner(
     runner: &Runner,
     snapshots: &[RunnerSnapshot],
     horse_lane: f64,
 ) -> bool {
-    snapshots.iter().any(|snapshot| {
-        if snapshot.id == runner.id {
-            return false;
-        }
-        let lane_delta = (snapshot.current_lane - runner.current_lane).abs();
-        let distance_ahead = snapshot.position - runner.position;
-        let is_ahead = snapshot.position > runner.position;
-        lane_delta <= horse_lane && is_ahead && distance_ahead <= 5.0
-    })
+    front_blocking_runner(runner, snapshots, horse_lane).is_some()
 }
 
 /// Whether `runner` is overtaking another runner (pushes the target lane out).

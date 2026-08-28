@@ -12,7 +12,7 @@
 //! scalar payloads. The richer telemetry record (`race-event-log.ts`) is derived
 //! by a projection in the application layer (t-018), not emitted here.
 
-use crate::shared_kernel::ids::RunnerId;
+use crate::shared_kernel::ids::{RunnerId, SkillId};
 use crate::stamina::ledger::StaminaLedger;
 
 // `ActiveEffectView` is a pure projection value object; it was extracted into
@@ -187,6 +187,10 @@ pub trait RunnerObservation {
     fn is_side_blocked(&self) -> bool {
         false
     }
+    /// Runner blocking this one in front, if the contested field found one.
+    fn front_blocker(&self) -> Option<RunnerId> {
+        None
+    }
     /// Ids of skills the runner has used so far this round.
     fn used_skills(&self) -> Vec<&str> {
         Vec::new()
@@ -319,6 +323,8 @@ pub trait RaceObserver {
     fn on_round_start(&mut self, _race: &dyn RaceObservation, _seed: u64) {}
     /// A step of `dt` seconds is about to run.
     fn on_before_tick(&mut self, _race: &dyn RaceObservation, _dt: f64) {}
+    /// A caster's debuff was applied to a target.
+    fn on_debuff_routed(&mut self, _source: RunnerId, _target: RunnerId, _skill_id: &SkillId) {}
     /// `runner` finished a step of `dt` seconds.
     fn on_after_runner_tick(
         &mut self,
@@ -383,6 +389,13 @@ impl RaceObservers {
     pub fn emit_before_tick(&mut self, race: &dyn RaceObservation, dt: f64) {
         for observer in &mut self.observers {
             observer.on_before_tick(race, dt);
+        }
+    }
+
+    /// Emit an applied external debuff route.
+    pub fn emit_debuff_routed(&mut self, source: RunnerId, target: RunnerId, skill_id: &SkillId) {
+        for observer in &mut self.observers {
+            observer.on_debuff_routed(source, target, skill_id);
         }
     }
 

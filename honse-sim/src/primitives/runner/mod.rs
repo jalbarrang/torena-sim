@@ -241,6 +241,8 @@ pub struct Runner {
     pub lane_change_speed: f64,
     /// Whether a runner is blocking this runner's side this tick (telemetry).
     pub is_side_blocked: bool,
+    /// Runner blocking this one in front this tick, if known.
+    pub front_blocker: Option<RunnerId>,
     /// Whether this runner is overtaking this tick (telemetry).
     pub is_overtaking: bool,
 
