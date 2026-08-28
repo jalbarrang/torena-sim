@@ -425,17 +425,20 @@ impl Race {
         // (docs/mechanics/README.md § Skill Target), so the exclusion happens
         // here at application, after target resolution.
         for route in routes {
-            if let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) {
-                if route.source_team.is_some() && route.source_team == target.team {
-                    continue;
-                }
-                target.receive_targeted_effect(
-                    route.skill_id,
-                    vec![route.effect],
-                    route.source,
-                    course_distance,
-                );
+            let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) else {
+                continue;
+            };
+            if route.source_team.is_some() && route.source_team == target.team {
+                continue;
             }
+            target.receive_targeted_effect(
+                route.skill_id.clone(),
+                vec![route.effect],
+                route.source,
+                course_distance,
+            );
+            self.observers
+                .emit_debuff_routed(route.source, route.target, &route.skill_id);
         }
     }
 
@@ -494,6 +497,7 @@ fn resolve_field_inputs<'a>(
 ) -> FieldInputs<'a> {
     FieldInputs {
         side_blocked: condition_value(runner, "blocked_side") == 1,
+        front_blocker: None,
         overtaking: condition_value(runner, "overtake") == 1,
         dueling: DuelingInput::Artificial(dueling_rates),
         position_keep,

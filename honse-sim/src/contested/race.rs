@@ -16,7 +16,7 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    build_field_snapshot, build_field_view, has_side_blocking_runner, is_overtaking_runner,
+    build_field_snapshot, build_field_view, front_blocking_runner, is_overtaking_runner,
     proximity_snapshots, resolve_debuff_targets, FieldOrderTracker, FieldSnapshot,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
@@ -471,17 +471,20 @@ impl Race {
         // (docs/mechanics/README.md § Skill Target), so the exclusion happens
         // here at application, after target resolution.
         for route in routes {
-            if let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) {
-                if route.source_team.is_some() && route.source_team == target.team {
-                    continue;
-                }
-                target.receive_targeted_effect(
-                    route.skill_id,
-                    vec![route.effect],
-                    route.source,
-                    course_distance,
-                );
+            let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) else {
+                continue;
+            };
+            if route.source_team.is_some() && route.source_team == target.team {
+                continue;
             }
+            target.receive_targeted_effect(
+                route.skill_id.clone(),
+                vec![route.effect],
+                route.source,
+                course_distance,
+            );
+            self.observers
+                .emit_debuff_routed(route.source, route.target, &route.skill_id);
         }
     }
 
@@ -891,8 +894,12 @@ fn resolve_field_inputs<'a>(
     position_keep: PositionKeepContext,
     horse_lane: f64,
 ) -> FieldInputs<'a> {
+    let front_blocker = front_blocking_runner(runner, snapshots, horse_lane);
     FieldInputs {
-        side_blocked: has_side_blocking_runner(runner, snapshots, horse_lane),
+        // Preserve the lane-drift behavior that previously used the same
+        // front-runner approximation as a boolean.
+        side_blocked: front_blocker.is_some(),
+        front_blocker,
         overtaking: is_overtaking_runner(runner, snapshots, horse_lane),
         dueling: DuelingInput::Coordinated,
         position_keep,
@@ -903,11 +910,28 @@ fn resolve_field_inputs<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::rc::Rc;
     use uma_sim_primitives::runner::lifecycle::RunnerAptitudes;
     use uma_sim_primitives::runner::test_support::{test_course, test_race_params};
     use uma_sim_primitives::shared_kernel::language::{Aptitude, Mood};
     use uma_sim_primitives::shared_kernel::params::StatLine;
+
+    struct RoutedDebuffObserver {
+        targets: Rc<RefCell<Vec<RunnerId>>>,
+    }
+
+    impl RaceObserver for RoutedDebuffObserver {
+        fn on_debuff_routed(
+            &mut self,
+            _source: RunnerId,
+            target: RunnerId,
+            _skill_id: &uma_sim_primitives::shared_kernel::ids::SkillId,
+        ) {
+            self.targets.borrow_mut().push(target);
+        }
+    }
 
     fn props(name: &str, strategy: Strategy) -> CreateRunner {
         CreateRunner {
@@ -958,6 +982,39 @@ mod tests {
             race.add_runner(props(&format!("R{i}"), s));
         }
         race
+    }
+
+    #[test]
+    fn front_blocker_selects_the_closest_matching_runner() {
+        let mut race = race_with(3);
+        race.prepare_round(7);
+        race.runners[0].position = 100.0;
+        race.runners[0].current_lane = 1.0;
+        let snapshots = [
+            RunnerSnapshot {
+                id: RunnerId(0),
+                position: 100.0,
+                current_lane: 1.0,
+                current_speed: 20.0,
+            },
+            RunnerSnapshot {
+                id: RunnerId(1),
+                position: 104.0,
+                current_lane: 1.0,
+                current_speed: 20.0,
+            },
+            RunnerSnapshot {
+                id: RunnerId(2),
+                position: 102.0,
+                current_lane: 1.1,
+                current_speed: 20.0,
+            },
+        ];
+
+        assert_eq!(
+            front_blocking_runner(&race.runners[0], &snapshots, race.course.horse_lane),
+            Some(RunnerId(2))
+        );
     }
 
     #[test]
@@ -1176,6 +1233,10 @@ mod tests {
         race.add_runner(opponent);
         race.add_runner(teamless);
         race.prepare_round(7);
+        let routed_targets = Rc::new(RefCell::new(Vec::new()));
+        race.subscribe(Box::new(RoutedDebuffObserver {
+            targets: Rc::clone(&routed_targets),
+        }));
 
         let snapshot = build_field_snapshot(
             &mut race.runners,
@@ -1206,6 +1267,8 @@ mod tests {
         assert!(race.runners[2].modifiers.current_speed.total() < 0.0);
         assert_eq!(race.runners[3].targeted_current_speed_active.len(), 1);
         assert!(race.runners[3].modifiers.current_speed.total() < 0.0);
+        // The replay mask means "affected", so the skipped teammate is absent.
+        assert_eq!(*routed_targets.borrow(), vec![RunnerId(2), RunnerId(3)]);
     }
 
     #[test]

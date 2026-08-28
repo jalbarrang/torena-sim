@@ -14,20 +14,18 @@
 //! - a result per gate: 0-based finish order, scaled finish time, scaled gap to
 //!   the runner one place ahead, start delay, 0-based guts and wit ranks, spurt
 //!   start distance, running style, raw finish time
-//! - point events: skill activations as `[gate, skill_id, -1, 0, 0, 0]`
+//! - point events: skill activations as
+//!   `[gate, skill_id, -1, 0, target_bitmask, 0]`
 //!
 //! Serialization (the packed binary, gzip, base64) is not this crate's job; a
 //! downstream owns the bytes. This projection owns the values.
-//!
-//! What the engine cannot fill yet: `block_front_horse_index` (the field only
-//! knows *that* a runner is blocked, not by whom) and the skill event's target
-//! bitmask. Both are written as their "none" value.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RunnerObservation};
+use uma_sim_primitives::shared_kernel::ids::{RunnerId, SkillId};
 use uma_sim_primitives::shared_kernel::language::Strategy;
 
 /// Ticks per simulated second; matches the aggregate frame rate.
@@ -152,6 +150,8 @@ struct ReplayInner {
     gates: Vec<GateState>,
     /// Finish times in finishing order, for the gap to the runner ahead.
     finish_times: Vec<f64>,
+    /// Applied debuff targets keyed by caster and skill until its point event is written.
+    target_masks: HashMap<(RunnerId, String), i32>,
 }
 
 impl ReplayInner {
@@ -229,6 +229,16 @@ impl RaceObserver for ReplayObserver {
         inner.current = RaceReplay::default();
         inner.gates.clear();
         inner.finish_times.clear();
+        inner.target_masks.clear();
+    }
+
+    fn on_debuff_routed(&mut self, source: RunnerId, target: RunnerId, skill_id: &SkillId) {
+        let target_bit = 1_i32.checked_shl(target.0).unwrap_or(0);
+        let mut inner = self.inner.borrow_mut();
+        *inner
+            .target_masks
+            .entry((source, skill_id.0.clone()))
+            .or_default() |= target_bit;
     }
 
     fn on_after_runner_tick(
@@ -262,7 +272,10 @@ impl RaceObserver for ReplayObserver {
                 .round()
                 .clamp(0.0, f64::from(u16::MAX)) as u16,
             temptation_mode: temptation_mode(runner.is_rushed(), running_style),
-            block_front_horse_index: NO_BLOCKER,
+            block_front_horse_index: runner
+                .front_blocker()
+                .and_then(|id| i8::try_from(id.0).ok())
+                .unwrap_or(NO_BLOCKER),
         };
 
         let newly_used: Vec<String> = {
@@ -292,6 +305,10 @@ impl RaceObserver for ReplayObserver {
         frame.horses[gate] = sample;
 
         for skill_id in newly_used {
+            let target_mask = inner
+                .target_masks
+                .remove(&(runner.id(), skill_id.clone()))
+                .unwrap_or(0);
             // A skill the engine names outside the game's numeric space has no
             // id a replay viewer could resolve; it is left out of the replay.
             let Ok(numeric) = skill_id.parse::<i32>() else {
@@ -300,7 +317,7 @@ impl RaceObserver for ReplayObserver {
             inner.current.events.push(ReplayEvent {
                 frame_time: time as f32,
                 kind: EVENT_SKILL,
-                params: vec![gate as i32, numeric, -1, 0, 0, 0],
+                params: vec![gate as i32, numeric, -1, 0, target_mask, 0],
             });
         }
     }
@@ -443,6 +460,7 @@ mod tests {
         last_spurt: bool,
         finish_time: f64,
         start_delay: f64,
+        blocker: Option<u32>,
         used: Vec<String>,
     }
     impl RunnerObservation for TestRunner {
@@ -482,6 +500,9 @@ mod tests {
         fn start_delay(&self) -> f64 {
             self.start_delay
         }
+        fn front_blocker(&self) -> Option<RunnerId> {
+            self.blocker.map(RunnerId)
+        }
         fn used_skills(&self) -> Vec<&str> {
             self.used.iter().map(String::as_str).collect()
         }
@@ -515,6 +536,7 @@ mod tests {
         a.speed = 18.63;
         a.lane = 7.03125;
         a.hp = 1180.4;
+        a.blocker = Some(1);
         let b = runner(1, 12.0);
         tick(&mut obs, 1.0 / 15.0, &[a, b]);
         obs.on_round_end(&TestRace { time: 1.0 / 15.0 });
@@ -527,7 +549,8 @@ mod tests {
         assert_eq!(frame.horses[0].speed, 1863);
         assert_eq!(frame.horses[0].lane_position, 5000);
         assert_eq!(frame.horses[0].hp, 1180);
-        assert_eq!(frame.horses[0].block_front_horse_index, NO_BLOCKER);
+        assert_eq!(frame.horses[0].block_front_horse_index, 1);
+        assert_eq!(frame.horses[1].block_front_horse_index, NO_BLOCKER);
         assert_eq!(replay.distance_diff_max, 2.0);
     }
 
@@ -655,6 +678,8 @@ mod tests {
 
         let mut r = runner(2, 10.0);
         r.used = vec!["200331".to_owned(), "not-a-game-id".to_owned()];
+        obs.on_debuff_routed(RunnerId(2), RunnerId(0), &SkillId::new("200331"));
+        obs.on_debuff_routed(RunnerId(2), RunnerId(4), &SkillId::new("200331"));
         tick(&mut obs, 1.0 / 15.0, &[r]);
         // The same skill is still in `used` next tick; it must not repeat.
         let mut again = runner(2, 20.0);
@@ -665,7 +690,7 @@ mod tests {
         let events = &collector.result()[0].events;
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].kind, EVENT_SKILL);
-        assert_eq!(events[0].params, vec![2, 200_331, -1, 0, 0, 0]);
+        assert_eq!(events[0].params, vec![2, 200_331, -1, 0, 0b1_0001, 0]);
         assert!((events[0].frame_time - 1.0 / 15.0).abs() < 1e-6);
     }
 
