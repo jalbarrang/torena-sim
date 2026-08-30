@@ -14,6 +14,11 @@ use crate::shared_kernel::language::{
     Grade, GroundCondition, Season, Strategy, TimeOfDay, Weather,
 };
 
+/// Inclusive 1-indexed order band assumed for each race phase, indexed by
+/// `Phase::index()`. Vacuum-mode only: a synthetic stand-in for real positions,
+/// not a game mechanic.
+pub type PhaseOrderRanges = [(u32, u32); 4];
+
 /// A runner's five core stats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatLine {
@@ -47,10 +52,10 @@ pub struct RaceParameters {
     /// Number of runners in the field.
     #[serde(default)]
     pub num_umas: Option<u32>,
-    /// Inclusive 1-indexed finishing-order range `[lo, hi]` this runner is
-    /// being evaluated for (used by order conditions).
+    /// Per-phase order bands this runner is assumed to hold (used by order
+    /// conditions). `None` leaves order conditions unconstrained.
     #[serde(default)]
-    pub order_range: Option<(u32, u32)>,
+    pub order_ranges: Option<PhaseOrderRanges>,
     /// The skill currently being evaluated, when relevant.
     #[serde(default)]
     pub skill_id: Option<SkillId>,
@@ -91,7 +96,7 @@ mod tests {
             time_of_day: TimeOfDay::Midday,
             grade: Grade::G1,
             num_umas: Some(18),
-            order_range: Some((1, 9)),
+            order_ranges: Some([(1, 1), (1, 3), (3, 5), (1, 9)]),
             skill_id: None,
             strategy_counts: None,
             common_skills: None,
@@ -100,6 +105,6 @@ mod tests {
         assert!(json.contains("\"timeOfDay\":"), "json was: {json}");
         let back: RaceParameters = serde_json::from_str(&json).expect("parse");
         assert_eq!(back, params);
-        assert_eq!(back.order_range, Some((1, 9)));
+        assert_eq!(back.order_ranges, Some([(1, 1), (1, 3), (3, 5), (1, 9)]));
     }
 }

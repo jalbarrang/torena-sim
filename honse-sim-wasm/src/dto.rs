@@ -891,6 +891,14 @@ pub struct WasmRaceParameters {
     pub time_of_day: i32,
     /// Grade (numeric).
     pub grade: i32,
+    /// Assumed field size the order bands are expressed against. Vacuum runs
+    /// hold a single runner, so without this the engine would judge the bands
+    /// against a field of one. Absent falls back to the real field.
+    #[serde(default)]
+    pub num_umas: Option<u32>,
+    /// Per-phase assumed order bands `[[lo, hi]; 4]` (vacuum mode only).
+    #[serde(default)]
+    pub order_ranges: Option<[[u32; 2]; 4]>,
 }
 
 impl WasmRaceParameters {
@@ -901,8 +909,10 @@ impl WasmRaceParameters {
             season: to_season(self.season)?,
             time_of_day: to_time_of_day(self.time_of_day)?,
             grade: to_grade(self.grade)?,
-            num_umas: None,
-            order_range: None,
+            num_umas: self.num_umas,
+            order_ranges: self
+                .order_ranges
+                .map(|bands| bands.map(|[lo, hi]| (lo, hi))),
             skill_id: None,
             strategy_counts: None,
             common_skills: None,
@@ -1844,6 +1854,42 @@ impl WasmCompareData {
 mod tests {
     use super::*;
     use honse_sim::skills::model::build_skill_effects;
+
+    #[test]
+    fn race_parameters_carry_per_phase_order_bands_across_the_js_boundary() {
+        let with_bands: WasmRaceParameters = serde_json::from_str(
+            r#"{
+                "ground": 1,
+                "weather": 1,
+                "season": 1,
+                "timeOfDay": 1,
+                "grade": 100,
+                "orderRanges": [[1, 1], [1, 1], [3, 4], [1, 1]]
+            }"#,
+        )
+        .expect("parse");
+
+        assert_eq!(
+            with_bands.to_domain().expect("domain").order_ranges,
+            Some([(1, 1), (1, 1), (3, 4), (1, 1)])
+        );
+    }
+
+    #[test]
+    fn race_parameters_treat_an_absent_or_undefined_order_range_as_unconstrained() {
+        let absent: WasmRaceParameters = serde_json::from_str(
+            r#"{"ground": 1, "weather": 1, "season": 1, "timeOfDay": 1, "grade": 100}"#,
+        )
+        .expect("parse");
+        assert_eq!(absent.to_domain().expect("domain").order_ranges, None);
+
+        // `present-but-undefined` keys arrive as null across the JS boundary.
+        let undefined: WasmRaceParameters = serde_json::from_str(
+            r#"{"ground": 1, "weather": 1, "season": 1, "timeOfDay": 1, "grade": 100, "orderRanges": null}"#,
+        )
+        .expect("parse");
+        assert_eq!(undefined.to_domain().expect("domain").order_ranges, None);
+    }
 
     #[test]
     fn wasm_skill_input_carries_tags_and_defaults_missing_tags() {

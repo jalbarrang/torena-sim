@@ -298,98 +298,120 @@ where
 // order_filter family
 // ============================================================
 
-/// `order_filter`: position-order conditions resolved against `order_range` and
-/// `num_umas`. `get_pos(arg, num_umas)` yields the comparison position.
+const PHASES: [Phase; 4] = [
+    Phase::EarlyRace,
+    Phase::MidRace,
+    Phase::LateRace,
+    Phase::LastSpurt,
+];
+
+/// How per-phase satisfiability accumulates across the race.
+#[derive(Clone, Copy)]
+enum OrderScan {
+    /// Each phase is judged on its own band.
+    PerPhase,
+    /// `*_continue` conditions also require every earlier phase to hold
+    /// (docs/mechanics/README.md:678).
+    Cumulative,
+}
+
+/// Narrows `p.regions` to the phase windows whose assumed order band can
+/// satisfy the comparison. `band_valid` rejects a malformed band outright;
+/// `satisfiable` decides whether a band admits the comparison.
+///
+/// Contiguous satisfiable phases merge into one window, so an unrestricted set
+/// of bands leaves the incoming regions untouched. There is deliberately no
+/// "the runner may move up in the last leg" allowance: with a band per phase
+/// that belongs in the bands, not in the comparator.
+fn order_phase_filter<V, S>(
+    p: &ConditionFilterParams<'_>,
+    scan: OrderScan,
+    band_valid: V,
+    satisfiable: S,
+) -> FilterResult
+where
+    V: Fn((u32, u32), u32) -> bool,
+    S: Fn((u32, u32), u32) -> bool,
+{
+    let (Some(bands), Some(num)) = (p.extra.order_ranges, p.extra.num_umas) else {
+        return pass(p.regions.clone());
+    };
+    if !bands.iter().all(|&band| band_valid(band, num)) {
+        return Err(ConditionError::Invalid("Invalid order range"));
+    }
+
+    let mut sat = bands.map(|band| satisfiable(band, num));
+    if let (OrderScan::Cumulative, Some(first_fail)) = (scan, sat.iter().position(|&ok| !ok)) {
+        sat[first_fail..].fill(false);
+    }
+
+    let mut windows: Vec<Region> = Vec::new();
+    for phase in PHASES {
+        if !sat[phase.index()] {
+            continue;
+        }
+        let window = Region::new(
+            phase_start(p.course.distance, phase),
+            phase_end(p.course.distance, phase),
+        );
+        match windows.last_mut() {
+            Some(last) if last.end >= window.start => last.end = window.end,
+            _ => windows.push(window),
+        }
+    }
+
+    pass(p.regions.rmap(|r| {
+        windows
+            .iter()
+            .map(|w| r.intersect(w))
+            .collect::<Vec<Region>>()
+    }))
+}
+
+/// `order_filter`: position-order conditions resolved against `order_ranges`
+/// and `num_umas`. `get_pos(arg, num_umas)` yields the comparison position.
 fn order_filter<P>(get_pos: P) -> Arc<dyn Condition>
 where
     P: Fn(i64, u32) -> f64 + Send + Sync + Copy + 'static,
 {
-    let last_leg_bounds = |course_distance: f64| {
-        Region::new(
-            phase_start(course_distance, Phase::LateRace) + 100.0,
-            course_distance,
-        )
-    };
+    let any_band = |_: (u32, u32), _: u32| true;
+    let lower_band = |(lo, hi): (u32, u32), _: u32| 1 <= lo && lo <= hi;
+    let upper_band = |(lo, hi): (u32, u32), num: u32| lo <= hi && hi <= num;
     Cond::new(ActivationSamplePolicy::Immediate)
         .eq(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            let pos = get_pos(p.arg, num);
-            if pos >= f64::from(lo) && pos <= f64::from(hi) {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            order_phase_filter(p, OrderScan::PerPhase, any_band, |(lo, hi), num| {
+                let pos = get_pos(p.arg, num);
+                pos >= f64::from(lo) && pos <= f64::from(hi)
+            })
         })
         .neq(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            let pos = get_pos(p.arg, num);
-            if pos < f64::from(lo) || pos > f64::from(hi) {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            // Satisfiable when the band holds *any* position other than `pos`,
+            // matching the rest of the family. Demanding that the band exclude
+            // `pos` outright would ask whether the inequality is guaranteed,
+            // which rejects every band wide enough to be interesting.
+            order_phase_filter(p, OrderScan::PerPhase, any_band, |(lo, hi), num| {
+                lo != hi || f64::from(lo) != get_pos(p.arg, num)
+            })
         })
         .lt(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if !(1 <= lo && lo <= hi) {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            let bounds = last_leg_bounds(p.course.distance);
-            let pos = get_pos(p.arg, num);
-            if f64::from(lo) < pos {
-                pass(p.regions.clone())
-            } else {
-                pass(p.regions.rmap(move |r| r.intersect(&bounds)))
-            }
+            order_phase_filter(p, OrderScan::PerPhase, lower_band, |(lo, _), num| {
+                f64::from(lo) < get_pos(p.arg, num)
+            })
         })
         .lte(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if !(1 <= lo && lo <= hi) {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            let bounds = last_leg_bounds(p.course.distance);
-            let pos = get_pos(p.arg, num);
-            if f64::from(lo) <= pos {
-                pass(p.regions.clone())
-            } else {
-                pass(p.regions.rmap(move |r| r.intersect(&bounds)))
-            }
+            order_phase_filter(p, OrderScan::PerPhase, lower_band, |(lo, _), num| {
+                f64::from(lo) <= get_pos(p.arg, num)
+            })
         })
         .gt(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if !(lo <= hi && hi <= num) {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            let pos = get_pos(p.arg, num);
-            if pos < f64::from(hi) {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            order_phase_filter(p, OrderScan::PerPhase, upper_band, |(_, hi), num| {
+                get_pos(p.arg, num) < f64::from(hi)
+            })
         })
         .gte(move |p| {
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if !(lo <= hi && hi <= num) {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            let pos = get_pos(p.arg, num);
-            if pos <= f64::from(hi) {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            order_phase_filter(p, OrderScan::PerPhase, upper_band, |(_, hi), num| {
+                get_pos(p.arg, num) <= f64::from(hi)
+            })
         })
         .build()
 }
@@ -403,18 +425,12 @@ fn order_in_filter(rate: f64) -> Arc<dyn Condition> {
                     "must be order_rate_inXX_continue==1",
                 ));
             }
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if lo < 1 || lo > hi {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            let change_rate = (rate * f64::from(num)).round() as u32;
-            if lo <= change_rate {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            order_phase_filter(
+                p,
+                OrderScan::Cumulative,
+                |(lo, hi), _| 1 <= lo && lo <= hi,
+                |(lo, _), num| lo <= (rate * f64::from(num)).round() as u32,
+            )
         })
         .build()
 }
@@ -428,17 +444,12 @@ fn order_out_filter(rate: f64) -> Arc<dyn Condition> {
                     "must be order_rate_outXX_continue==1",
                 ));
             }
-            let (Some((lo, hi)), Some(num)) = (p.extra.order_range, p.extra.num_umas) else {
-                return pass(p.regions.clone());
-            };
-            if !(lo <= hi && hi <= num) {
-                return Err(ConditionError::Invalid("Invalid order range"));
-            }
-            if (rate * f64::from(num)).round() as u32 <= hi {
-                pass(p.regions.clone())
-            } else {
-                pass(RegionList::new())
-            }
+            order_phase_filter(
+                p,
+                OrderScan::Cumulative,
+                |(lo, hi), num| lo <= hi && hi <= num,
+                |(_, hi), num| (rate * f64::from(num)).round() as u32 <= hi,
+            )
         })
         .build()
 }
@@ -2078,7 +2089,7 @@ mod tests {
     use crate::shared_kernel::language::{
         Grade, GroundCondition, Mood, Orientation, Season, Surface, TimeOfDay, Weather,
     };
-    use crate::shared_kernel::params::{RaceParameters, StatLine};
+    use crate::shared_kernel::params::{PhaseOrderRanges, RaceParameters, StatLine};
     use crate::skills::condition::dynamic::RunnerView;
     use crate::skills::condition::language::ConditionParser;
     use crate::skills::condition::{ApplyParams, SkillEvalRunner};
@@ -2176,7 +2187,7 @@ mod tests {
             time_of_day: TimeOfDay::Midday,
             grade: Grade::G1,
             num_umas: Some(9),
-            order_range: Some((1, 9)),
+            order_ranges: Some([(1, 9); 4]),
             skill_id: None,
             strategy_counts: None,
             common_skills: None,
@@ -2207,6 +2218,114 @@ mod tests {
             resolution,
         })
         .expect("apply")
+    }
+
+    fn apply_bands(condition: &str, distance: f64, bands: Option<PhaseOrderRanges>) -> RegionList {
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let op = parser.parse(condition).expect("parse");
+        let mut course = course();
+        course.distance = distance;
+        let runner = runner();
+        let mut extra = params();
+        extra.order_ranges = bands;
+        let regions = whole_course(&course);
+        let (out, _) = op
+            .apply(&ApplyParams {
+                regions,
+                course: &course,
+                runner: &runner,
+                extra: &extra,
+                resolution: ConditionResolution::Static,
+            })
+            .expect("apply");
+        out
+    }
+
+    #[test]
+    fn bands_are_judged_against_the_assumed_field_not_the_vacuum_field() {
+        // A vacuum run holds one runner. Judging a nine-runner band against
+        // that field rejects it as invalid and kills the whole batch, so the
+        // assumed size has to reach the resolver.
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let op = parser.parse("order>=3").expect("parse");
+        let mut course = course();
+        course.distance = 2000.0;
+        let runner = runner();
+
+        let apply = |num_umas: u32| {
+            let mut extra = params();
+            extra.order_ranges = Some([(1, 1), (1, 1), (3, 4), (1, 1)]);
+            extra.num_umas = Some(num_umas);
+            op.apply(&ApplyParams {
+                regions: whole_course(&course),
+                course: &course,
+                runner: &runner,
+                extra: &extra,
+                resolution: ConditionResolution::Static,
+            })
+        };
+
+        assert!(apply(1).is_err());
+        assert!(apply(9).is_ok());
+    }
+
+    #[test]
+    fn order_neq_asks_whether_the_band_permits_the_inequality() {
+        // A band wide enough to hold another position satisfies `order != 3`;
+        // only a band pinned to exactly 3rd cannot.
+        let wide = apply_bands("order!=3", 2000.0, Some([(1, 9); 4]));
+        assert_eq!(wide.0.len(), 1);
+        assert_eq!(wide.0[0].start, 0.0);
+        assert_eq!(wide.0[0].end, 2000.0);
+
+        let pinned = apply_bands("order!=3", 2000.0, Some([(3, 3); 4]));
+        assert!(pinned.0.is_empty());
+
+        let pinned_elsewhere = apply_bands("order!=3", 2000.0, Some([(5, 5); 4]));
+        assert_eq!(pinned_elsewhere.0.len(), 1);
+    }
+
+    #[test]
+    fn order_gte_confines_to_the_phases_whose_band_reaches_it() {
+        // Budding Blossom: a front runner sitting 1st all race but 3rd-4th in
+        // late race can still satisfy `order>=3`, but only there.
+        let regions = apply_bands("order>=3", 2000.0, Some([(1, 1), (1, 1), (3, 4), (1, 1)]));
+        assert!(!regions.0.is_empty());
+        let (lo, hi) = (
+            phase_start(2000.0, Phase::LateRace),
+            phase_end(2000.0, Phase::LateRace),
+        );
+        assert!(
+            regions.iter().all(|r| r.start >= lo && r.end <= hi),
+            "regions escaped late race: {:?}",
+            regions.0
+        );
+    }
+
+    #[test]
+    fn order_gte_is_unconstrained_without_bands() {
+        let regions = apply_bands("order>=3", 2000.0, None);
+        assert_eq!(regions.0, vec![Region::new(0.0, 2000.0)]);
+    }
+
+    #[test]
+    fn order_gte_is_empty_when_no_band_reaches_it() {
+        let regions = apply_bands("order>=3", 2000.0, Some([(1, 1); 4]));
+        assert!(regions.0.is_empty(), "{:?}", regions.0);
+    }
+
+    #[test]
+    fn order_rate_in_continue_stops_at_the_first_failing_phase() {
+        // num_umas 9, so in40 -> top 4. Early race sits 6th, so the condition
+        // has already been broken by the time late race gets back inside 4th.
+        let regions = apply_bands(
+            "order_rate_in40_continue==1",
+            2000.0,
+            Some([(6, 6), (1, 1), (1, 1), (1, 1)]),
+        );
+        assert!(regions.0.is_empty(), "{:?}", regions.0);
     }
 
     #[test]
@@ -2311,7 +2430,7 @@ mod tests {
 
     #[test]
     fn order_rate_passes_when_in_range_static_fallback() {
-        // In compare mode the static `order_filter` is used: order_range (1,9),
+        // In compare mode the static `order_filter` is used: bands (1,9) in every
         // num_umas 9; order_rate<=50 -> pos=round(9*0.5)=5, within [1,9] for the
         // <= leg, so the whole course passes and no dynamic gate is attached.
         let (regions, cond) = apply_with("order_rate<=50", ConditionResolution::Static);
