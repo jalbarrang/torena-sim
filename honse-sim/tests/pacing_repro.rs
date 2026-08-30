@@ -56,7 +56,7 @@ fn test_race_params() -> RaceParameters {
         time_of_day: TimeOfDay::Midday,
         grade: Grade::G1,
         num_umas: Some(9),
-        order_range: None,
+        order_ranges: None,
         skill_id: None,
         strategy_counts: None,
         common_skills: None,

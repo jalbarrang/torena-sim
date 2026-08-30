@@ -286,8 +286,15 @@ impl Race {
     /// Reset per-round race params for the vacuum field: the synthetic engine
     /// does not fold in field composition (no live field to count), so the
     /// strategy-count / common-skill aggregates are cleared.
+    ///
+    /// A caller-supplied `num_umas` is the *assumed* field the order bands
+    /// describe, so it wins over the vacuum field's real size (typically a
+    /// single runner). Overwriting it would judge a nine-runner band against a
+    /// field of one and reject the band as an invalid range.
     fn prepare_race(&mut self) {
-        self.race_params.num_umas = Some(self.runners.len() as u32);
+        self.race_params
+            .num_umas
+            .get_or_insert(self.runners.len() as u32);
         self.race_params.strategy_counts = None;
         self.race_params.common_skills = None;
     }
