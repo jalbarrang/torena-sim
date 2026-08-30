@@ -385,9 +385,12 @@ where
             })
         })
         .neq(move |p| {
+            // Satisfiable when the band holds *any* position other than `pos`,
+            // matching the rest of the family. Demanding that the band exclude
+            // `pos` outright would ask whether the inequality is guaranteed,
+            // which rejects every band wide enough to be interesting.
             order_phase_filter(p, OrderScan::PerPhase, any_band, |(lo, hi), num| {
-                let pos = get_pos(p.arg, num);
-                pos < f64::from(lo) || pos > f64::from(hi)
+                lo != hi || f64::from(lo) != get_pos(p.arg, num)
             })
         })
         .lt(move |p| {
@@ -2266,6 +2269,22 @@ mod tests {
 
         assert!(apply(1).is_err());
         assert!(apply(9).is_ok());
+    }
+
+    #[test]
+    fn order_neq_asks_whether_the_band_permits_the_inequality() {
+        // A band wide enough to hold another position satisfies `order != 3`;
+        // only a band pinned to exactly 3rd cannot.
+        let wide = apply_bands("order!=3", 2000.0, Some([(1, 9); 4]));
+        assert_eq!(wide.0.len(), 1);
+        assert_eq!(wide.0[0].start, 0.0);
+        assert_eq!(wide.0[0].end, 2000.0);
+
+        let pinned = apply_bands("order!=3", 2000.0, Some([(3, 3); 4]));
+        assert!(pinned.0.is_empty());
+
+        let pinned_elsewhere = apply_bands("order!=3", 2000.0, Some([(5, 5); 4]));
+        assert_eq!(pinned_elsewhere.0.len(), 1);
     }
 
     #[test]
