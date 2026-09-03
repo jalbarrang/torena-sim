@@ -358,7 +358,6 @@ impl Race {
                 base_speed,
                 accumulated_time: self.accumulated_time,
                 course: &self.course,
-                downhill_enabled: self.settings.downhill,
             };
             runner.on_update(dt, &field_inputs, &ctx);
         }

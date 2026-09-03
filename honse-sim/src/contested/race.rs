@@ -53,10 +53,16 @@ pub struct SimulationSettings {
     /// Per-runner rushed settings, by runner insertion index. Entries override
     /// the default; unlisted runners (such as generated mobs) use `rushed`.
     pub rushed_runners: Vec<bool>,
-    /// Whether downhill mode is enabled.
+    /// Whether downhill mode is enabled by default.
     pub downhill: bool,
-    /// Whether Power Conservation / Fully Charged is enabled.
+    /// Per-runner downhill settings, by runner insertion index. Entries
+    /// override the default; unlisted runners use `downhill`.
+    pub downhill_runners: Vec<bool>,
+    /// Whether Power Conservation / Fully Charged is enabled by default.
     pub conserve_power: bool,
+    /// Per-runner Power Conservation settings, by runner insertion index.
+    /// Entries override the default; unlisted runners use `conserve_power`.
+    pub conserve_power_runners: Vec<bool>,
     /// Whether spot-struggle is enabled.
     pub spot_struggle: bool,
     /// Whether dueling is enabled.
@@ -83,7 +89,9 @@ impl Default for SimulationSettings {
             rushed: true,
             rushed_runners: Vec::new(),
             downhill: true,
+            downhill_runners: Vec::new(),
             conserve_power: true,
+            conserve_power_runners: Vec::new(),
             spot_struggle: true,
             dueling: true,
             wit_checks: true,
@@ -290,8 +298,18 @@ impl Race {
                 .unwrap_or(self.settings.rushed);
             runner.dueling_enabled = self.settings.dueling;
             runner.spot_struggle_enabled = self.settings.spot_struggle;
-            runner.downhill_enabled = self.settings.downhill;
-            runner.conserve_power_enabled = self.settings.conserve_power;
+            runner.downhill_enabled = self
+                .settings
+                .downhill_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.downhill);
+            runner.conserve_power_enabled = self
+                .settings
+                .conserve_power_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.conserve_power);
             runner
                 .stamina_drain_overrides
                 .clone_from(&self.settings.stamina_drain_overrides);
@@ -402,7 +420,6 @@ impl Race {
                 base_speed,
                 accumulated_time: self.accumulated_time,
                 course: &self.course,
-                downhill_enabled: self.settings.downhill,
             };
             runner.on_update(dt, &field_inputs, &ctx);
         }
@@ -1076,6 +1093,55 @@ mod tests {
 
         race.run();
         assert!(race.runners[1].rushed_activations.is_empty());
+    }
+
+    #[test]
+    fn per_runner_downhill_settings_override_the_race_default() {
+        // The runner already carried `downhill_enabled`, but the step read the
+        // shared update context instead, so one runner's setting decided the
+        // whole field.
+        let settings = SimulationSettings {
+            downhill: true,
+            downhill_runners: vec![false],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+        );
+        race.add_runner(props("disabled", Strategy::PaceChaser));
+        race.add_runner(props("default", Strategy::PaceChaser));
+        race.prepare_round(42);
+
+        assert!(!race.runners[0].downhill_enabled);
+        assert!(race.runners[1].downhill_enabled);
+
+        race.run();
+        // Downhill mode never opens for a runner that has it switched off.
+        assert!(!race.runners[0].is_downhill_mode);
+    }
+
+    #[test]
+    fn per_runner_conserve_power_settings_override_the_race_default() {
+        let settings = SimulationSettings {
+            conserve_power: true,
+            conserve_power_runners: vec![false],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+        );
+        race.add_runner(props("disabled", Strategy::PaceChaser));
+        race.add_runner(props("default", Strategy::PaceChaser));
+        race.prepare_round(42);
+
+        assert!(!race.runners[0].conserve_power_enabled);
+        assert!(race.runners[1].conserve_power_enabled);
     }
 
     #[test]
