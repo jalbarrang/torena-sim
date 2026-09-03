@@ -61,8 +61,12 @@ pub struct SimulationSettings {
     pub spot_struggle: bool,
     /// Whether dueling is enabled.
     pub dueling: bool,
-    /// Whether wit checks gate skill activation.
+    /// Whether wit checks gate skill activation by default.
     pub wit_checks: bool,
+    /// Per-runner wit-check settings, by runner insertion index. Entries
+    /// override the default; unlisted runners (such as generated mobs) use
+    /// `wit_checks`.
+    pub wit_checks_runners: Vec<bool>,
     /// Position-keep mode (`2` enables virtual position keeping).
     pub position_keep_mode: i32,
     /// Number of activation samples drawn per skill trigger.
@@ -83,6 +87,7 @@ impl Default for SimulationSettings {
             spot_struggle: true,
             dueling: true,
             wit_checks: true,
+            wit_checks_runners: Vec::new(),
             position_keep_mode: 2,
             skill_samples: 1,
             stamina_drain_overrides: HashMap::new(),
@@ -271,7 +276,12 @@ impl Race {
                 Box::new(NoopStaminaPolicy)
             };
             runner.health_policy = policy;
-            runner.wit_checks_enabled = self.settings.wit_checks;
+            runner.wit_checks_enabled = self
+                .settings
+                .wit_checks_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.wit_checks);
             runner.rushed_enabled = self
                 .settings
                 .rushed_runners
@@ -1066,6 +1076,31 @@ mod tests {
 
         race.run();
         assert!(race.runners[1].rushed_activations.is_empty());
+    }
+
+    #[test]
+    fn per_runner_wit_checks_override_the_race_default() {
+        // A contested field is one race, so a single global flag forced both
+        // compared runners onto the same setting. The list is what lets a
+        // player turn their own wit rolls off without touching the opponent.
+        let settings = SimulationSettings {
+            wit_checks: true,
+            wit_checks_runners: vec![false],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+        );
+        race.add_runner(props("disabled", Strategy::PaceChaser));
+        race.add_runner(props("default", Strategy::PaceChaser));
+        race.prepare_round(42);
+
+        assert!(!race.runners[0].wit_checks_enabled);
+        // Unlisted runners, mobs included, keep the race default.
+        assert!(race.runners[1].wit_checks_enabled);
     }
 
     fn hesitant_props(name: &str, strategy: Strategy) -> CreateRunner {

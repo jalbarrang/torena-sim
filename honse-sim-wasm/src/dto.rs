@@ -948,9 +948,12 @@ pub struct WasmSettings {
     /// Dueling.
     #[serde(default)]
     pub dueling: Option<bool>,
-    /// Wit checks.
+    /// Wit checks default.
     #[serde(default)]
     pub wit_checks: Option<bool>,
+    /// Per-runner wit-check settings, by runner insertion index.
+    #[serde(default)]
+    pub wit_checks_runners: Option<Vec<bool>>,
     /// Skill sample budget.
     #[serde(default)]
     pub skill_samples: Option<usize>,
@@ -977,6 +980,7 @@ struct ResolvedSettings {
     spot_struggle: bool,
     dueling: bool,
     wit_checks: bool,
+    wit_checks_runners: Vec<bool>,
     position_keep_mode: i32,
     skill_samples: usize,
     stamina_drain_overrides: HashMap<String, f64>,
@@ -994,6 +998,7 @@ impl WasmSettings {
             spot_struggle: self.spot_struggle.unwrap_or(true),
             dueling: self.dueling.unwrap_or(true),
             wit_checks: self.wit_checks.unwrap_or(true),
+            wit_checks_runners: self.wit_checks_runners.unwrap_or_default(),
             position_keep_mode: self.position_keep_mode.unwrap_or(2),
             skill_samples: self.skill_samples.map_or(1, |v| v.max(1)),
             stamina_drain_overrides: self.stamina_drain_overrides.unwrap_or_default(),
@@ -1012,6 +1017,7 @@ impl WasmSettings {
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
             wit_checks: r.wit_checks,
+            wit_checks_runners: r.wit_checks_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
             stamina_drain_overrides: r.stamina_drain_overrides,
@@ -2434,6 +2440,7 @@ mod tests {
                 "settings": {
                     "spotStruggle": true,
                     "rushedRunners": [true, false],
+                    "witChecksRunners": [false, true],
                     "dueling": false,
                     "positionKeepMode": 2
                 },
@@ -2476,6 +2483,7 @@ mod tests {
         assert_eq!(domain.master_seed, 42);
         assert!(domain.settings.spot_struggle);
         assert_eq!(domain.settings.rushed_runners, vec![true, false]);
+        assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
         assert!(!domain.settings.dueling);
     }
 
