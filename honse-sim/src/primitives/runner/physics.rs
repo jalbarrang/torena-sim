@@ -102,8 +102,6 @@ pub struct UpdateContext<'a> {
     pub accumulated_time: f64,
     /// The course configuration.
     pub course: &'a CourseData,
-    /// Whether downhill mode is enabled for this race.
-    pub downhill_enabled: bool,
 }
 
 /// Resolved dueling input (ADR-0005 data seam).
@@ -188,7 +186,7 @@ impl Runner {
         self.update_phase(ctx.course.distance);
 
         self.update_rushed(); // t-016
-        self.update_downhill_mode(ctx.downhill_enabled); // t-016
+        self.update_downhill_mode(self.downhill_enabled); // t-016
         self.process_skill_activations(field_inputs.skill_triggers.field, ctx.course.distance); // t-015
         self.process_targeted_skill_activations(ctx.course.distance); // t-015
         apply_virtual_position_keep(self, &field_inputs.position_keep);
@@ -833,7 +831,6 @@ mod tests {
             base_speed: 20.0 - (course.distance - 2000.0) / 1000.0,
             accumulated_time: 0.0,
             course,
-            downhill_enabled: false,
         }
     }
 

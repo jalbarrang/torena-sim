@@ -936,21 +936,30 @@ pub struct WasmSettings {
     /// Per-runner rushed settings, by runner insertion index.
     #[serde(default)]
     pub rushed_runners: Option<Vec<bool>>,
-    /// Downhill mode.
+    /// Downhill mode default.
     #[serde(default)]
     pub downhill: Option<bool>,
-    /// Power Conservation / Fully Charged.
+    /// Per-runner downhill settings, by runner insertion index.
+    #[serde(default)]
+    pub downhill_runners: Option<Vec<bool>>,
+    /// Power Conservation / Fully Charged default.
     #[serde(default)]
     pub conserve_power: Option<bool>,
+    /// Per-runner Power Conservation settings, by runner insertion index.
+    #[serde(default)]
+    pub conserve_power_runners: Option<Vec<bool>>,
     /// Spot struggle.
     #[serde(default)]
     pub spot_struggle: Option<bool>,
     /// Dueling.
     #[serde(default)]
     pub dueling: Option<bool>,
-    /// Wit checks.
+    /// Wit checks default.
     #[serde(default)]
     pub wit_checks: Option<bool>,
+    /// Per-runner wit-check settings, by runner insertion index.
+    #[serde(default)]
+    pub wit_checks_runners: Option<Vec<bool>>,
     /// Skill sample budget.
     #[serde(default)]
     pub skill_samples: Option<usize>,
@@ -973,10 +982,13 @@ struct ResolvedSettings {
     rushed: bool,
     rushed_runners: Vec<bool>,
     downhill: bool,
+    downhill_runners: Vec<bool>,
     conserve_power: bool,
+    conserve_power_runners: Vec<bool>,
     spot_struggle: bool,
     dueling: bool,
     wit_checks: bool,
+    wit_checks_runners: Vec<bool>,
     position_keep_mode: i32,
     skill_samples: usize,
     stamina_drain_overrides: HashMap<String, f64>,
@@ -990,10 +1002,13 @@ impl WasmSettings {
             rushed: self.rushed.unwrap_or(true),
             rushed_runners: self.rushed_runners.unwrap_or_default(),
             downhill: self.downhill.unwrap_or(true),
+            downhill_runners: self.downhill_runners.unwrap_or_default(),
             conserve_power: self.conserve_power.unwrap_or(true),
+            conserve_power_runners: self.conserve_power_runners.unwrap_or_default(),
             spot_struggle: self.spot_struggle.unwrap_or(true),
             dueling: self.dueling.unwrap_or(true),
             wit_checks: self.wit_checks.unwrap_or(true),
+            wit_checks_runners: self.wit_checks_runners.unwrap_or_default(),
             position_keep_mode: self.position_keep_mode.unwrap_or(2),
             skill_samples: self.skill_samples.map_or(1, |v| v.max(1)),
             stamina_drain_overrides: self.stamina_drain_overrides.unwrap_or_default(),
@@ -1008,10 +1023,13 @@ impl WasmSettings {
             rushed: r.rushed,
             rushed_runners: r.rushed_runners,
             downhill: r.downhill,
+            downhill_runners: r.downhill_runners,
             conserve_power: r.conserve_power,
+            conserve_power_runners: r.conserve_power_runners,
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
             wit_checks: r.wit_checks,
+            wit_checks_runners: r.wit_checks_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
             stamina_drain_overrides: r.stamina_drain_overrides,
@@ -2434,6 +2452,9 @@ mod tests {
                 "settings": {
                     "spotStruggle": true,
                     "rushedRunners": [true, false],
+                    "witChecksRunners": [false, true],
+                    "downhillRunners": [false, true],
+                    "conservePowerRunners": [true, false],
                     "dueling": false,
                     "positionKeepMode": 2
                 },
@@ -2476,6 +2497,9 @@ mod tests {
         assert_eq!(domain.master_seed, 42);
         assert!(domain.settings.spot_struggle);
         assert_eq!(domain.settings.rushed_runners, vec![true, false]);
+        assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
+        assert_eq!(domain.settings.downhill_runners, vec![false, true]);
+        assert_eq!(domain.settings.conserve_power_runners, vec![true, false]);
         assert!(!domain.settings.dueling);
     }
 
