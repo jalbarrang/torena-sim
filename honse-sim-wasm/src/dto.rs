@@ -1042,11 +1042,15 @@ impl WasmSettings {
             health_system: r.health_system,
             section_modifier: r.section_modifier,
             rushed: r.rushed,
+            rushed_runners: r.rushed_runners,
             downhill: r.downhill,
+            downhill_runners: r.downhill_runners,
             conserve_power: r.conserve_power,
+            conserve_power_runners: r.conserve_power_runners,
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
             wit_checks: r.wit_checks,
+            wit_checks_runners: r.wit_checks_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
             stamina_drain_overrides: r.stamina_drain_overrides,
@@ -1096,8 +1100,14 @@ pub struct WasmCompareParams {
     /// Optional dueling rates (default: 10 per strategy).
     #[serde(default)]
     pub dueling_rates: Option<WasmDuelingRates>,
-    /// The contestants (typically 1 — vacuum race).
+    /// The contestants (typically 1 — vacuum race). Compared runners come
+    /// first, then context runners such as a pacer.
     pub runners: Vec<WasmCreateRunner>,
+    /// How many leading runners to collect. Omit for the vacuum default (1);
+    /// a same-race vacuum compare passes 2. `Option` so a present-but-
+    /// `undefined` key stays the default.
+    #[serde(default)]
+    pub focus_count: Option<usize>,
     /// Number of rounds.
     pub nsamples: usize,
     /// Master seed.
@@ -1133,6 +1143,7 @@ impl WasmCompareParams {
             settings,
             dueling_rates,
             runners,
+            focus_count: self.focus_count.unwrap_or(1),
             nsamples: self.nsamples,
             master_seed: self.master_seed,
         })
@@ -2550,6 +2561,36 @@ mod tests {
                 "masterSeed": 1
             }}"#
         )
+    }
+
+    #[test]
+    fn compare_settings_carry_per_runner_lists() {
+        let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(
+            r#" "settings": { "rushed": true, "rushedRunners": [true, false], "witChecksRunners": [false, true], "downhillRunners": [false, true], "conservePowerRunners": [true, false] },"#,
+        ))
+        .expect("compare params deserialize with per-runner settings");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.settings.rushed_runners, vec![true, false]);
+        assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
+        assert_eq!(domain.settings.downhill_runners, vec![false, true]);
+        assert_eq!(domain.settings.conserve_power_runners, vec![true, false]);
+    }
+
+    #[test]
+    fn compare_focus_count_defaults_to_primary_only() {
+        let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(""))
+            .expect("compare params deserialize without focusCount");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.focus_count, 1);
+    }
+
+    #[test]
+    fn compare_focus_count_passes_through() {
+        let dto: WasmCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "focusCount": 2,"#))
+                .expect("compare params deserialize with focusCount");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.focus_count, 2);
     }
 
     #[test]

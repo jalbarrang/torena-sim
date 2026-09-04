@@ -193,6 +193,7 @@ fn positions_for(order: &[&str]) -> Vec<Vec<f64>> {
         settings: VacuumSettings::default(),
         dueling_rates: DUELING_RATES,
         runners: vec![runner(order.iter().map(|id| skill(id)).collect())],
+        focus_count: 1,
         nsamples: SAMPLES,
         master_seed: SEED,
     })
