@@ -49,18 +49,30 @@ pub struct SimulationSettings {
     pub health_system: bool,
     /// Whether per-section wisdom variance is applied (currently always on).
     pub section_modifier: bool,
-    /// Whether the rushed (temptation) mechanic is enabled.
+    /// Whether the rushed (temptation) mechanic is enabled by default.
     pub rushed: bool,
-    /// Whether downhill mode is enabled.
+    /// Per-runner rushed settings, by runner insertion index. Entries override
+    /// the default; unlisted runners (such as a pacer) use `rushed`.
+    pub rushed_runners: Vec<bool>,
+    /// Whether downhill mode is enabled by default.
     pub downhill: bool,
-    /// Whether Power Conservation / Fully Charged is enabled.
+    /// Per-runner downhill settings, by runner insertion index. Entries
+    /// override the default; unlisted runners use `downhill`.
+    pub downhill_runners: Vec<bool>,
+    /// Whether Power Conservation / Fully Charged is enabled by default.
     pub conserve_power: bool,
+    /// Per-runner Power Conservation settings, by runner insertion index.
+    /// Entries override the default; unlisted runners use `conserve_power`.
+    pub conserve_power_runners: Vec<bool>,
     /// Whether spot-struggle is enabled.
     pub spot_struggle: bool,
     /// Whether dueling is enabled.
     pub dueling: bool,
-    /// Whether wit checks gate skill activation.
+    /// Whether wit checks gate skill activation by default.
     pub wit_checks: bool,
+    /// Per-runner wit-check settings, by runner insertion index. Entries
+    /// override the default; unlisted runners use `wit_checks`.
+    pub wit_checks_runners: Vec<bool>,
     /// Position-keep mode (`2` enables virtual position keeping).
     pub position_keep_mode: i32,
     /// Number of activation samples drawn per skill trigger.
@@ -75,11 +87,15 @@ impl Default for SimulationSettings {
             health_system: true,
             section_modifier: true,
             rushed: true,
+            rushed_runners: Vec::new(),
             downhill: true,
+            downhill_runners: Vec::new(),
             conserve_power: true,
+            conserve_power_runners: Vec::new(),
             spot_struggle: true,
             dueling: true,
             wit_checks: true,
+            wit_checks_runners: Vec::new(),
             position_keep_mode: 2,
             skill_samples: 1,
             stamina_drain_overrides: HashMap::new(),
@@ -252,12 +268,32 @@ impl Race {
                 Box::new(NoopStaminaPolicy)
             };
             runner.health_policy = policy;
-            runner.wit_checks_enabled = self.settings.wit_checks;
-            runner.rushed_enabled = self.settings.rushed;
+            runner.wit_checks_enabled = self
+                .settings
+                .wit_checks_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.wit_checks);
+            runner.rushed_enabled = self
+                .settings
+                .rushed_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.rushed);
             runner.dueling_enabled = self.settings.dueling;
             runner.spot_struggle_enabled = self.settings.spot_struggle;
-            runner.downhill_enabled = self.settings.downhill;
-            runner.conserve_power_enabled = self.settings.conserve_power;
+            runner.downhill_enabled = self
+                .settings
+                .downhill_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.downhill);
+            runner.conserve_power_enabled = self
+                .settings
+                .conserve_power_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.conserve_power);
             runner
                 .stamina_drain_overrides
                 .clone_from(&self.settings.stamina_drain_overrides);
@@ -570,6 +606,43 @@ mod tests {
             race.add_runner(props(&format!("R{i}"), s));
         }
         race
+    }
+
+    #[test]
+    fn per_runner_settings_override_the_race_default() {
+        let settings = SimulationSettings {
+            rushed: true,
+            rushed_runners: vec![true, false],
+            downhill_runners: vec![false, true],
+            conserve_power_runners: vec![true, false],
+            wit_checks_runners: vec![false, true],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+            None,
+        );
+        race.add_runner(props("a", Strategy::PaceChaser));
+        race.add_runner(props("b", Strategy::PaceChaser));
+        race.add_runner(props("pacer", Strategy::FrontRunner));
+        race.prepare_round(42);
+
+        assert!(race.runners[0].rushed_enabled);
+        assert!(!race.runners[1].rushed_enabled);
+        assert!(!race.runners[0].downhill_enabled);
+        assert!(race.runners[1].downhill_enabled);
+        assert!(race.runners[0].conserve_power_enabled);
+        assert!(!race.runners[1].conserve_power_enabled);
+        assert!(!race.runners[0].wit_checks_enabled);
+        assert!(race.runners[1].wit_checks_enabled);
+        // Unlisted runners fall back to the race defaults.
+        assert!(race.runners[2].rushed_enabled);
+        assert!(race.runners[2].downhill_enabled);
+        assert!(race.runners[2].conserve_power_enabled);
+        assert!(race.runners[2].wit_checks_enabled);
     }
 
     #[test]

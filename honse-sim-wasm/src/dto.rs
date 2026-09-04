@@ -1042,11 +1042,15 @@ impl WasmSettings {
             health_system: r.health_system,
             section_modifier: r.section_modifier,
             rushed: r.rushed,
+            rushed_runners: r.rushed_runners,
             downhill: r.downhill,
+            downhill_runners: r.downhill_runners,
             conserve_power: r.conserve_power,
+            conserve_power_runners: r.conserve_power_runners,
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
             wit_checks: r.wit_checks,
+            wit_checks_runners: r.wit_checks_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
             stamina_drain_overrides: r.stamina_drain_overrides,
@@ -2557,6 +2561,19 @@ mod tests {
                 "masterSeed": 1
             }}"#
         )
+    }
+
+    #[test]
+    fn compare_settings_carry_per_runner_lists() {
+        let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(
+            r#" "settings": { "rushed": true, "rushedRunners": [true, false], "witChecksRunners": [false, true], "downhillRunners": [false, true], "conservePowerRunners": [true, false] },"#,
+        ))
+        .expect("compare params deserialize with per-runner settings");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.settings.rushed_runners, vec![true, false]);
+        assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
+        assert_eq!(domain.settings.downhill_runners, vec![false, true]);
+        assert_eq!(domain.settings.conserve_power_runners, vec![true, false]);
     }
 
     #[test]
