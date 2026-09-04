@@ -1096,8 +1096,14 @@ pub struct WasmCompareParams {
     /// Optional dueling rates (default: 10 per strategy).
     #[serde(default)]
     pub dueling_rates: Option<WasmDuelingRates>,
-    /// The contestants (typically 1 — vacuum race).
+    /// The contestants (typically 1 — vacuum race). Compared runners come
+    /// first, then context runners such as a pacer.
     pub runners: Vec<WasmCreateRunner>,
+    /// How many leading runners to collect. Omit for the vacuum default (1);
+    /// a same-race vacuum compare passes 2. `Option` so a present-but-
+    /// `undefined` key stays the default.
+    #[serde(default)]
+    pub focus_count: Option<usize>,
     /// Number of rounds.
     pub nsamples: usize,
     /// Master seed.
@@ -1133,6 +1139,7 @@ impl WasmCompareParams {
             settings,
             dueling_rates,
             runners,
+            focus_count: self.focus_count.unwrap_or(1),
             nsamples: self.nsamples,
             master_seed: self.master_seed,
         })
@@ -2550,6 +2557,23 @@ mod tests {
                 "masterSeed": 1
             }}"#
         )
+    }
+
+    #[test]
+    fn compare_focus_count_defaults_to_primary_only() {
+        let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(""))
+            .expect("compare params deserialize without focusCount");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.focus_count, 1);
+    }
+
+    #[test]
+    fn compare_focus_count_passes_through() {
+        let dto: WasmCompareParams =
+            serde_json::from_str(&minimal_contested_json(r#" "focusCount": 2,"#))
+                .expect("compare params deserialize with focusCount");
+        let domain = dto.into_domain().expect("params convert to domain");
+        assert_eq!(domain.focus_count, 2);
     }
 
     #[test]

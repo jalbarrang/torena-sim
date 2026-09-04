@@ -32,7 +32,7 @@ Primary code:
 
 `honse_sim::vacuum` models a primary runner with synthetic field conditions. Use it for isolated comparisons where emergent field interaction is not necessary.
 
-The engine uses approximate condition policies and configured dueling rates. It collects telemetry for the primary runner only. Context runners can affect race setup and do not increase the result payload.
+The engine uses approximate condition policies and configured dueling rates. It collects telemetry for the first `focus_count` runners only (default 1). A same-race vacuum compare passes 2 so both contestants pace off each other in one field. Context runners can affect race setup and do not increase the result payload.
 
 Primary code:
 
