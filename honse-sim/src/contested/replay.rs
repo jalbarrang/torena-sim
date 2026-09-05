@@ -8,7 +8,7 @@
 //!
 //! The layout, in the game's units, transcribed from the capture format:
 //!
-//! - a frame per tick: raw seconds, then per gate `distance` (m),
+//! - a frame at the gate (time 0) and one per tick: raw seconds, then per gate `distance` (m),
 //!   `lane_position` (0..=9999 across the track width), `speed` (m/s × 100),
 //!   `hp`, `temptation_mode`, `block_front_horse_index`
 //! - a result per gate: 0-based finish order, scaled finish time, scaled gap to
@@ -155,9 +155,61 @@ struct ReplayInner {
 }
 
 impl ReplayInner {
+    /// Frame index for the current race time. Frame 0 is the gate, so the
+    /// first tick lands in frame 1, as in the game's own capture.
     fn tick_of(&self, race: &dyn RaceObservation) -> usize {
-        let one_based = (race.accumulated_time() * TICKS_PER_SECOND).round() as i64;
-        usize::try_from((one_based - 1).max(0)).unwrap_or(0)
+        (race.accumulated_time() * TICKS_PER_SECOND)
+            .round()
+            .max(0.0) as usize
+    }
+
+    /// Record `runner`'s state into the frame for `race`'s current time and
+    /// remember the per-gate fields the result row needs.
+    fn record(&mut self, race: &dyn RaceObservation, runner: &dyn RunnerObservation) {
+        let gate = runner.id().0 as usize;
+        let tick = self.tick_of(race);
+        let time = race.accumulated_time();
+        let position = runner.position().min(race.course_distance());
+        let lane_max = race.max_lane_distance();
+        let running_style = runner.running_style();
+
+        let sample = ReplayHorseFrame {
+            distance: position as f32,
+            lane_position: if lane_max > 0.0 {
+                (runner.current_lane() / lane_max * LANE_POSITION_MAX)
+                    .round()
+                    .clamp(0.0, LANE_POSITION_MAX) as u16
+            } else {
+                0
+            },
+            speed: (runner.current_speed() * 100.0)
+                .round()
+                .clamp(0.0, f64::from(u16::MAX)) as u16,
+            hp: runner
+                .current_health()
+                .round()
+                .clamp(0.0, f64::from(u16::MAX)) as u16,
+            temptation_mode: temptation_mode(runner.is_rushed(), running_style),
+            block_front_horse_index: runner.front_blocker().map_or(NO_BLOCKER, |id| id.0 as i8),
+        };
+
+        let state = self.gate_mut(gate);
+        state.last_frame = sample;
+        state.guts = runner.guts_stat();
+        state.wit = runner.wit_stat();
+        state.running_style = running_style;
+        state.start_delay = runner.start_delay();
+        if state.last_spurt_start.is_none() && runner.is_last_spurt() {
+            state.last_spurt_start = Some(position);
+        }
+
+        let frame = self.frame_mut(tick, time);
+        if frame.horses.len() <= gate {
+            frame
+                .horses
+                .resize_with(gate + 1, ReplayHorseFrame::default);
+        }
+        frame.horses[gate] = sample;
     }
 
     /// The gate's state, growing the field the first time a gate is seen. A
@@ -241,6 +293,10 @@ impl RaceObserver for ReplayObserver {
             .or_default() |= target_bit;
     }
 
+    fn on_runner_prepared(&mut self, race: &dyn RaceObservation, runner: &dyn RunnerObservation) {
+        self.inner.borrow_mut().record(race, runner);
+    }
+
     fn on_after_runner_tick(
         &mut self,
         race: &dyn RaceObservation,
@@ -248,43 +304,11 @@ impl RaceObserver for ReplayObserver {
         _dt: f64,
     ) {
         let mut inner = self.inner.borrow_mut();
+        inner.record(race, runner);
         let gate = runner.id().0 as usize;
-        let tick = inner.tick_of(race);
         let time = race.accumulated_time();
-        let position = runner.position().min(race.course_distance());
-        let lane_max = race.max_lane_distance();
-        let running_style = runner.running_style();
-
-        let sample = ReplayHorseFrame {
-            distance: position as f32,
-            lane_position: if lane_max > 0.0 {
-                (runner.current_lane() / lane_max * LANE_POSITION_MAX)
-                    .round()
-                    .clamp(0.0, LANE_POSITION_MAX) as u16
-            } else {
-                0
-            },
-            speed: (runner.current_speed() * 100.0)
-                .round()
-                .clamp(0.0, f64::from(u16::MAX)) as u16,
-            hp: runner
-                .current_health()
-                .round()
-                .clamp(0.0, f64::from(u16::MAX)) as u16,
-            temptation_mode: temptation_mode(runner.is_rushed(), running_style),
-            block_front_horse_index: runner.front_blocker().map_or(NO_BLOCKER, |id| id.0 as i8),
-        };
-
         let newly_used: Vec<String> = {
             let state = inner.gate_mut(gate);
-            state.last_frame = sample;
-            state.guts = runner.guts_stat();
-            state.wit = runner.wit_stat();
-            state.running_style = running_style;
-            state.start_delay = runner.start_delay();
-            if state.last_spurt_start.is_none() && runner.is_last_spurt() {
-                state.last_spurt_start = Some(position);
-            }
             runner
                 .used_skills()
                 .into_iter()
@@ -292,14 +316,6 @@ impl RaceObserver for ReplayObserver {
                 .map(str::to_owned)
                 .collect()
         };
-
-        let frame = inner.frame_mut(tick, time);
-        if frame.horses.len() <= gate {
-            frame
-                .horses
-                .resize_with(gate + 1, ReplayHorseFrame::default);
-        }
-        frame.horses[gate] = sample;
 
         for skill_id in newly_used {
             let target_mask = inner
@@ -527,7 +543,10 @@ mod tests {
     fn frames_carry_every_gate_in_game_units() {
         let collector = RaceReplayCollector::new();
         let mut obs = collector.handle();
-        obs.on_round_start(&TestRace { time: 0.0 }, 1);
+        let start = TestRace { time: 0.0 };
+        obs.on_round_start(&start, 1);
+        obs.on_runner_prepared(&start, &runner(0, 0.0));
+        obs.on_runner_prepared(&start, &runner(1, 0.0));
 
         let mut a = runner(0, 10.0);
         a.speed = 18.63;
@@ -539,8 +558,9 @@ mod tests {
         obs.on_round_end(&TestRace { time: 1.0 / 15.0 });
 
         let replay = &collector.result()[0];
-        assert_eq!(replay.frames.len(), 1);
-        let frame = &replay.frames[0];
+        // Frame 0 is the gate; the first tick lands in frame 1.
+        assert_eq!(replay.frames.len(), 2);
+        let frame = &replay.frames[1];
         assert_eq!(frame.horses.len(), 2);
         assert_eq!(frame.horses[0].distance, 10.0);
         assert_eq!(frame.horses[0].speed, 1863);
@@ -549,6 +569,27 @@ mod tests {
         assert_eq!(frame.horses[0].block_front_horse_index, 1);
         assert_eq!(frame.horses[1].block_front_horse_index, NO_BLOCKER);
         assert_eq!(replay.distance_diff_max, 2.0);
+    }
+
+    #[test]
+    fn the_gate_frame_records_the_prepared_field_at_time_zero() {
+        let collector = RaceReplayCollector::new();
+        let mut obs = collector.handle();
+        let start = TestRace { time: 0.0 };
+        obs.on_round_start(&start, 1);
+        let mut a = runner(0, 0.0);
+        a.speed = 3.0;
+        obs.on_runner_prepared(&start, &a);
+        obs.on_runner_prepared(&start, &runner(1, 0.0));
+        tick(&mut obs, 1.0 / 15.0, &[runner(0, 1.0), runner(1, 1.0)]);
+        obs.on_round_end(&TestRace { time: 1.0 / 15.0 });
+
+        let replay = &collector.result()[0];
+        assert_eq!(replay.frames.len(), 2);
+        assert_eq!(replay.frames[0].time, 0.0);
+        assert_eq!(replay.frames[0].horses[0].speed, 300);
+        assert_eq!(replay.frames[0].horses[1].distance, 0.0);
+        assert_eq!(replay.frames[1].horses[0].distance, 1.0);
     }
 
     #[test]
@@ -574,9 +615,9 @@ mod tests {
         obs.on_round_end(&TestRace { time: 2.0 / 15.0 });
 
         let replay = &collector.result()[0];
-        assert_eq!(replay.frames.len(), 2);
-        assert_eq!(replay.frames[1].horses[0].distance, 1600.0);
-        assert_eq!(replay.frames[1].horses[1].distance, 1600.0);
+        assert_eq!(replay.frames.len(), 3);
+        assert_eq!(replay.frames[2].horses[0].distance, 1600.0);
+        assert_eq!(replay.frames[2].horses[1].distance, 1600.0);
     }
 
     #[test]
@@ -722,6 +763,6 @@ mod tests {
         assert_eq!(rounds.len(), 2);
         // The skill fires fresh in the second round rather than being "seen".
         assert_eq!(rounds[1].events.len(), 1);
-        assert_eq!(rounds[1].frames.len(), 1);
+        assert_eq!(rounds[1].frames.len(), 2);
     }
 }
