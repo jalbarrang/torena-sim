@@ -17,9 +17,11 @@
 //!   game recorded it. What is left is the deterministic part (speed,
 //!   acceleration, HP), so a residual here is a formula error, not luck.
 //!
-//! The scores print with `--nocapture` and gate against `baseline.json`; run
-//! with `UPDATE_ACCURACY_BASELINE=1` to accept a new baseline after a change
-//! that is meant to move them.
+//! This is a local harness, not a CI gate: the test is `#[ignore]`d so
+//! `cargo test --workspace` skips it, and `-- --ignored` runs it. The scores
+//! print with `--nocapture` and gate against `baseline.json`; run with
+//! `UPDATE_ACCURACY_BASELINE=1` to accept a new baseline after a change that
+//! is meant to move them.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -460,6 +462,7 @@ fn check_against_baseline(
 }
 
 #[test]
+#[ignore = "local accuracy harness; run with `cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored`"]
 fn captured_races_score_no_worse_than_baseline() {
     let fixtures = load_fixtures();
     assert!(!fixtures.is_empty(), "no capture fixtures found");

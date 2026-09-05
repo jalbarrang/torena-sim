@@ -70,7 +70,7 @@ Each fixture runs twice over `ACCURACY_SAMPLES` seeds (default 8, deterministic)
 
 Scores per run: finish time MAE and bias, winner hit rate, Spearman rank correlation of the finish order, spurt start MAE, skill activation error, and trajectory MAE over the recorded frames. A per-runner breakdown prints under each pinned run so an aggregate points at a runner.
 
-`baseline.json` stores the last accepted scores. The test fails when finish time MAE or trajectory MAE regress past a small tolerance. Accept a new baseline with `UPDATE_ACCURACY_BASELINE=1` only in the change that moves the mechanics, and say why in that change.
+The harness runs locally only: the test is `#[ignore]`d and runs with `cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored --nocapture`. `baseline.json` stores the last accepted scores. The test fails when finish time MAE or trajectory MAE regress past a small tolerance. Accept a new baseline with `UPDATE_ACCURACY_BASELINE=1` only in the change that moves the mechanics, and say why in that change.
 
 Outcomes the replay does not record and the engine still rolls in pinned mode: per-section wit variance, lane targets, and blocking. The recorded spurt distance pins the transition only; the spurt speed follows from the HP formula for that transition.
 

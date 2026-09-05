@@ -28,8 +28,8 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 | Validate release version | `./scripts/validate-release-version.sh <version>` |
 | Run quick gates | `./scripts/quality-gates.sh --quick` |
 | Run full gates | `./scripts/quality-gates.sh` |
-| Score captured races | `cargo test -p honse-sim-wasm --test capture_accuracy -- --nocapture` |
-| Accept a new accuracy baseline | `UPDATE_ACCURACY_BASELINE=1 cargo test -p honse-sim-wasm --test capture_accuracy` |
+| Score captured races (local only) | `cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored --nocapture` |
+| Accept a new accuracy baseline | `UPDATE_ACCURACY_BASELINE=1 cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored` |
 
 ## Rules
 
@@ -45,7 +45,7 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 - **Optional DTO fields:** Use `Option<T>` for optional WASM DTO fields. Serde defaults apply to absent keys, not present keys with `undefined` values.
 - **Generated npm package:** Use `scripts/package-npm.sh`. Preserve the `uma_sim_wasm` entry point and asset names. Generated files under `honse-sim-wasm/pkg/` are not source files.
 - **Release safety:** Do not publish, tag, or create a GitHub Release outside the manual release workflow. The first crates.io publish uses the bootstrap token; later releases use OIDC.
-- **Capture accuracy:** `honse-sim-wasm/tests/capture_accuracy.rs` replays real game races and gates against `baseline.json`. A mechanics change that moves the scores on purpose must update the baseline in the same change and say why. Fixtures come from torena-hub's `pnpm run race:fixture`, never by hand.
+- **Capture accuracy:** `honse-sim-wasm/tests/capture_accuracy.rs` replays real game races and gates against `baseline.json`. It is a local harness (`#[ignore]`, run with `--ignored`), not a CI gate. Run it before and after a mechanics change; a change that moves the scores on purpose must update the baseline in the same change and say why. Fixtures come from torena-hub's `pnpm run race:fixture`, never by hand.
 - **Delegated verification:** Re-run the relevant Cargo gates and inspect risky diffs before accepting delegated work.
 
 ## Key paths
