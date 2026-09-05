@@ -547,7 +547,10 @@ impl Runner {
         } else if self.extra_move_lane > current_lane {
             self.target_lane = self.extra_move_lane;
         } else if self.phase_index() <= 1 && !side_blocked {
-            self.target_lane = (current_lane - 0.05).max(0.0);
+            // Normal-mode rule 4, in course widths like the live path.
+            self.target_lane = (current_lane
+                - crate::runner::lane::INWARD_DRIFT_WIDTHS * course.course_width)
+                .max(0.0);
         } else {
             self.target_lane = current_lane;
         }

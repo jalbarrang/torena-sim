@@ -32,7 +32,7 @@ const SIDE_BLOCK_DISTANCE: f64 = 1.05;
 const PACE_DOWN_LANE: f64 = 0.18;
 /// Normal-mode rule 4: the inward drift per update in early and mid race, in
 /// course widths.
-const INWARD_DRIFT_WIDTHS: f64 = 0.05;
+pub const INWARD_DRIFT_WIDTHS: f64 = 0.05;
 /// Seconds overtake mode lingers after its last target is lost.
 pub const OVERTAKE_LINGER_SECONDS: f64 = 1.5;
 /// Overlap bump, in horse lanes (mechanics § Overlapping).
