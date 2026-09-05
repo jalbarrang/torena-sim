@@ -317,6 +317,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         }
     }
 

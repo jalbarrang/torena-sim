@@ -37,6 +37,15 @@ opt-level = 3
 [profile.release.package.honse-sim-wasm]
 opt-level = "s"
 
+# Tests replay dozens of captured races (`capture_accuracy`); an unoptimized
+# engine makes that a multi-minute suite. Only the two engine packages opt in,
+# so test code and dependencies keep the fast debug build.
+[profile.test.package.honse-sim]
+opt-level = 3
+
+[profile.test.package.honse-sim-wasm]
+opt-level = 3
+
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"   # explicit unsafe blocks inside unsafe fns
 non_ascii_idents = "deny"         # confusing identifiers (domain strings are fine)

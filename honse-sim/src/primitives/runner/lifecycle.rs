@@ -85,6 +85,13 @@ pub struct CreateRunner {
     pub forced_spot_struggle_regions: Vec<ForcedRegion>,
     /// Scripted forced-rank regions.
     pub forced_rank: Vec<ForcedRank>,
+    /// Fixed 0-based gate. `None` lets the round's gate shuffle place the
+    /// runner. Replaying a captured race pins every runner to its post.
+    pub gate: Option<i64>,
+    /// Scripted start delay in seconds, replacing the `0.1 * random()` draw
+    /// and any gate-skill override. Replaying a captured race pins the
+    /// recorded `startDelayTime`.
+    pub forced_start_delay: Option<f64>,
 }
 
 /// The race-derived inputs `on_prepare` needs without a `&Race` back-pointer.
@@ -185,6 +192,8 @@ impl Runner {
             forced_dueling_regions: props.forced_dueling_regions,
             forced_spot_struggle_regions: props.forced_spot_struggle_regions,
             forced_rank: props.forced_rank,
+            fixed_gate: props.gate,
+            forced_start_delay: props.forced_start_delay,
             health_policy,
             rng,
             rushed_rng: placeholder_rng(),
@@ -366,6 +375,9 @@ impl Runner {
         self.initialize_skill_tracking(ctx); // build pending skills
         self.initialize_rushed_state();
         self.activate_gate_skills(course_distance); // green skills may modify stats
+        if let Some(delay) = self.forced_start_delay {
+            self.start_delay = delay; // scripted replay wins over the draw and gate skills
+        }
         self.start_delay_accumulator = self.start_delay; // resync after gate delay skills
         self.initialize_speed_calculations(ctx.base_speed);
         self.initialize_hills(course);
@@ -468,6 +480,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         }
     }
 
@@ -608,5 +622,40 @@ mod tests {
         // Max HP = 0.8 * 1.0 (LateSurger) * adjusted_stamina + distance > distance.
         assert!(r.health_policy.current_health() > 2400.0);
         assert_eq!(r.health_policy.health_ratio_remaining(), 1.0);
+    }
+
+    #[test]
+    fn on_prepare_honors_a_forced_start_delay() {
+        let course = course();
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let rp = test_race_params();
+        let wc = test_whole_course(&course);
+        let ctx = PrepareContext {
+            course: &course,
+            base_speed: 19.6,
+            condition_resolution: ConditionResolution::Dynamic,
+            pos_keep_end_multiplier: 3.0,
+            race_params: &rp,
+            whole_course: &wc,
+            parser: &parser,
+            skill_samples: 4,
+            round_iteration: 0,
+        };
+        let mut props = props(Strategy::PaceChaser);
+        props.forced_start_delay = Some(0.0333);
+        let mut r = Runner::create(
+            RunnerId(0),
+            &course,
+            GroundCondition::Firm,
+            props,
+            Box::new(NoopStaminaPolicy),
+            Box::new(Xoshiro256StarStar::from_u64_seed(99)),
+        );
+
+        r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
+
+        assert_eq!(r.start_delay, 0.0333);
+        assert_eq!(r.start_delay_accumulator, 0.0333);
     }
 }

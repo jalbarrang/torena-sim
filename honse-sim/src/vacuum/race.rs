@@ -16,7 +16,7 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    build_field_snapshot, build_field_view, condition_value, resolve_debuff_targets,
+    assign_gates, build_field_snapshot, build_field_view, condition_value, resolve_debuff_targets,
     FieldOrderTracker,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
@@ -248,12 +248,9 @@ impl Race {
         let base_speed = self.base_speed();
         let parser = ConditionParser::new(&self.catalog);
 
-        // Fisher-Yates gate shuffle (9 gates) seeded from the race RNG.
-        let mut gates: Vec<i64> = (0..9).collect();
-        for i in (1..gates.len()).rev() {
-            let j = self.rng.uniform(i as u32 + 1) as usize;
-            gates.swap(i, j);
-        }
+        // The vacuum field always draws from 9 gates, whatever its size.
+        let fixed_gates: Vec<Option<i64>> = self.runners.iter().map(|r| r.fixed_gate).collect();
+        let gates = assign_gates(&fixed_gates, 9, &mut *self.rng);
 
         let mut runners = std::mem::take(&mut self.runners);
         for (idx, runner) in runners.iter_mut().enumerate() {
@@ -583,6 +580,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         }
     }
 

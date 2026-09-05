@@ -17,6 +17,7 @@ use crate::runner::skills::FieldView;
 use crate::runner::Runner;
 use crate::shared_kernel::ids::RunnerId;
 use crate::shared_kernel::language::{strategy_matches, Strategy};
+use crate::shared_kernel::rng::Prng;
 use crate::skills::condition::dynamic::{ActiveRunner, RunnerSnapshot as DynRunnerSnapshot};
 use crate::skills::effect::SkillTarget;
 
@@ -344,6 +345,29 @@ pub fn condition_value(runner: &Runner, name: &str) -> i32 {
         .map_or(0, |condition| condition.value_on_start())
 }
 
+/// Assign one gate per runner for a round.
+///
+/// A runner with a fixed gate keeps it. The remaining gates are dealt to the
+/// remaining runners by a Fisher-Yates shuffle over `rng`, so an all-free field
+/// consumes exactly the draws it always did and a fully pinned field consumes
+/// none. `gate_count` may exceed the field (the vacuum engine always deals
+/// from nine); a fixed gate outside `0..gate_count` or claimed twice is a
+/// caller bug and is honored as given.
+pub fn assign_gates(fixed: &[Option<i64>], gate_count: usize, rng: &mut dyn Prng) -> Vec<i64> {
+    let mut free_gates: Vec<i64> = (0..gate_count as i64)
+        .filter(|gate| !fixed.contains(&Some(*gate)))
+        .collect();
+    for i in (1..free_gates.len()).rev() {
+        let j = rng.uniform(i as u32 + 1) as usize;
+        free_gates.swap(i, j);
+    }
+    let mut free_gates = free_gates.into_iter();
+    fixed
+        .iter()
+        .map(|slot| slot.or_else(|| free_gates.next()).unwrap_or(0))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -453,5 +477,27 @@ mod tests {
             resolve_debuff_targets(&snap, RunnerId(0), SkillTarget::BehindSelf, None),
             vec![RunnerId(2)]
         );
+    }
+
+    #[test]
+    fn assign_gates_keeps_fixed_gates_and_deals_the_rest() {
+        use crate::shared_kernel::rng::Xoshiro256StarStar;
+        let fixed = [None, Some(0), None, Some(2)];
+        let mut rng = Xoshiro256StarStar::from_u64_seed(1);
+        let gates = assign_gates(&fixed, 4, &mut rng);
+        assert_eq!(gates[1], 0);
+        assert_eq!(gates[3], 2);
+        let mut free = vec![gates[0], gates[2]];
+        free.sort_unstable();
+        assert_eq!(free, vec![1, 3]);
+    }
+
+    #[test]
+    fn assign_gates_without_fixed_gates_is_a_permutation() {
+        use crate::shared_kernel::rng::Xoshiro256StarStar;
+        let mut rng = Xoshiro256StarStar::from_u64_seed(7);
+        let mut gates = assign_gates(&[None; 9], 9, &mut rng);
+        gates.sort_unstable();
+        assert_eq!(gates, (0..9).collect::<Vec<i64>>());
     }
 }

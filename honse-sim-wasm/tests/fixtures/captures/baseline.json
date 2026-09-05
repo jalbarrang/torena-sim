@@ -1,0 +1,1062 @@
+{
+  "Curren Chan-74.6644s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.2737862269083659,
+      "finishTimeBias": -0.19405523935953775,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.7312500000000001,
+      "spurtStartMae": 7.961212158203125,
+      "skillActivationError": 0.24269005847953215,
+      "trajectoryMae": 5.889396616404545
+    },
+    "pinned": {
+      "finishTimeMae": 0.2252443101671007,
+      "finishTimeBias": -0.2070185343424479,
+      "winnerHitRate": 1.0,
+      "orderSpearman": 0.8333333333333334,
+      "spurtStartMae": 5.09382798936632,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.747179993778835
+    }
+  },
+  "El Condor Pasa-74.4610s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2571461995442708,
+      "finishTimeBias": -0.09762488471137153,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.625,
+      "spurtStartMae": 0.7246636284722222,
+      "skillActivationError": 0.22162576687116564,
+      "trajectoryMae": 5.595611936854492
+    },
+    "pinned": {
+      "finishTimeMae": 0.23955408732096353,
+      "finishTimeBias": -0.05410639444986979,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.8541666666666666,
+      "spurtStartMae": 0.4752909342447917,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.004817293836481
+    }
+  },
+  "Fine Motion-74.3042s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.2978832456800673,
+      "finishTimeBias": -0.03529347313774957,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.26041666666666663,
+      "spurtStartMae": 18.75503200954861,
+      "skillActivationError": 0.28125,
+      "trajectoryMae": 5.2964724126197416
+    },
+    "pinned": {
+      "finishTimeMae": 0.21117983924018013,
+      "finishTimeBias": -0.00844203101264106,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.7270833333333333,
+      "spurtStartMae": 10.189234415690104,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.359712657123282
+    }
+  },
+  "Fine Motion-74.4389s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.3491252263387044,
+      "finishTimeBias": -0.19122579362657335,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.31875000000000003,
+      "spurtStartMae": 4.1530100504557295,
+      "skillActivationError": 0.30367647058823527,
+      "trajectoryMae": 5.494108667430769
+    },
+    "pinned": {
+      "finishTimeMae": 0.2557229995727539,
+      "finishTimeBias": -0.20511404673258463,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.625,
+      "spurtStartMae": 3.904542711046007,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.905362820791134
+    }
+  },
+  "Fine Motion-74.9016s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3129602008395725,
+      "finishTimeBias": -0.19789727528889975,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.61875,
+      "spurtStartMae": 4.794553968641493,
+      "skillActivationError": 0.21224832214765102,
+      "trajectoryMae": 6.749326094050276
+    },
+    "pinned": {
+      "finishTimeMae": 0.28853829701741535,
+      "finishTimeBias": -0.17011970943874782,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.75625,
+      "spurtStartMae": 3.3388197157118054,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.5542004952354755
+    }
+  },
+  "Mayano Top Gun-74.1634s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.3857216305202908,
+      "finishTimeBias": 0.0009059906005859375,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.2520833333333333,
+      "spurtStartMae": 4.026791042751736,
+      "skillActivationError": 0.27569444444444446,
+      "trajectoryMae": 6.171006823330943
+    },
+    "pinned": {
+      "finishTimeMae": 0.19885434044731987,
+      "finishTimeBias": 0.03423934512668186,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.8291666666666666,
+      "spurtStartMae": 9.785166422526041,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.587745646246814
+    }
+  },
+  "Mejiro Dober-74.8391s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.41232193840874565,
+      "finishTimeBias": -0.20385975307888454,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.6666666666666666,
+      "spurtStartMae": 0.2995045979817708,
+      "skillActivationError": 0.2748397435897436,
+      "trajectoryMae": 6.546090426873201
+    },
+    "pinned": {
+      "finishTimeMae": 0.38120195600721574,
+      "finishTimeBias": -0.1844152874416775,
+      "winnerHitRate": 0.875,
+      "orderSpearman": 0.8937499999999999,
+      "spurtStartMae": 0.3709055582682292,
+      "skillActivationError": 0.02586206896551724,
+      "trajectoryMae": 6.42975137579826
+    }
+  },
+  "Mejiro Palmer-74.7307s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2418299780951606,
+      "finishTimeBias": -0.1984736124674479,
+      "winnerHitRate": 1.0,
+      "orderSpearman": 0.8,
+      "spurtStartMae": 6.424163818359375,
+      "skillActivationError": 0.25837988826815644,
+      "trajectoryMae": 5.688951833869767
+    },
+    "pinned": {
+      "finishTimeMae": 0.20340008205837673,
+      "finishTimeBias": -0.16421466403537327,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8520833333333333,
+      "spurtStartMae": 14.96470472547743,
+      "skillActivationError": 0.008064516129032258,
+      "trajectoryMae": 5.46488165676678
+    }
+  },
+  "Mihono Bourbon-74.2859s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.31870396931966144,
+      "finishTimeBias": -0.20626873440212673,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.7708333333333334,
+      "spurtStartMae": 13.20587158203125,
+      "skillActivationError": 0.21911764705882353,
+      "trajectoryMae": 8.21572371014403
+    },
+    "pinned": {
+      "finishTimeMae": 0.2714819378323025,
+      "finishTimeBias": -0.17941697438557944,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.7791666666666667,
+      "spurtStartMae": 14.415846082899305,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 7.647860397292738
+    }
+  },
+  "Mihono Bourbon-74.5808s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.28027894761827254,
+      "finishTimeBias": -0.16199451022677952,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.6458333333333334,
+      "spurtStartMae": 0.4278988308376736,
+      "skillActivationError": 0.22598870056497175,
+      "trajectoryMae": 5.810226393970049
+    },
+    "pinned": {
+      "finishTimeMae": 0.19622717963324654,
+      "finishTimeBias": -0.06292004055447048,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.8708333333333333,
+      "spurtStartMae": 0.5342271592881944,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.312115991990137
+    }
+  },
+  "Narita Brian-74.3895s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.3070363998413086,
+      "finishTimeBias": -0.1658069822523329,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.6833333333333333,
+      "spurtStartMae": 0.3307342529296875,
+      "skillActivationError": 0.25996932515337423,
+      "trajectoryMae": 8.738522155017652
+    },
+    "pinned": {
+      "finishTimeMae": 0.20305336846245658,
+      "finishTimeBias": -0.07506603664822048,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.8729166666666668,
+      "spurtStartMae": 0.4145067003038194,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 7.917194552406531
+    }
+  },
+  "Narita Taishin-74.6592s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.22774887084960938,
+      "finishTimeBias": -0.057747099134657115,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.6,
+      "spurtStartMae": 0.4049157036675347,
+      "skillActivationError": 0.27721088435374147,
+      "trajectoryMae": 5.371108418345536
+    },
+    "pinned": {
+      "finishTimeMae": 0.22883881462944877,
+      "finishTimeBias": -0.043857574462890625,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.7208333333333332,
+      "spurtStartMae": 0.4078318277994792,
+      "skillActivationError": 0.009345794392523364,
+      "trajectoryMae": 5.591865756544445
+    }
+  },
+  "Nishino Flower-74.4822s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.38416481018066406,
+      "finishTimeBias": -0.2025750478108724,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.21875,
+      "spurtStartMae": 0.3752373589409722,
+      "skillActivationError": 0.2727941176470588,
+      "trajectoryMae": 6.24972253454336
+    },
+    "pinned": {
+      "finishTimeMae": 0.17121569315592447,
+      "finishTimeBias": -0.07572385999891493,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8187499999999999,
+      "spurtStartMae": 0.40618896484375,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.685463856353223
+    }
+  },
+  "Nishino Flower-74.8612s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.31364960140652126,
+      "finishTimeBias": -0.24093680911593968,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.725,
+      "spurtStartMae": 2.6443294949001737,
+      "skillActivationError": 0.24375,
+      "trajectoryMae": 6.596794835201644
+    },
+    "pinned": {
+      "finishTimeMae": 0.35317516326904297,
+      "finishTimeBias": -0.3113069534301758,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.74375,
+      "spurtStartMae": 0.6528116861979166,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 6.727859869323196
+    }
+  },
+  "Oguri Cap-74.2531s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2692759831746419,
+      "finishTimeBias": 0.22431553734673393,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.7979166666666667,
+      "spurtStartMae": 1.404905531141493,
+      "skillActivationError": 0.25234375,
+      "trajectoryMae": 5.658480131795487
+    },
+    "pinned": {
+      "finishTimeMae": 0.16020192040337455,
+      "finishTimeBias": 0.054871559143066406,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.8312499999999999,
+      "spurtStartMae": 0.9932505289713541,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.982990568811305
+    }
+  },
+  "Oguri Cap-74.2781s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2361061308119032,
+      "finishTimeBias": 0.010740386115180122,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.7708333333333333,
+      "spurtStartMae": 4.9431915283203125,
+      "skillActivationError": 0.24453125,
+      "trajectoryMae": 5.457096547021081
+    },
+    "pinned": {
+      "finishTimeMae": 0.16943963368733725,
+      "finishTimeBias": -0.03925969865587023,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.93125,
+      "spurtStartMae": 4.255464341905382,
+      "skillActivationError": 0.008695652173913044,
+      "trajectoryMae": 4.338351444046703
+    }
+  },
+  "Oguri Cap-74.3331s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.27582719590928817,
+      "finishTimeBias": -0.20616764492458767,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.6541666666666667,
+      "spurtStartMae": 3.6982354058159723,
+      "skillActivationError": 0.22874149659863946,
+      "trajectoryMae": 5.479072291351489
+    },
+    "pinned": {
+      "finishTimeMae": 0.20748986138237846,
+      "finishTimeBias": -0.08394538031684028,
+      "winnerHitRate": 0.875,
+      "orderSpearman": 0.6624999999999999,
+      "spurtStartMae": 3.533564249674479,
+      "skillActivationError": 0.008849557522123894,
+      "trajectoryMae": 4.610586594370511
+    }
+  },
+  "Oguri Cap-74.3391s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.2855611377292209,
+      "finishTimeBias": -0.058521800571017794,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.5499999999999999,
+      "spurtStartMae": 0.5284966362847222,
+      "skillActivationError": 0.2700617283950617,
+      "trajectoryMae": 6.309871171338285
+    },
+    "pinned": {
+      "finishTimeMae": 0.18370914459228516,
+      "finishTimeBias": -0.1251880857679579,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8145833333333332,
+      "spurtStartMae": 0.6774308946397569,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.328433281747386
+    }
+  },
+  "Oguri Cap-74.3566s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.3141134050157335,
+      "finishTimeBias": 0.0069488949245876735,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.5437500000000001,
+      "spurtStartMae": 8.00271945529514,
+      "skillActivationError": 0.20209580838323354,
+      "trajectoryMae": 6.959488588009331
+    },
+    "pinned": {
+      "finishTimeMae": 0.21966923607720268,
+      "finishTimeBias": -0.07082907358805339,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.8083333333333333,
+      "spurtStartMae": 7.7056020100911455,
+      "skillActivationError": 0.00819672131147541,
+      "trajectoryMae": 6.018930302448762
+    }
+  },
+  "Oguri Cap-74.5212s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.508708635965983,
+      "finishTimeBias": -0.2934681574503581,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.7770833333333332,
+      "spurtStartMae": 8.933537801106771,
+      "skillActivationError": 0.29983660130718953,
+      "trajectoryMae": 11.208651136478514
+    },
+    "pinned": {
+      "finishTimeMae": 0.42815303802490234,
+      "finishTimeBias": -0.3406907187567817,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.8250000000000001,
+      "spurtStartMae": 0.4977739122178819,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 7.921532750152345
+    }
+  },
+  "Oguri Cap-74.5276s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.15391688876681858,
+      "finishTimeBias": -0.009860780504014757,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.81875,
+      "spurtStartMae": 8.926500108506945,
+      "skillActivationError": 0.28164556962025317,
+      "trajectoryMae": 5.164810373017521
+    },
+    "pinned": {
+      "finishTimeMae": 0.11593490176730686,
+      "finishTimeBias": -0.0626382827758789,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.8729166666666665,
+      "spurtStartMae": 7.085886637369792,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.059949893025513
+    }
+  },
+  "Oguri Cap-74.5545s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3077501720852322,
+      "finishTimeBias": 0.061582459343804255,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.5604166666666667,
+      "spurtStartMae": 13.834330240885416,
+      "skillActivationError": 0.25703125,
+      "trajectoryMae": 6.460929992011364
+    },
+    "pinned": {
+      "finishTimeMae": 0.2763485378689236,
+      "finishTimeBias": 0.03287908766004774,
+      "winnerHitRate": 1.0,
+      "orderSpearman": 0.75,
+      "spurtStartMae": 13.739793565538195,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 6.149550793483953
+    }
+  },
+  "Oguri Cap-74.6380s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.40424230363633895,
+      "finishTimeBias": 0.04044098324245877,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.46458333333333335,
+      "spurtStartMae": 0.3650292290581597,
+      "skillActivationError": 0.2602739726027397,
+      "trajectoryMae": 7.016410860492501
+    },
+    "pinned": {
+      "finishTimeMae": 0.28889920976426864,
+      "finishTimeBias": -0.02344799041748047,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.5708333333333333,
+      "spurtStartMae": 0.3800743950737847,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 6.409530700817354
+    }
+  },
+  "Oguri Cap-74.6403s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.34706359439426,
+      "finishTimeBias": -0.07109016842312282,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.55,
+      "spurtStartMae": 0.6035359700520834,
+      "skillActivationError": 0.27450980392156865,
+      "trajectoryMae": 5.804725806136328
+    },
+    "pinned": {
+      "finishTimeMae": 0.22285313076443142,
+      "finishTimeBias": -0.22201644049750435,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.9062500000000001,
+      "spurtStartMae": 0.5524139404296875,
+      "skillActivationError": 0.009523809523809525,
+      "trajectoryMae": 5.8338359949194825
+    }
+  },
+  "Oguri Cap-74.6538s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2502797444661458,
+      "finishTimeBias": -0.21085484822591147,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.8791666666666667,
+      "spurtStartMae": 0.9661237928602431,
+      "skillActivationError": 0.21955128205128205,
+      "trajectoryMae": 6.667188292691469
+    },
+    "pinned": {
+      "finishTimeMae": 0.21456485324435765,
+      "finishTimeBias": -0.1432613796657986,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.9395833333333333,
+      "spurtStartMae": 1.128143310546875,
+      "skillActivationError": 0.008849557522123894,
+      "trajectoryMae": 6.496739394223715
+    }
+  },
+  "Oguri Cap-74.6961s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.28732458750406903,
+      "finishTimeBias": -0.1003527111477322,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.3791666666666667,
+      "spurtStartMae": 2.4361334906684027,
+      "skillActivationError": 0.27122641509433965,
+      "trajectoryMae": 4.958751446757479
+    },
+    "pinned": {
+      "finishTimeMae": 0.17153549194335938,
+      "finishTimeBias": -0.04294543796115451,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.7979166666666666,
+      "spurtStartMae": 0.5030704074435763,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.239142080271827
+    }
+  },
+  "Oguri Cap-74.8158s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.32280710008409286,
+      "finishTimeBias": -0.04028956095377604,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.3020833333333333,
+      "spurtStartMae": 0.3549431694878472,
+      "skillActivationError": 0.2903225806451613,
+      "trajectoryMae": 5.306327189215268
+    },
+    "pinned": {
+      "finishTimeMae": 0.247274292839898,
+      "finishTimeBias": -0.08288182152642144,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.46249999999999997,
+      "spurtStartMae": 0.4039035373263889,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.81302490422439
+    }
+  },
+  "Oguri Cap-74.9062s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.28032366434733075,
+      "finishTimeBias": -0.28032366434733075,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.8375,
+      "spurtStartMae": 0.3555755615234375,
+      "skillActivationError": 0.2762738853503185,
+      "trajectoryMae": 5.816802421907921
+    },
+    "pinned": {
+      "finishTimeMae": 0.16273106469048393,
+      "finishTimeBias": -0.16273106469048393,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.9250000000000002,
+      "spurtStartMae": 3.6754828559027777,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.519613030950293
+    }
+  },
+  "Oguri Cap-74.9342s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.297360102335612,
+      "finishTimeBias": -0.17039871215820312,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.5645833333333333,
+      "spurtStartMae": 0.2910970052083333,
+      "skillActivationError": 0.2700617283950617,
+      "trajectoryMae": 6.173003555012875
+    },
+    "pinned": {
+      "finishTimeMae": 0.2654294967651367,
+      "finishTimeBias": -0.06669436560736762,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.6645833333333333,
+      "spurtStartMae": 0.3596343994140625,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.322403190747088
+    }
+  },
+  "Oguri Cap-74.9537s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.35883087582058376,
+      "finishTimeBias": -0.24833202362060547,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.6416666666666667,
+      "spurtStartMae": 5.905592176649305,
+      "skillActivationError": 0.28264331210191085,
+      "trajectoryMae": 6.004836509845872
+    },
+    "pinned": {
+      "finishTimeMae": 0.3252880308363173,
+      "finishTimeBias": -0.2770359251234267,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.8,
+      "spurtStartMae": 3.510557386610243,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.39836787201714
+    }
+  },
+  "Oguri Cap-75.0204s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.23423661126030815,
+      "finishTimeBias": -0.1480274200439453,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.7854166666666667,
+      "spurtStartMae": 9.976793077256945,
+      "skillActivationError": 0.2721518987341772,
+      "trajectoryMae": 4.82451504817977
+    },
+    "pinned": {
+      "finishTimeMae": 0.2436367670694987,
+      "finishTimeBias": -0.1202495363023546,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.7604166666666666,
+      "spurtStartMae": 4.80411614312066,
+      "skillActivationError": 0.009009009009009009,
+      "trajectoryMae": 5.250153203845024
+    }
+  },
+  "Silence Suzuka-74.0926s-20260902.json": {
+    "free": {
+      "finishTimeMae": 0.2631331549750434,
+      "finishTimeBias": 0.052772733900282115,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.5812499999999999,
+      "spurtStartMae": 0.5061238606770834,
+      "skillActivationError": 0.22633136094674555,
+      "trajectoryMae": 5.776303323034212
+    },
+    "pinned": {
+      "finishTimeMae": 0.19736925760904947,
+      "finishTimeBias": 0.029624515109592013,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.7750000000000001,
+      "spurtStartMae": 0.5989362928602431,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.358149098906144
+    }
+  },
+  "Silence Suzuka-74.2955s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3734090593126085,
+      "finishTimeBias": 0.04072019788953993,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.5208333333333333,
+      "spurtStartMae": 16.711658053927952,
+      "skillActivationError": 0.22437888198757763,
+      "trajectoryMae": 6.49877541133946
+    },
+    "pinned": {
+      "finishTimeMae": 0.36214468214246964,
+      "finishTimeBias": 0.015719943576388888,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.5625,
+      "spurtStartMae": 16.79024420844184,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.91625868293761
+    }
+  },
+  "Silence Suzuka-74.5840s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.27924230363633895,
+      "finishTimeBias": -0.08839151594373915,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.5395833333333333,
+      "spurtStartMae": 2.536343044704861,
+      "skillActivationError": 0.25,
+      "trajectoryMae": 5.275042834442008
+    },
+    "pinned": {
+      "finishTimeMae": 0.16441196865505642,
+      "finishTimeBias": -0.1133914523654514,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.7229166666666668,
+      "spurtStartMae": 4.560548570421007,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.837703667665121
+    }
+  },
+  "Special Week-74.1695s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.3390495512220595,
+      "finishTimeBias": -0.006742795308430989,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.4666666666666667,
+      "spurtStartMae": 0.3174828423394097,
+      "skillActivationError": 0.28654970760233917,
+      "trajectoryMae": 5.4002275767921
+    },
+    "pinned": {
+      "finishTimeMae": 0.14799446529812282,
+      "finishTimeBias": 0.008072005377875434,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8770833333333333,
+      "spurtStartMae": 0.3533003065321181,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.050998607815174
+    }
+  },
+  "Special Week-74.2200s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.3600233925713433,
+      "finishTimeBias": 0.1072278552585178,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.33958333333333335,
+      "spurtStartMae": 14.25755140516493,
+      "skillActivationError": 0.2904191616766467,
+      "trajectoryMae": 5.51876344418126
+    },
+    "pinned": {
+      "finishTimeMae": 0.13713402218288845,
+      "finishTimeBias": 0.07481967078314887,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.7645833333333334,
+      "spurtStartMae": 6.3220062255859375,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 3.8615071888897883
+    }
+  },
+  "Special Week-74.2330s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.2667978074815538,
+      "finishTimeBias": 0.10425631205240886,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.15625,
+      "spurtStartMae": 4.695926242404514,
+      "skillActivationError": 0.24441340782122906,
+      "trajectoryMae": 3.99385185533744
+    },
+    "pinned": {
+      "finishTimeMae": 0.18288040161132812,
+      "finishTimeBias": 0.1255527072482639,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.7479166666666666,
+      "spurtStartMae": 0.5961880154079862,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 3.375191365634475
+    }
+  },
+  "Special Week-74.3402s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3920572068956163,
+      "finishTimeBias": 0.08800612555609809,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.6375,
+      "spurtStartMae": 24.033072577582466,
+      "skillActivationError": 0.2429245283018868,
+      "trajectoryMae": 5.62998250844845
+    },
+    "pinned": {
+      "finishTimeMae": 0.3011147181193034,
+      "finishTimeBias": -0.008290290832519531,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.7999999999999998,
+      "spurtStartMae": 22.728746202256943,
+      "skillActivationError": 0.00819672131147541,
+      "trajectoryMae": 4.79529623372403
+    }
+  },
+  "Special Week-74.3953s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.32007747226291233,
+      "finishTimeBias": 0.10053740607367621,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.8124999999999999,
+      "spurtStartMae": 25.218665228949654,
+      "skillActivationError": 0.2692901234567901,
+      "trajectoryMae": 6.183886141036094
+    },
+    "pinned": {
+      "finishTimeMae": 0.20789623260498047,
+      "finishTimeBias": 0.07461134592692058,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.8812499999999999,
+      "spurtStartMae": 22.533789740668404,
+      "skillActivationError": 0.018691588785046728,
+      "trajectoryMae": 5.5949821130457105
+    }
+  },
+  "Special Week-74.4111s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3353583017985026,
+      "finishTimeBias": 0.031649483574761286,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.48125,
+      "spurtStartMae": 0.5323655870225694,
+      "skillActivationError": 0.2389937106918239,
+      "trajectoryMae": 5.6565995245381595
+    },
+    "pinned": {
+      "finishTimeMae": 0.21315140194363064,
+      "finishTimeBias": 0.014982965257432725,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.69375,
+      "spurtStartMae": 0.5662146674262153,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.341819471699467
+    }
+  },
+  "Special Week-74.4734s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.34368451436360675,
+      "finishTimeBias": 0.0627076890733507,
+      "winnerHitRate": 0.0,
+      "orderSpearman": -0.23541666666666672,
+      "spurtStartMae": 0.4515092637803819,
+      "skillActivationError": 0.3177083333333333,
+      "trajectoryMae": 5.495416717930296
+    },
+    "pinned": {
+      "finishTimeMae": 0.10540103912353516,
+      "finishTimeBias": -0.0011813905504014757,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.6645833333333333,
+      "spurtStartMae": 0.4509124755859375,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 3.436158823358711
+    }
+  },
+  "Special Week-74.5035s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.3204362657335069,
+      "finishTimeBias": -0.11385387844509548,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.7041666666666666,
+      "spurtStartMae": 0.4226938883463542,
+      "skillActivationError": 0.23996913580246915,
+      "trajectoryMae": 5.762317599871389
+    },
+    "pinned": {
+      "finishTimeMae": 0.2240830527411567,
+      "finishTimeBias": -0.1314454608493381,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.8791666666666667,
+      "spurtStartMae": 0.6597222222222222,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.254025435992627
+    }
+  },
+  "Special Week-74.5834s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.20896593729654947,
+      "finishTimeBias": 0.08243751525878906,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.7708333333333333,
+      "spurtStartMae": 0.4228396945529514,
+      "skillActivationError": 0.26445086705202314,
+      "trajectoryMae": 4.712088456789945
+    },
+    "pinned": {
+      "finishTimeMae": 0.17785633934868705,
+      "finishTimeBias": -0.026821878221299913,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.9229166666666668,
+      "spurtStartMae": 0.4090711805555556,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.035606105658224
+    }
+  },
+  "Special Week-74.5856s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.19674830966525608,
+      "finishTimeBias": 0.08015653822157118,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.7791666666666666,
+      "spurtStartMae": 6.864695231119792,
+      "skillActivationError": 0.2483974358974359,
+      "trajectoryMae": 4.924532120329148
+    },
+    "pinned": {
+      "finishTimeMae": 0.2388654285007053,
+      "finishTimeBias": 0.1579347186618381,
+      "winnerHitRate": 0.875,
+      "orderSpearman": 0.8979166666666667,
+      "spurtStartMae": 7.3246612548828125,
+      "skillActivationError": 0.009900990099009901,
+      "trajectoryMae": 5.122317043916553
+    }
+  },
+  "Special Week-74.6034s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.26703336503770614,
+      "finishTimeBias": -0.21179803212483725,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.7958333333333332,
+      "spurtStartMae": 2.32608879937066,
+      "skillActivationError": 0.26633986928104575,
+      "trajectoryMae": 5.742530305005444
+    },
+    "pinned": {
+      "finishTimeMae": 0.25574525197347003,
+      "finishTimeBias": -0.21179803212483725,
+      "winnerHitRate": 0.875,
+      "orderSpearman": 0.89375,
+      "spurtStartMae": 0.8888719346788194,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.533009421468512
+    }
+  },
+  "Special Week-74.6260s-20260830.json": {
+    "free": {
+      "finishTimeMae": 0.20959525638156468,
+      "finishTimeBias": -0.042356385125054255,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.8500000000000001,
+      "spurtStartMae": 0.3969540066189236,
+      "skillActivationError": 0.2629573170731707,
+      "trajectoryMae": 4.701886797577822
+    },
+    "pinned": {
+      "finishTimeMae": 0.20799085828993055,
+      "finishTimeBias": -0.09883795844184028,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.9166666666666667,
+      "spurtStartMae": 0.3869255913628472,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.339426957575086
+    }
+  },
+  "Special Week-74.6306s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.46985308329264325,
+      "finishTimeBias": -0.2692858378092448,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.25625,
+      "spurtStartMae": 3.51937018500434,
+      "skillActivationError": 0.2801470588235294,
+      "trajectoryMae": 6.665441543775144
+    },
+    "pinned": {
+      "finishTimeMae": 0.19188467661539713,
+      "finishTimeBias": -0.17206393347846138,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8166666666666667,
+      "spurtStartMae": 3.54435051812066,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.224237152124826
+    }
+  },
+  "Special Week-74.6895s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.23973782857259116,
+      "finishTimeBias": -0.06416850619845921,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.6375,
+      "spurtStartMae": 0.16402689615885416,
+      "skillActivationError": 0.2418154761904762,
+      "trajectoryMae": 5.76548119819397
+    },
+    "pinned": {
+      "finishTimeMae": 0.18476157718234593,
+      "finishTimeBias": -0.028982904222276475,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.7375,
+      "spurtStartMae": 0.22459242078993055,
+      "skillActivationError": 0.008620689655172414,
+      "trajectoryMae": 4.838903055797586
+    }
+  },
+  "Special Week-74.8247s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.33403947618272567,
+      "finishTimeBias": -0.23127449883355033,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.5333333333333334,
+      "spurtStartMae": 0.3458048502604167,
+      "skillActivationError": 0.2780448717948718,
+      "trajectoryMae": 7.076260683369125
+    },
+    "pinned": {
+      "finishTimeMae": 0.3229413562350803,
+      "finishTimeBias": -0.3229413562350803,
+      "winnerHitRate": 1.0,
+      "orderSpearman": 0.9187500000000001,
+      "spurtStartMae": 1.7588992648654513,
+      "skillActivationError": 0.008695652173913044,
+      "trajectoryMae": 7.04339985550824
+    }
+  },
+  "Taiki Shuttle-74.4905s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.16862445407443577,
+      "finishTimeBias": -0.032286749945746526,
+      "winnerHitRate": 0.25,
+      "orderSpearman": 0.24583333333333332,
+      "spurtStartMae": 0.3714616563585069,
+      "skillActivationError": 0.31919642857142855,
+      "trajectoryMae": 3.674918488736024
+    },
+    "pinned": {
+      "finishTimeMae": 0.07711103227403429,
+      "finishTimeBias": -0.01006370120578342,
+      "winnerHitRate": 0.625,
+      "orderSpearman": 0.8708333333333332,
+      "spurtStartMae": 0.3220808241102431,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 2.9976021750794257
+    }
+  },
+  "Taiki Shuttle-74.6058s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.2023857964409722,
+      "finishTimeBias": -0.03882492913140191,
+      "winnerHitRate": 0.125,
+      "orderSpearman": 0.5562500000000001,
+      "spurtStartMae": 9.719963921440971,
+      "skillActivationError": 0.23166666666666666,
+      "trajectoryMae": 6.402260128290828
+    },
+    "pinned": {
+      "finishTimeMae": 0.12213092380099827,
+      "finishTimeBias": -0.10549206203884548,
+      "winnerHitRate": 0.375,
+      "orderSpearman": 0.9,
+      "spurtStartMae": 3.819771660698785,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 5.444201709181865
+    }
+  },
+  "Vodka-74.5581s-20260831.json": {
+    "free": {
+      "finishTimeMae": 0.31051434410942924,
+      "finishTimeBias": -0.04495991600884332,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.4395833333333333,
+      "spurtStartMae": 3.5210639105902777,
+      "skillActivationError": 0.26048951048951047,
+      "trajectoryMae": 4.912365768615961
+    },
+    "pinned": {
+      "finishTimeMae": 0.18986882103814018,
+      "finishTimeBias": -0.04218218061659071,
+      "winnerHitRate": 0.0,
+      "orderSpearman": 0.7833333333333333,
+      "spurtStartMae": 3.338997734917535,
+      "skillActivationError": 0.0,
+      "trajectoryMae": 4.42533284240276
+    }
+  },
+  "Yukino Bijin-74.7362s-20260823.json": {
+    "free": {
+      "finishTimeMae": 0.34877438015407985,
+      "finishTimeBias": -0.30741797553168404,
+      "winnerHitRate": 0.5,
+      "orderSpearman": 0.45416666666666666,
+      "spurtStartMae": 0.3663262261284722,
+      "skillActivationError": 0.26704545454545453,
+      "trajectoryMae": 6.951296519856373
+    },
+    "pinned": {
+      "finishTimeMae": 0.3269193437364366,
+      "finishTimeBias": -0.2546405792236328,
+      "winnerHitRate": 0.75,
+      "orderSpearman": 0.5916666666666666,
+      "spurtStartMae": 0.2975870768229167,
+      "skillActivationError": 0.007407407407407408,
+      "trajectoryMae": 6.414407411932837
+    }
+  }
+}
