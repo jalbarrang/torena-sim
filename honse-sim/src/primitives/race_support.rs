@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use crate::pacing::select_pacer;
-use crate::runner::physics::RunnerSnapshot;
+use crate::runner::physics::{FrontBlock, RunnerSnapshot};
 use crate::runner::skills::FieldView;
 use crate::runner::Runner;
 use crate::shared_kernel::ids::RunnerId;
@@ -283,34 +283,50 @@ pub fn resolve_debuff_targets(
         .collect()
 }
 
-/// The closest runner matching the engine's front-block approximation.
-///
-/// The current lane-drift behavior also treats this as side-blocked. Keeping
-/// that boolean derived from this result preserves the existing simulation.
+/// Front blocking reach in meters (mechanics § Front Blocking).
+const FRONT_BLOCK_DISTANCE: f64 = 2.0;
+/// Side blocking reach in meters either way (mechanics § Side Blocking).
+const SIDE_BLOCK_DISTANCE: f64 = 1.05;
+
+/// The runner blocking `runner` in front (mechanics § Front Blocking): under
+/// 2 m ahead, within 0.75 horse lane when touching narrowing to 0.3 at the
+/// limit. The closest one wins.
 pub fn front_blocking_runner(
     runner: &Runner,
     snapshots: &[RunnerSnapshot],
     horse_lane: f64,
-) -> Option<RunnerId> {
+) -> Option<FrontBlock> {
     snapshots
         .iter()
         .filter(|snapshot| snapshot.id != runner.id)
-        .filter(|snapshot| {
-            let lane_delta = (snapshot.current_lane - runner.current_lane).abs();
-            let distance_ahead = snapshot.position - runner.position;
-            lane_delta <= horse_lane && distance_ahead > 0.0 && distance_ahead <= 5.0
+        .filter_map(|snapshot| {
+            let distance_gap = snapshot.position - runner.position;
+            if distance_gap <= 0.0 || distance_gap >= FRONT_BLOCK_DISTANCE {
+                return None;
+            }
+            let lane_reach = (1.0 - 0.6 * distance_gap / FRONT_BLOCK_DISTANCE) * 0.75 * horse_lane;
+            let lane_gap = (snapshot.current_lane - runner.current_lane).abs();
+            (lane_gap <= lane_reach).then_some(FrontBlock {
+                id: snapshot.id,
+                distance_gap,
+                speed: snapshot.current_speed,
+            })
         })
-        .min_by(|a, b| (a.position - runner.position).total_cmp(&(b.position - runner.position)))
-        .map(|snapshot| snapshot.id)
+        .min_by(|a, b| a.distance_gap.total_cmp(&b.distance_gap))
 }
 
-/// Whether the lane-drift approximation considers this runner blocked.
+/// Whether another runner sits beside `runner` (mechanics § Side Blocking):
+/// within 1.05 m ahead or behind and under two horse lanes across.
 pub fn has_side_blocking_runner(
     runner: &Runner,
     snapshots: &[RunnerSnapshot],
     horse_lane: f64,
 ) -> bool {
-    front_blocking_runner(runner, snapshots, horse_lane).is_some()
+    snapshots.iter().any(|snapshot| {
+        snapshot.id != runner.id
+            && (snapshot.position - runner.position).abs() < SIDE_BLOCK_DISTANCE
+            && (snapshot.current_lane - runner.current_lane).abs() < 2.0 * horse_lane
+    })
 }
 
 /// Whether `runner` is overtaking another runner (pushes the target lane out).

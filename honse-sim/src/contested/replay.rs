@@ -9,7 +9,7 @@
 //! The layout, in the game's units, transcribed from the capture format:
 //!
 //! - a frame at the gate (time 0) and one per tick: raw seconds, then per gate `distance` (m),
-//!   `lane_position` (0..=9999 across the track width), `speed` (m/s × 100),
+//!   `lane_position` (10000 per course width, so gate k stands at k/18 of it), `speed` (m/s × 100),
 //!   `hp`, `temptation_mode`, `block_front_horse_index`
 //! - a result per gate: 0-based finish order, scaled finish time, scaled gap to
 //!   the runner one place ahead, start delay, 0-based guts and wit ranks, spurt
@@ -33,8 +33,9 @@ const TICKS_PER_SECOND: f64 = 15.0;
 /// Displayed race time is the raw time scaled (`docs/mechanics/README.md`,
 /// "DisplayedTime = ActualTime * 1.18").
 const DISPLAY_TIME_SCALE: f64 = 1.18;
-/// `lane_position` spans this range from the inner rail to the outer.
-const LANE_POSITION_MAX: f64 = 9999.0;
+/// `lane_position` units per course width. The game places gate k at
+/// `k / 18` of the width, which is `k * 555` in these units.
+const LANE_UNITS_PER_COURSE_WIDTH: f64 = 10000.0;
 /// `SimulateEventType.SKILL`.
 const EVENT_SKILL: i8 = 3;
 /// `block_front_horse_index` when nothing is in front.
@@ -59,7 +60,7 @@ fn temptation_mode(rushed: bool, running_style: i64) -> i8 {
 pub struct ReplayHorseFrame {
     /// Meters from the start.
     pub distance: f32,
-    /// 0 at the inner rail, 9999 at the outer.
+    /// 0 at the inner rail, 10000 one course width out; can exceed 10000.
     pub lane_position: u16,
     /// Meters per second, times 100.
     pub speed: u16,
@@ -170,15 +171,15 @@ impl ReplayInner {
         let tick = self.tick_of(race);
         let time = race.accumulated_time();
         let position = runner.position().min(race.course_distance());
-        let lane_max = race.max_lane_distance();
+        let course_width = race.course_width();
         let running_style = runner.running_style();
 
         let sample = ReplayHorseFrame {
             distance: position as f32,
-            lane_position: if lane_max > 0.0 {
-                (runner.current_lane() / lane_max * LANE_POSITION_MAX)
+            lane_position: if course_width > 0.0 {
+                (runner.current_lane() / course_width * LANE_UNITS_PER_COURSE_WIDTH)
                     .round()
-                    .clamp(0.0, LANE_POSITION_MAX) as u16
+                    .clamp(0.0, f64::from(u16::MAX)) as u16
             } else {
                 0
             },
@@ -457,6 +458,9 @@ mod tests {
         fn max_lane_distance(&self) -> f64 {
             14.0625
         }
+        fn course_width(&self) -> f64 {
+            11.25
+        }
     }
 
     #[derive(Default)]
@@ -564,7 +568,8 @@ mod tests {
         assert_eq!(frame.horses.len(), 2);
         assert_eq!(frame.horses[0].distance, 10.0);
         assert_eq!(frame.horses[0].speed, 1863);
-        assert_eq!(frame.horses[0].lane_position, 5000);
+        // 7.03125 m is 0.625 of an 11.25 m course width.
+        assert_eq!(frame.horses[0].lane_position, 6250);
         assert_eq!(frame.horses[0].hp, 1180);
         assert_eq!(frame.horses[0].block_front_horse_index, 1);
         assert_eq!(frame.horses[1].block_front_horse_index, NO_BLOCKER);

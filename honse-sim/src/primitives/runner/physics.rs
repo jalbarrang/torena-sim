@@ -88,6 +88,25 @@ pub struct RunnerSnapshot {
     pub current_speed: f64,
 }
 
+/// The runner blocking in front this tick (mechanics § Front Blocking).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FrontBlock {
+    /// The blocking runner.
+    pub id: RunnerId,
+    /// Meters between the two, `0 < gap < 2`.
+    pub distance_gap: f64,
+    /// The blocker's speed at the start of the tick, in m/s.
+    pub speed: f64,
+}
+
+impl FrontBlock {
+    /// The speed a blocked runner is held to: 0.988x the blocker's speed
+    /// when touching, 1.0x at the 2 m limit (mechanics § Blocking).
+    pub fn speed_cap(&self) -> f64 {
+        (0.988 + 0.012 * (self.distance_gap / 2.0)) * self.speed
+    }
+}
+
 /// Pure, race-derived course context the step needs each tick — **no
 /// field-presence inputs** (ADR-0005 step "producer lift").
 ///
@@ -147,8 +166,9 @@ pub struct SkillTriggerInputs<'a> {
 pub struct FieldInputs<'a> {
     /// Whether a runner blocks this one to the side (caps inward lane drift).
     pub side_blocked: bool,
-    /// Runner blocking this one in front, when a live field can identify it.
-    pub front_blocker: Option<RunnerId>,
+    /// Runner blocking this one in front, when a live field can identify it
+    /// (mechanics § Front Blocking).
+    pub front_block: Option<FrontBlock>,
     /// Whether this runner is overtaking (pushes the target lane outward).
     pub overtaking: bool,
     /// Resolved dueling input (coordinated vs synthetic).
@@ -216,6 +236,12 @@ impl Runner {
         if !self.start_dash && self.current_speed < self.min_speed {
             self.current_speed = self.min_speed;
         }
+        // A runner boxed in behind another is held to that runner's pace
+        // (mechanics § Blocking). Not applied yet: the engine does not spread
+        // runners the way the game's target-lane rules do, so its pack stacks
+        // up and the cap held 9 to 20% of late-race frames against the game's
+        // near zero. It lands with the target-lane port.
+        let _ = field_inputs.front_block.map(|block| block.speed_cap());
 
         // ---- integrate position ----
         let displacement = self.current_speed + self.modifiers.current_speed.total();
@@ -516,7 +542,7 @@ impl Runner {
         }
 
         self.is_side_blocked = side_blocked;
-        self.front_blocker = field_inputs.front_blocker;
+        self.front_blocker = field_inputs.front_block.map(|block| block.id);
         self.is_overtaking = overtake;
     }
 
@@ -840,7 +866,7 @@ mod tests {
     fn test_field_inputs(field: &FieldView) -> FieldInputs<'_> {
         FieldInputs {
             side_blocked: false,
-            front_blocker: None,
+            front_block: None,
             overtaking: false,
             dueling: DuelingInput::Coordinated,
             position_keep: PositionKeepContext {

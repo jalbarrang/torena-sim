@@ -17,8 +17,8 @@ use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
     assign_gates, build_field_snapshot, build_field_view, front_blocking_runner,
-    is_overtaking_runner, proximity_snapshots, resolve_debuff_targets, FieldOrderTracker,
-    FieldSnapshot,
+    has_side_blocking_runner, is_overtaking_runner, proximity_snapshots, resolve_debuff_targets,
+    FieldOrderTracker, FieldSnapshot,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
 use uma_sim_primitives::runner::physics::{
@@ -169,6 +169,9 @@ impl RaceObservation for Race {
     }
     fn max_lane_distance(&self) -> f64 {
         self.course.max_lane_distance
+    }
+    fn course_width(&self) -> f64 {
+        self.course.course_width
     }
 }
 
@@ -927,11 +930,13 @@ fn resolve_field_inputs<'a>(
     position_keep: PositionKeepContext,
     horse_lane: f64,
 ) -> FieldInputs<'a> {
-    let front_blocker = front_blocking_runner(runner, snapshots, horse_lane);
+    let front_block = front_blocking_runner(runner, snapshots, horse_lane);
     FieldInputs {
-        side_blocked: front_blocker.is_some(),
-        front_blocker,
-        overtaking: is_overtaking_runner(runner, snapshots, horse_lane),
+        side_blocked: has_side_blocking_runner(runner, snapshots, horse_lane),
+        front_block,
+        // The closest runner blocking in front is always an overtake target
+        // (mechanics § Overtake Targets).
+        overtaking: front_block.is_some() || is_overtaking_runner(runner, snapshots, horse_lane),
         dueling: DuelingInput::Coordinated,
         position_keep,
         skill_triggers: SkillTriggerInputs { field },
@@ -1034,22 +1039,30 @@ mod tests {
             },
             RunnerSnapshot {
                 id: RunnerId(1),
-                position: 104.0,
+                position: 101.0,
                 current_lane: 1.0,
                 current_speed: 20.0,
             },
             RunnerSnapshot {
                 id: RunnerId(2),
-                position: 102.0,
+                position: 100.5,
                 current_lane: 1.1,
-                current_speed: 20.0,
+                current_speed: 19.0,
+            },
+            // 2 m ahead is outside the reach.
+            RunnerSnapshot {
+                id: RunnerId(3),
+                position: 102.0,
+                current_lane: 1.0,
+                current_speed: 18.0,
             },
         ];
 
-        assert_eq!(
-            front_blocking_runner(&race.runners[0], &snapshots, race.course.horse_lane),
-            Some(RunnerId(2))
-        );
+        let block = front_blocking_runner(&race.runners[0], &snapshots, race.course.horse_lane)
+            .expect("blocked");
+        assert_eq!(block.id, RunnerId(2));
+        assert_eq!(block.distance_gap, 0.5);
+        assert!((block.speed_cap() - (0.988 + 0.012 * 0.25) * 19.0).abs() < 1e-9);
     }
 
     #[test]

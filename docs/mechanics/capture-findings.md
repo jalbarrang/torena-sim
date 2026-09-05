@@ -119,7 +119,33 @@ is clear almost at once and accelerates at 0.98 m/s²: the same base plus the
 unique skill's +0.3 and a gold skill's +0.2, both of which the game also fired
 but which land on a capped runner there.
 
-The capture records lane position per frame; the fixtures do not carry it yet.
+## Lane trajectory: measured, model open
+
+Lane MAE in meters from the rail, pinned, 53 fixtures, engine replay lane
+scaled by course width like the game (10000 units per width, gate k at k/18):
+
+| Strategy | Runners | Lane MAE |
+|---|---|---|
+| Front runner | 50 | 0.71 m |
+| Pace chaser | 203 | 1.31 m |
+| Late surger | 122 | 1.24 m |
+| End closer | 88 | 1.51 m |
+| Runaway | 14 | 0.85 m |
+
+Traced on the same race as above, gate 2: the game moves the closer out to
+2.8 m in the first five seconds and back to 0.7 m by mid-race; the engine
+leaves him in his gate lane at 1.25 m and drifts in from 20 s. From 40 s both
+move out; the game reaches 6.8 m, the engine stops at 4.13 m from 53 s on.
+
+Applying the documented front-block speed cap (0.988 to 1.0 times the
+blocker's speed under 2 m) without the documented target-lane rules made
+things worse: pinned finish MAE 0.212 s to 0.352 s, order Spearman 0.835 to
+0.612, finish bias flipped to +0.21 s. With the cap, the engine held runners
+front-blocked in 9 to 20% of late-race frames by strategy; the game's recorded
+blocker column is near zero in the same frames. The engine does not spread
+the pack the way the game's rules do (two horse lanes from the runner inside
+in mid-race, candidate lanes in overtake mode), so its pack stacks and stays
+capped. The cap is wired but off until those rules land.
 
 ## Career races: excluded
 
