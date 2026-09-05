@@ -925,7 +925,7 @@ impl Race {
 /// produced.
 fn resolve_field_inputs<'a>(
     runner: &Runner,
-    snapshots: &[RunnerSnapshot],
+    snapshots: &'a [RunnerSnapshot],
     field: &'a FieldView,
     position_keep: PositionKeepContext,
     horse_lane: f64,
@@ -937,6 +937,7 @@ fn resolve_field_inputs<'a>(
         // The closest runner blocking in front is always an overtake target
         // (mechanics § Overtake Targets).
         overtaking: front_block.is_some() || is_overtaking_runner(runner, snapshots, horse_lane),
+        lane_neighbors: Some(snapshots),
         dueling: DuelingInput::Coordinated,
         position_keep,
         skill_triggers: SkillTriggerInputs { field },
@@ -1036,18 +1037,24 @@ mod tests {
                 position: 100.0,
                 current_lane: 1.0,
                 current_speed: 20.0,
+                target_speed: 20.0,
+                is_front_blocked: false,
             },
             RunnerSnapshot {
                 id: RunnerId(1),
                 position: 101.0,
                 current_lane: 1.0,
                 current_speed: 20.0,
+                target_speed: 20.0,
+                is_front_blocked: false,
             },
             RunnerSnapshot {
                 id: RunnerId(2),
                 position: 100.5,
                 current_lane: 1.1,
                 current_speed: 19.0,
+                target_speed: 20.0,
+                is_front_blocked: false,
             },
             // 2 m ahead is outside the reach.
             RunnerSnapshot {
@@ -1055,6 +1062,8 @@ mod tests {
                 position: 102.0,
                 current_lane: 1.0,
                 current_speed: 18.0,
+                target_speed: 20.0,
+                is_front_blocked: false,
             },
         ];
 

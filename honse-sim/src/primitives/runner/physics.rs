@@ -86,6 +86,10 @@ pub struct RunnerSnapshot {
     pub current_lane: f64,
     /// Current speed in m/s.
     pub current_speed: f64,
+    /// Target speed in m/s (overtake targets compare it).
+    pub target_speed: f64,
+    /// Whether a runner blocked this one in front last tick.
+    pub is_front_blocked: bool,
 }
 
 /// The runner blocking in front this tick (mechanics § Front Blocking).
@@ -171,6 +175,9 @@ pub struct FieldInputs<'a> {
     pub front_block: Option<FrontBlock>,
     /// Whether this runner is overtaking (pushes the target lane outward).
     pub overtaking: bool,
+    /// Every active runner's frozen state when a live field exists. Drives
+    /// the documented target-lane rules; `None` keeps the synthetic path.
+    pub lane_neighbors: Option<&'a [RunnerSnapshot]>,
     /// Resolved dueling input (coordinated vs synthetic).
     pub dueling: DuelingInput,
     /// Resolved pacer / position-keep inputs the virtual pos-keep step consumes.
@@ -216,7 +223,10 @@ impl Runner {
         self.update_last_spurt_state(); // t-016
         self.update_target_speed(field_inputs.side_blocked, ctx.course.course_width);
         self.apply_forces();
-        self.apply_lane_movement(field_inputs, ctx);
+        match field_inputs.lane_neighbors {
+            Some(neighbors) => self.apply_lane_movement_live(neighbors, field_inputs, ctx, dt),
+            None => self.apply_lane_movement(field_inputs, ctx),
+        }
 
         // ---- integrate speed ----
         let mut new_speed = if self.current_speed <= self.target_speed {
@@ -237,11 +247,11 @@ impl Runner {
             self.current_speed = self.min_speed;
         }
         // A runner boxed in behind another is held to that runner's pace
-        // (mechanics § Blocking). Not applied yet: the engine does not spread
-        // runners the way the game's target-lane rules do, so its pack stacks
-        // up and the cap held 9 to 20% of late-race frames against the game's
-        // near zero. It lands with the target-lane port.
-        let _ = field_inputs.front_block.map(|block| block.speed_cap());
+        // (mechanics § Blocking). The cap is on speed, not target speed, so
+        // acceleration keeps building and the runner springs once clear.
+        if let Some(block) = field_inputs.front_block {
+            self.current_speed = self.current_speed.min(block.speed_cap());
+        }
 
         // ---- integrate position ----
         let displacement = self.current_speed + self.modifiers.current_speed.total();
@@ -546,6 +556,134 @@ impl Runner {
         self.is_overtaking = overtake;
     }
 
+    /// Lane movement over a live field: the documented target-lane rules
+    /// (mechanics § Target Lane) with the documented lane change speed.
+    fn apply_lane_movement_live(
+        &mut self,
+        neighbors: &[RunnerSnapshot],
+        field_inputs: &FieldInputs<'_>,
+        ctx: &UpdateContext<'_>,
+        dt: f64,
+    ) {
+        use crate::runner::lane::{
+            overlap_bump, overtake_targets, resolve_target_lane, side_space_free, LaneCourse,
+            LaneMode, LaneSelf, OVERTAKE_LINGER_SECONDS,
+        };
+        let course = ctx.course;
+        let lane_course = LaneCourse {
+            horse_lane: course.horse_lane,
+            max_lane_distance: course.max_lane_distance,
+        };
+        if self.extra_move_lane < 0.0 && self.is_after_final_corner_or_in_final_straight(course) {
+            self.extra_move_lane = (self.current_lane / 0.1).min(course.max_lane_distance) * 0.5
+                + self.lane_movement_rng.random() * 0.1;
+        }
+        let me = |runner: &Self| LaneSelf {
+            id: runner.id,
+            position: runner.position,
+            current_lane: runner.current_lane,
+            current_speed: runner.current_speed,
+            target_speed: runner.target_speed,
+            phase_index: runner.phase_index(),
+            extra_move_lane: runner.extra_move_lane,
+            out_of_hp: !runner.health_policy.has_remaining_health(),
+            pace_down: runner.position_keep_state == PositionKeepState::PaceDown,
+            on_final_straight: runner.is_on_final_straight(course),
+            front_blocker: field_inputs.front_block.map(|block| block.id),
+        };
+
+        let mut force_update = false;
+        if let Some(lane) = overlap_bump(&me(self), neighbors, &lane_course) {
+            self.current_lane = lane;
+            force_update = true;
+        }
+
+        let has_targets = !overtake_targets(&me(self), neighbors, &lane_course).is_empty();
+        if has_targets {
+            self.overtake_linger_left = OVERTAKE_LINGER_SECONDS;
+        } else {
+            self.overtake_linger_left = (self.overtake_linger_left - dt).max(0.0);
+        }
+
+        let near_target = (self.current_lane - self.target_lane).abs() < 0.5 * course.horse_lane;
+        let blocked_toward_target =
+            !side_space_free(&me(self), neighbors, self.target_lane, &lane_course);
+        if force_update || near_target || blocked_toward_target {
+            if !self.change_lane_skills_active.is_empty() {
+                self.target_lane = 9.5 * course.horse_lane;
+            } else {
+                let lingering = !has_targets && self.overtake_linger_left > 0.0;
+                let (mode, lane) =
+                    resolve_target_lane(&me(self), neighbors, &lane_course, lingering);
+                self.lane_mode = mode;
+                self.target_lane = lane;
+            }
+        }
+
+        self.move_toward_target_lane(neighbors, field_inputs, course, &lane_course);
+        self.is_side_blocked = field_inputs.side_blocked;
+        self.front_blocker = field_inputs.front_block.map(|block| block.id);
+        self.is_overtaking = self.lane_mode == LaneMode::Overtake;
+    }
+
+    /// Move toward the target lane at the documented lane change speed
+    /// (mechanics § Lane Change Speed). A move blocked on its side does not
+    /// happen, but the lane change speed keeps building.
+    fn move_toward_target_lane(
+        &mut self,
+        neighbors: &[RunnerSnapshot],
+        field_inputs: &FieldInputs<'_>,
+        course: &CourseData,
+        lane_course: &crate::runner::lane::LaneCourse,
+    ) {
+        use crate::runner::lane::{side_space_free, LaneSelf};
+        let current_lane = self.current_lane;
+        if (self.target_lane - current_lane).abs() < 0.00001 {
+            self.lane_change_speed = 0.0;
+            return;
+        }
+        let mut target_speed = 0.02 * (0.3 + 0.001 * self.adjusted_stats.power);
+        if self.phase_index() <= 1 && self.position < course.move_lane_point {
+            target_speed *= 1.0 + (current_lane / course.max_lane_distance) * 0.05;
+        }
+        if self.phase_index() >= 2 {
+            let order = field_inputs.skill_triggers.field.self_order.unwrap_or(0);
+            target_speed *= 1.0 + order as f64 * 0.01;
+        }
+        self.lane_change_speed =
+            (self.lane_change_speed + course.lane_change_acceleration_per_frame).min(target_speed);
+
+        let me = LaneSelf {
+            id: self.id,
+            position: self.position,
+            current_lane,
+            current_speed: self.current_speed,
+            target_speed: self.target_speed,
+            phase_index: self.phase_index(),
+            extra_move_lane: self.extra_move_lane,
+            out_of_hp: false,
+            pace_down: false,
+            on_final_straight: false,
+            front_blocker: None,
+        };
+        if !side_space_free(&me, neighbors, self.target_lane, lane_course) {
+            return;
+        }
+        let lane_skill_bonus: f64 = self
+            .lane_movement_skills_active
+            .iter()
+            .map(|s| s.modifier)
+            .sum();
+        let actual_speed = (self.lane_change_speed + lane_skill_bonus).clamp(0.0, 0.6);
+        if self.target_lane > current_lane {
+            self.current_lane = self.target_lane.min(current_lane + actual_speed);
+        } else {
+            self.current_lane = self
+                .target_lane
+                .max(current_lane - actual_speed * (1.0 + current_lane));
+        }
+    }
+
     pub fn is_on_final_straight(&self, course: &CourseData) -> bool {
         match course.straights.last() {
             Some(last) => self.position >= last.start && self.position <= last.end,
@@ -631,6 +769,8 @@ impl Runner {
         self.is_side_blocked = false;
         self.front_blocker = None;
         self.is_overtaking = false;
+        self.lane_mode = crate::runner::lane::LaneMode::Normal;
+        self.overtake_linger_left = 0.0;
     }
 
     /// `initializeLastSpurt`.
@@ -868,6 +1008,7 @@ mod tests {
             side_blocked: false,
             front_block: None,
             overtaking: false,
+            lane_neighbors: None,
             dueling: DuelingInput::Coordinated,
             position_keep: PositionKeepContext {
                 position_keep_mode: 0,
