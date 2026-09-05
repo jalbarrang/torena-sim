@@ -163,8 +163,10 @@ fn lane_occupied(
 }
 
 /// The crowd a target belongs to: runners linked by chains of 0 to 3 m along
-/// the course and under two horse lanes across.
+/// the course and under two horse lanes across. The runner looking for a way
+/// past is never part of it.
 fn crowd_of<'a>(
+    me: RunnerId,
     target: &'a RunnerSnapshot,
     others: &'a [RunnerSnapshot],
     course: &LaneCourse,
@@ -173,7 +175,7 @@ fn crowd_of<'a>(
     let mut frontier = vec![target];
     while let Some(member) = frontier.pop() {
         for other in others {
-            if crowd.iter().any(|c| c.id == other.id) {
+            if other.id == me || crowd.iter().any(|c| c.id == other.id) {
                 continue;
             }
             let distance_gap = (other.position - member.position).abs();
@@ -216,7 +218,7 @@ pub fn overtake_target_lane(
     let horse_lane = course.horse_lane;
     let mut candidates: Vec<f64> = Vec::new();
     for target in targets {
-        let crowd = crowd_of(target, others, course);
+        let crowd = crowd_of(me.id, target, others, course);
         let (Some(inner), Some(outer)) = (
             crowd
                 .iter()
@@ -331,13 +333,15 @@ pub fn resolve_target_lane(
 
 /// The outward bump when two runners overlap (mechanics § Overlapping): the
 /// outer of the pair is moved 0.4 horse lane out at once. Returns the new lane
-/// when this runner is the outer one of an overlapping pair.
+/// when this runner is the outer one of an overlapping pair; at exactly equal
+/// lanes the higher id moves, so one of the pair stays put.
 pub fn overlap_bump(me: &LaneSelf, others: &[RunnerSnapshot], course: &LaneCourse) -> Option<f64> {
     let overlapping = others.iter().any(|other| {
         other.id != me.id
             && (other.position - me.position).abs() < 0.4
             && (other.current_lane - me.current_lane).abs() < OVERLAP_BUMP_LANES * course.horse_lane
-            && other.current_lane <= me.current_lane
+            && (other.current_lane < me.current_lane
+                || (other.current_lane == me.current_lane && other.id.0 < me.id.0))
     });
     overlapping.then(|| {
         (me.current_lane + OVERLAP_BUMP_LANES * course.horse_lane).min(course.max_lane_distance)
@@ -496,6 +500,35 @@ mod tests {
         let beside = vec![other(1, 100.5, 1.4, 21.0, 22.0)];
         assert!(!side_space_free(&m, &beside, 2.0, &c));
         assert!(side_space_free(&m, &beside, 0.5, &c));
+    }
+
+    #[test]
+    fn the_reviewing_runner_is_never_part_of_the_crowd_it_passes() {
+        let c = course();
+        // Sitting right behind and beside the target: close enough to be
+        // chained into its crowd if the runner were not excluded.
+        let m = me(100.0, 2.0);
+        let field = vec![other(1, 101.5, 2.5, 20.0, 21.0)];
+        let crowd = crowd_of(m.id, &field[0], &field, &c);
+        assert_eq!(crowd.len(), 1);
+        assert_eq!(crowd[0].id, RunnerId(1));
+    }
+
+    #[test]
+    fn equal_lane_overlap_bumps_one_runner_only() {
+        let c = course();
+        let low = me(100.0, 1.0);
+        let high = LaneSelf {
+            id: RunnerId(5),
+            ..me(100.1, 1.0)
+        };
+        let as_seen_by_low = vec![other(5, 100.1, 1.0, 21.0, 22.0)];
+        let as_seen_by_high = vec![other(0, 100.0, 1.0, 21.0, 22.0)];
+        assert_eq!(overlap_bump(&low, &as_seen_by_low, &c), None);
+        assert_eq!(
+            overlap_bump(&high, &as_seen_by_high, &c),
+            Some(1.0 + 0.4 * HL)
+        );
     }
 
     #[test]

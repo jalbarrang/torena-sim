@@ -603,6 +603,11 @@ impl Runner {
             self.overtake_linger_left = OVERTAKE_LINGER_SECONDS;
         } else {
             self.overtake_linger_left = (self.overtake_linger_left - dt).max(0.0);
+            if self.overtake_linger_left <= 0.0 {
+                // Overtake mode is over even if the target lane is not
+                // refreshed this tick, so the telemetry does not go stale.
+                self.lane_mode = LaneMode::Normal;
+            }
         }
 
         let near_target = (self.current_lane - self.target_lane).abs() < 0.5 * course.horse_lane;
