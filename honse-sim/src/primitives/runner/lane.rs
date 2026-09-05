@@ -290,8 +290,16 @@ pub fn normal_target_lane(me: &LaneSelf, others: &[RunnerSnapshot], course: &Lan
     {
         return me.extra_move_lane;
     }
+    if me.phase_index <= 1 {
+        // Rule 4: drift in while the inside is open.
+        let inward = (me.current_lane - INWARD_DRIFT).max(0.0);
+        if side_space_free(me, others, inward, course) {
+            return inward;
+        }
+    }
     if me.phase_index == 1 {
-        // Rule 5: keep two horse lanes off the nearest runner inside.
+        // Rule 5, reached only when the inward move is blocked: keep two horse
+        // lanes off the nearest runner inside.
         // ASSUMPTION: "inside uma" reaches the crowd distance along the course.
         let inside = others
             .iter()
@@ -303,12 +311,6 @@ pub fn normal_target_lane(me: &LaneSelf, others: &[RunnerSnapshot], course: &Lan
             if me.current_lane - inside.current_lane < 1.75 * horse_lane {
                 return (inside.current_lane + 2.0 * horse_lane).min(course.max_lane_distance);
             }
-        }
-    }
-    if me.phase_index <= 1 {
-        let inward = (me.current_lane - INWARD_DRIFT).max(0.0);
-        if side_space_free(me, others, inward, course) {
-            return inward;
         }
     }
     me.current_lane
