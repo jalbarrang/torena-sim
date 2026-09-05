@@ -147,6 +147,50 @@ the pack the way the game's rules do (two horse lanes from the runner inside
 in mid-race, candidate lanes in overtake mode), so its pack stacks and stays
 capped. The cap is wired but off until those rules land.
 
+## Lane units: fixed, one constant held back
+
+The doc's lane section measures lanes in course widths (11.25 m on this
+course); the engine measured them in meters and had read the doc's constants
+unscaled. Fixture `10903-mihono-bourbon-74-2859s-20260831`, gate 2, power 1140:
+
+- Lane change speed. The game moves him out at 0.33 m/s from 41.6 to 52.2 s.
+  The documented `0.02 * (0.3 + 0.001 * power)` is 0.0293 per second; in
+  widths that is 0.33 m/s. The engine had moved 0.0293 m per tick.
+- Final-corner lane. The corner starts at 800 m and every runner moves out
+  from there, the leader included. Runners at 1.10 to 1.33 m from the rail
+  settle at 6.10, 6.61 and 6.28 m; runners on the rail settle between 0.26 and
+  1.04 m. The documented `clamp(lane / 0.1, 0, 1) * 0.5 + random(0.1)` in
+  widths gives 5.5 to 6.6 m for the first group and 0 to 1.1 m for the second.
+  The engine had used meters with no clamp, so the random part was 0.1 m and
+  a runner at 1.25 m targeted 6.3 m.
+- Inward drift. Normal-mode rule 4 moves the target 0.05 widths in, 0.56 m;
+  the engine had used 0.05 m.
+
+With the three in widths (torena-sim#102), pinned means over 53 fixtures:
+finish MAE 0.205 to 0.203 s, trajectory 4.61 to 4.55 m, lane MAE 1.00 to
+0.98 m, Spearman 0.815 to 0.809.
+
+The pace-down lane, 0.18 in the doc, stays in meters. Read as widths (2.0 m)
+the pinned finish MAE is 0.217 s, and fixture
+`10903-special-week-74-3953s-20260830` goes from 0.208 to 0.626 s: its whole
+field runs 0.2 to 0.3 m/s slow through the mid-race and finishes 0.6 to 1.0 s
+late. The paced-down runner parks inside the bunch and the runners behind it
+stay front-blocked and speed-capped. Whether the game's value is 0.18 widths
+and the engine's bunching is the real difference is open.
+
+Firing normal-mode rule 3 from the final corner as well as the final straight,
+which the leader's move at 800 m suggests, changed nothing: finish MAE 0.206 s,
+lane MAE 0.99 m. Not applied.
+
+## Closer's corner lane: open
+
+Same fixture, gate 2, after the unit fix. The game holds him at 1.10 m from
+8.5 s to 40 s, which is 1.76 horse lanes off the runners on the rail, the
+edge of normal-mode rule 5. The engine drifts him to 0.42 m by 40 s. The
+final-corner lane is set from the lane at the corner entry, so the game sends
+him to 6.6 m and the engine to 2.3 m, and he spurts inside the pack instead
+of around it. He finishes 0.92 s early in the engine.
+
 ## Career races: excluded
 
 Career runners carry debut-level stats (speed 92, stamina 115 in one capture)
@@ -166,5 +210,7 @@ Means over the 53 fixtures, pinned mode, 8 seeds.
 | Frames matched by time (#95) | 0.221 s | −0.097 s | 0.809 | 0.96 m | 4.77 m | 36.8 |
 | Rushed pinned (#96) | 0.226 s | −0.094 s | 0.824 | | 4.72 m | 33.3 |
 | Downhill pinned (#97) | 0.212 s | −0.068 s | 0.835 | | 4.67 m | 22.3 |
+| Target-lane rules and blocking cap (#100) | 0.205 s | +0.007 s | 0.815 | | 4.61 m | 21.5 |
+| Lane constants in course widths (#102) | 0.203 s | −0.003 s | 0.809 | | 4.55 m | 21.1 |
 
 Speed bias by phase after #97, early / mid / late: +0.031 / +0.043 / +0.055 m/s.
