@@ -13,9 +13,10 @@
 //! - **free**: the engine rolls its own skill activations. Scores the whole
 //!   model, randomness included, against one drawn outcome.
 //! - **pinned**: skills the game fired are forced at the recorded distance,
-//!   skills it never fired are removed, and the last spurt starts where the
-//!   game recorded it. What is left is the deterministic part (speed,
-//!   acceleration, HP), so a residual here is a formula error, not luck.
+//!   skills it never fired are removed, the last spurt starts where the game
+//!   recorded it, and rushed spells run where the game recorded them. What is
+//!   left is the deterministic part (speed, acceleration, HP) plus the rolls
+//!   the replay does not record (section variance, downhill, dueling).
 //!
 //! This is a local harness, not a CI gate: the test is `#[ignore]`d so
 //! `cargo test --workspace` skips it, and `-- --ignored` runs it. The scores
@@ -30,7 +31,7 @@ use std::path::{Path, PathBuf};
 use honse_sim::contested::replay::RaceReplay;
 use honse_sim::contested::run_race_sim;
 use serde::{Deserialize, Serialize};
-use uma_sim_wasm::dto::WasmRaceSimParams;
+use uma_sim_wasm::dto::{WasmForcedRegion, WasmRaceSimParams};
 
 const TICK_SECONDS: f64 = 1.0 / 15.0;
 /// `SimulateEventType.SKILL` in both the game replay and `RaceReplay`.
@@ -82,6 +83,9 @@ struct ObservedFrame {
     distance: Vec<f64>,
     speed: Vec<f64>,
     hp: Vec<f64>,
+    /// `temptationMode` per gate: 0 calm, otherwise rushing. Absent in older fixtures.
+    #[serde(default)]
+    rushed: Vec<i64>,
 }
 
 #[derive(Deserialize)]
@@ -132,6 +136,10 @@ struct Scores {
     /// Mean over (observed frame, runner) of (mean simulated HP - observed); negative = engine drains more.
     #[serde(default)]
     hp_bias: f64,
+    /// Mean over (observed frame, runner) of agreement between the simulated
+    /// rushed rate and the recorded rushed flag (1 = identical).
+    #[serde(default)]
+    rushed_agreement: f64,
 }
 
 /// One runner's state in one frame, in engine units.
@@ -142,6 +150,8 @@ struct FrameSample {
     /// Meters per second.
     speed: f64,
     hp: f64,
+    /// 1 when rushed; averaged over rounds it is the rushed rate.
+    rushed: f64,
 }
 
 /// Running comparison of mean simulated samples against recorded ones.
@@ -152,6 +162,7 @@ struct FrameErrors {
     speed_signed: f64,
     hp_abs: f64,
     hp_signed: f64,
+    rushed_agreement: f64,
     count: usize,
 }
 
@@ -162,6 +173,7 @@ impl FrameErrors {
         self.speed_signed += sim.speed - observed.speed;
         self.hp_abs += (sim.hp - observed.hp).abs();
         self.hp_signed += sim.hp - observed.hp;
+        self.rushed_agreement += 1.0 - (sim.rushed - observed.rushed).abs();
         self.count += 1;
     }
 
@@ -271,16 +283,56 @@ fn observed_distance_at(observed: &Observed, gate: usize, time: f64) -> f64 {
     }
 }
 
-/// Force the observed activations, drop every skill the game never fired, and
-/// start each last spurt where the game recorded it.
+/// Contiguous recorded rushed spells per gate, as `[start, end)` distances.
+/// A spell that is still running in the last recorded frame ends there.
+fn observed_rushed_regions(observed: &Observed) -> Vec<Vec<WasmForcedRegion>> {
+    let runners = observed.results.len();
+    let mut regions: Vec<Vec<WasmForcedRegion>> = vec![Vec::new(); runners];
+    let mut open: Vec<Option<f64>> = vec![None; runners];
+    for frame in &observed.frames {
+        for gate in 0..runners {
+            let rushed = frame.rushed.get(gate).is_some_and(|&mode| mode != 0);
+            match (open[gate], rushed) {
+                (None, true) => open[gate] = Some(frame.distance[gate]),
+                (Some(start), false) => {
+                    regions[gate].push(WasmForcedRegion {
+                        start,
+                        end: frame.distance[gate],
+                    });
+                    open[gate] = None;
+                }
+                _ => {}
+            }
+        }
+    }
+    if let Some(last) = observed.frames.last() {
+        for (gate, start) in open.into_iter().enumerate() {
+            if let Some(start) = start {
+                regions[gate].push(WasmForcedRegion {
+                    start,
+                    end: last.distance[gate].max(start + 1.0),
+                });
+            }
+        }
+    }
+    regions
+}
+
+/// Force the observed activations, drop every skill the game never fired,
+/// start each last spurt where the game recorded it, and script the recorded
+/// rushed spells in place of the engine's roll.
 fn pin_outcomes(params: &mut WasmRaceSimParams, observed: &Observed) {
     let activations = observed_activations(observed);
-    for ((runner, fired), result) in params
+    let rushed = observed_rushed_regions(observed);
+    params.settings.rushed_runners = Some(vec![false; params.runners.len()]);
+    for (((runner, fired), result), spells) in params
         .runners
         .iter_mut()
         .zip(&activations)
         .zip(&observed.results)
+        .zip(rushed)
     {
+        runner.forced_rushed_regions = spells;
         runner.forced_last_spurt_distance =
             Some(result.last_spurt_start_distance).filter(|d| *d > 0.0);
         runner.skills.retain(|skill| {
@@ -340,6 +392,7 @@ fn sim_sample_at(replay: &RaceReplay, gate: usize, time: f64) -> Option<FrameSam
             distance: f64::from(horse.distance),
             speed: f64::from(horse.speed) / 100.0,
             hp: f64::from(horse.hp),
+            rushed: if horse.temptation_mode != 0 { 1.0 } else { 0.0 },
         }
     })
 }
@@ -349,6 +402,11 @@ fn observed_sample(frame: &ObservedFrame, gate: usize) -> FrameSample {
         distance: frame.distance[gate],
         speed: frame.speed[gate] / 100.0,
         hp: frame.hp[gate],
+        rushed: if frame.rushed.get(gate).is_some_and(|&mode| mode != 0) {
+            1.0
+        } else {
+            0.0
+        },
     }
 }
 
@@ -368,6 +426,7 @@ fn mean_sim_samples(
                     slot.0.distance += sample.distance;
                     slot.0.speed += sample.speed;
                     slot.0.hp += sample.hp;
+                    slot.0.rushed += sample.rushed;
                     slot.1 += 1;
                 }
             }
@@ -382,6 +441,7 @@ fn mean_sim_samples(
                     distance: sum.distance / n,
                     speed: sum.speed / n,
                     hp: sum.hp / n,
+                    rushed: sum.rushed / n,
                 },
             )
         })
@@ -489,6 +549,7 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
         speed_bias: frames.mean(frames.speed_signed),
         hp_mae: frames.mean(frames.hp_abs),
         hp_bias: frames.mean(frames.hp_signed),
+        rushed_agreement: frames.mean(frames.rushed_agreement),
     }
 }
 
@@ -509,7 +570,7 @@ fn engine_skills(params: &WasmRaceSimParams) -> Vec<Vec<i64>> {
 
 fn print_scores(label: &str, scores: &Scores) {
     println!(
-        "  {label:<7} finish MAE {:.3}s (bias {:+.3}s)  winner {:>3.0}%  spearman {:.3}  spurt MAE {:>6.1}m  skill err {:.3}  trajectory MAE {:>5.1}m  speed MAE {:.3} (bias {:+.3}) m/s  hp MAE {:>5.1} (bias {:+6.1})",
+        "  {label:<7} finish MAE {:.3}s (bias {:+.3}s)  winner {:>3.0}%  spearman {:.3}  spurt MAE {:>6.1}m  skill err {:.3}  trajectory MAE {:>5.1}m  speed MAE {:.3} (bias {:+.3}) m/s  hp MAE {:>5.1} (bias {:+6.1})  rushed agree {:.3}",
         scores.finish_time_mae,
         scores.finish_time_bias,
         scores.winner_hit_rate * 100.0,
@@ -521,6 +582,7 @@ fn print_scores(label: &str, scores: &Scores) {
         scores.speed_bias,
         scores.hp_mae,
         scores.hp_bias,
+        scores.rushed_agreement,
     );
 }
 

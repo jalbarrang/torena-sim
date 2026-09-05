@@ -321,6 +321,9 @@ impl RaceEvent {
 pub trait RaceObserver {
     /// A round started with `seed`.
     fn on_round_start(&mut self, _race: &dyn RaceObservation, _seed: u64) {}
+    /// `runner` is reset and standing in its gate; no tick has run yet.
+    fn on_runner_prepared(&mut self, _race: &dyn RaceObservation, _runner: &dyn RunnerObservation) {
+    }
     /// A step of `dt` seconds is about to run.
     fn on_before_tick(&mut self, _race: &dyn RaceObservation, _dt: f64) {}
     /// A caster's debuff was applied to a target.
@@ -382,6 +385,17 @@ impl RaceObservers {
     pub fn emit_round_start(&mut self, race: &dyn RaceObservation, seed: u64) {
         for observer in &mut self.observers {
             observer.on_round_start(race, seed);
+        }
+    }
+
+    /// Emit `runner-prepared`.
+    pub fn emit_runner_prepared(
+        &mut self,
+        race: &dyn RaceObservation,
+        runner: &dyn RunnerObservation,
+    ) {
+        for observer in &mut self.observers {
+            observer.on_runner_prepared(race, runner);
         }
     }
 

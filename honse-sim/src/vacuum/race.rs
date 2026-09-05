@@ -314,6 +314,7 @@ impl Race {
 
         self.round_iteration += 1;
         self.emit_round_start(master_seed);
+        self.emit_runners_prepared();
     }
 
     /// Reset per-round race params for the vacuum field: the synthetic engine
@@ -505,6 +506,14 @@ impl Race {
     fn emit_round_start(&mut self, seed: u64) {
         let mut observers = std::mem::take(&mut self.observers);
         observers.emit_round_start(self, seed);
+        self.observers = observers;
+    }
+
+    fn emit_runners_prepared(&mut self) {
+        let mut observers = std::mem::take(&mut self.observers);
+        for runner in &self.runners {
+            observers.emit_runner_prepared(self, runner);
+        }
         self.observers = observers;
     }
 
