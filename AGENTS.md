@@ -37,7 +37,7 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 - **Crate publication:** Publish only `honse-sim` to crates.io. Keep `honse-sim-wasm` configured with `publish = false`.
 - **Contribution licensing:** Do not accept external code contributions until the project has an approved contributor agreement with relicensing permission.
 - **Shared version:** Use `workspace.package.version` for the Rust crate, WASM adapter, npm package, Git tag, and GitHub Release.
-- **Mechanics source:** Treat `docs/mechanics/README.md` and `docs/mechanics/quick-reference.md` as the mechanics source of truth. Update them with cited evidence when behavior changes.
+- **Mechanics source:** Treat `docs/mechanics/README.md` and `docs/mechanics/quick-reference.md` as the mechanics source of truth. Update them with cited evidence when behavior changes. `docs/mechanics/capture-findings.md` records what the captured races measured, with the fixtures and commands behind each number; add to it when the harness settles or opens a question.
 - **Shared kernel:** Keep `honse-sim/src/primitives/` independent of field ownership and engine orchestration. Engines resolve `FieldInputs` before they call the runner step kernel.
 - **Tick consistency:** Build contested inputs from one field snapshot per tick so all runners observe the same pre-update state.
 - **Round determinism:** Reset reusable state in `prepare_round`. A round must depend only on its inputs and seed.
