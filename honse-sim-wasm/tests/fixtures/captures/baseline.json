@@ -7,7 +7,11 @@
       "orderSpearman": 0.7312500000000001,
       "spurtStartMae": 7.961212158203125,
       "skillActivationError": 0.24269005847953215,
-      "trajectoryMae": 5.889396616404545
+      "trajectoryMae": 5.138602528291508,
+      "speedMae": 0.2822712800519825,
+      "speedBias": 0.1326525573192241,
+      "hpMae": 40.117713264643086,
+      "hpBias": 5.904673721340388
     },
     "pinned": {
       "finishTimeMae": 0.21968862745496961,
@@ -16,7 +20,11 @@
       "orderSpearman": 0.8416666666666669,
       "spurtStartMae": 4.956261528862847,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.796249156854672
+      "trajectoryMae": 4.416140930514625,
+      "speedMae": 0.23408606150793645,
+      "speedBias": 0.11761946097883604,
+      "hpMae": 43.458994708994695,
+      "hpBias": 13.757357804232804
     }
   },
   "El Condor Pasa-74.4610s-20260831.json": {
@@ -27,7 +35,11 @@
       "orderSpearman": 0.625,
       "spurtStartMae": 0.7246636284722222,
       "skillActivationError": 0.22162576687116564,
-      "trajectoryMae": 5.595611936854492
+      "trajectoryMae": 5.2893260017712915,
+      "speedMae": 0.23220333333333312,
+      "speedBias": 0.027559629629629864,
+      "hpMae": 42.98205608465608,
+      "hpBias": 15.132720634920632
     },
     "pinned": {
       "finishTimeMae": 0.23955408732096353,
@@ -36,7 +48,11 @@
       "orderSpearman": 0.8541666666666666,
       "spurtStartMae": 0.4752909342447917,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.004817293836481
+      "trajectoryMae": 5.1568451189726146,
+      "speedMae": 0.19415980952380993,
+      "speedBias": 0.051905904761904896,
+      "hpMae": 41.86986666666666,
+      "hpBias": 16.034704761904763
     }
   },
   "Fine Motion-74.3042s-20260823.json": {
@@ -47,7 +63,11 @@
       "orderSpearman": 0.32499999999999996,
       "spurtStartMae": 4.774890475802952,
       "skillActivationError": 0.26448170731707316,
-      "trajectoryMae": 4.79080813694069
+      "trajectoryMae": 4.2937399271601375,
+      "speedMae": 0.19959420289855073,
+      "speedBias": -0.044241545893720015,
+      "hpMae": 51.94625603864734,
+      "hpBias": -29.13538647342995
     },
     "pinned": {
       "finishTimeMae": 0.15627914004855686,
@@ -56,7 +76,11 @@
       "orderSpearman": 0.7541666666666665,
       "spurtStartMae": 0.3570488823784722,
       "skillActivationError": 0.0,
-      "trajectoryMae": 3.550665407678235
+      "trajectoryMae": 3.154112803183167,
+      "speedMae": 0.13407211870255314,
+      "speedBias": -0.011871290545203392,
+      "hpMae": 44.19984472049689,
+      "hpBias": -19.90091442374051
     }
   },
   "Fine Motion-74.4389s-20260823.json": {
@@ -67,7 +91,11 @@
       "orderSpearman": 0.31875000000000003,
       "spurtStartMae": 4.1530100504557295,
       "skillActivationError": 0.30367647058823527,
-      "trajectoryMae": 5.494108667430769
+      "trajectoryMae": 4.7519575675337995,
+      "speedMae": 0.23899436392914683,
+      "speedBias": 0.03626312399355883,
+      "hpMae": 20.825797101449268,
+      "hpBias": 2.0517874396135274
     },
     "pinned": {
       "finishTimeMae": 0.24276002248128256,
@@ -76,7 +104,11 @@
       "orderSpearman": 0.7000000000000001,
       "spurtStartMae": 0.3522016737196181,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.8785170992329885
+      "trajectoryMae": 3.9888579885579034,
+      "speedMae": 0.17434251137102028,
+      "speedBias": 0.06199741251276362,
+      "hpMae": 18.560144574398958,
+      "hpBias": -2.4683409913673073
     }
   },
   "Fine Motion-74.9016s-20260831.json": {
@@ -87,7 +119,11 @@
       "orderSpearman": 0.61875,
       "spurtStartMae": 4.794553968641493,
       "skillActivationError": 0.21224832214765102,
-      "trajectoryMae": 6.749326094050276
+      "trajectoryMae": 6.272530041920177,
+      "speedMae": 0.32450935048348806,
+      "speedBias": 0.12719738642583492,
+      "hpMae": 44.753248722860796,
+      "hpBias": -7.406322979383323
     },
     "pinned": {
       "finishTimeMae": 0.27034929063585067,
@@ -96,7 +132,11 @@
       "orderSpearman": 0.8104166666666667,
       "spurtStartMae": 0.3946957058376736,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.5505458547551525
+      "trajectoryMae": 5.043447332983964,
+      "speedMae": 0.25046172288359797,
+      "speedBias": 0.1311429398148146,
+      "hpMae": 32.664517195767196,
+      "hpBias": 5.1801421957671945
     }
   },
   "Mayano Top Gun-74.1634s-20260823.json": {
@@ -107,7 +147,11 @@
       "orderSpearman": 0.2520833333333333,
       "spurtStartMae": 4.026791042751736,
       "skillActivationError": 0.27569444444444446,
-      "trajectoryMae": 6.171006823330943
+      "trajectoryMae": 6.067479298166008,
+      "speedMae": 0.3055128273531641,
+      "speedBias": 0.023122938064114317,
+      "hpMae": 54.494883508959134,
+      "hpBias": 8.017812680627808
     },
     "pinned": {
       "finishTimeMae": 0.19453822241889107,
@@ -116,7 +160,11 @@
       "orderSpearman": 0.8354166666666667,
       "spurtStartMae": 3.5947706434461804,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.648800695212214
+      "trajectoryMae": 4.63628916578778,
+      "speedMae": 0.23620803877106403,
+      "speedBias": 0.04528100128940459,
+      "hpMae": 38.89636410119606,
+      "hpBias": 1.7369892401404998
     }
   },
   "Mejiro Dober-74.8391s-20260831.json": {
@@ -127,7 +175,11 @@
       "orderSpearman": 0.6666666666666666,
       "spurtStartMae": 0.2995045979817708,
       "skillActivationError": 0.2748397435897436,
-      "trajectoryMae": 6.546090426873201
+      "trajectoryMae": 6.462876550311037,
+      "speedMae": 0.32404400126622446,
+      "speedBias": 0.14438113327002208,
+      "hpMae": 38.68597657486545,
+      "hpBias": -9.42125672681228
     },
     "pinned": {
       "finishTimeMae": 0.38120195600721574,
@@ -136,7 +188,11 @@
       "orderSpearman": 0.8937499999999999,
       "spurtStartMae": 0.3709055582682292,
       "skillActivationError": 0.02586206896551724,
-      "trajectoryMae": 6.42975137579826
+      "trajectoryMae": 6.08617589948742,
+      "speedMae": 0.25663802622498233,
+      "speedBias": 0.14125086266390666,
+      "hpMae": 34.75280653324132,
+      "hpBias": -9.041212330342768
     }
   },
   "Mejiro Palmer-74.7307s-20260831.json": {
@@ -147,7 +203,11 @@
       "orderSpearman": 0.6458333333333334,
       "spurtStartMae": 7.868367513020833,
       "skillActivationError": 0.2681564245810056,
-      "trajectoryMae": 5.739778284486002
+      "trajectoryMae": 4.981457317853943,
+      "speedMae": 0.260254216269842,
+      "speedBias": 0.06060037556689362,
+      "hpMae": 33.00369661753591,
+      "hpBias": 16.890188019652303
     },
     "pinned": {
       "finishTimeMae": 0.257401254442003,
@@ -156,7 +216,11 @@
       "orderSpearman": 0.7666666666666666,
       "spurtStartMae": 0.4151967366536458,
       "skillActivationError": 0.008064516129032258,
-      "trajectoryMae": 4.807711875606685
+      "trajectoryMae": 4.140597695453772,
+      "speedMae": 0.2038290010193677,
+      "speedBias": 0.0707573054706087,
+      "hpMae": 37.4859412164458,
+      "hpBias": 21.993246687054025
     }
   },
   "Mihono Bourbon-74.2859s-20260831.json": {
@@ -167,7 +231,11 @@
       "orderSpearman": 0.7708333333333334,
       "spurtStartMae": 13.20587158203125,
       "skillActivationError": 0.21911764705882353,
-      "trajectoryMae": 8.21572371014403
+      "trajectoryMae": 7.5779237528256935,
+      "speedMae": 0.2972179110327261,
+      "speedBias": 0.10208894767783658,
+      "hpMae": 48.72163041348222,
+      "hpBias": 4.182298647854207
     },
     "pinned": {
       "finishTimeMae": 0.26963022020128036,
@@ -176,7 +244,11 @@
       "orderSpearman": 0.7833333333333333,
       "spurtStartMae": 2.9273223876953125,
       "skillActivationError": 0.0,
-      "trajectoryMae": 7.678396149404866
+      "trajectoryMae": 6.968855844263052,
+      "speedMae": 0.21514305310601556,
+      "speedBias": 0.0645649617871837,
+      "hpMae": 44.12971487360376,
+      "hpBias": 1.504312169312169
     }
   },
   "Mihono Bourbon-74.5808s-20260831.json": {
@@ -187,7 +259,11 @@
       "orderSpearman": 0.6458333333333334,
       "spurtStartMae": 0.4278988308376736,
       "skillActivationError": 0.22598870056497175,
-      "trajectoryMae": 5.810226393970049
+      "trajectoryMae": 5.475432219046811,
+      "speedMae": 0.28119044011543987,
+      "speedBias": 0.07562947330447337,
+      "hpMae": 37.270645743145735,
+      "hpBias": -4.741085858585858
     },
     "pinned": {
       "finishTimeMae": 0.193449338277181,
@@ -196,7 +272,11 @@
       "orderSpearman": 0.8770833333333334,
       "spurtStartMae": 0.383026123046875,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.303688567457214
+      "trajectoryMae": 5.027062260122373,
+      "speedMae": 0.21451590909090804,
+      "speedBias": 0.051768434343434554,
+      "hpMae": 39.14873737373737,
+      "hpBias": 1.9108585858585854
     }
   },
   "Narita Brian-74.3895s-20260830.json": {
@@ -207,7 +287,11 @@
       "orderSpearman": 0.6833333333333333,
       "spurtStartMae": 0.3307342529296875,
       "skillActivationError": 0.25996932515337423,
-      "trajectoryMae": 8.738522155017652
+      "trajectoryMae": 8.663405945277027,
+      "speedMae": 0.25199025443510825,
+      "speedBias": 0.12597407018362908,
+      "hpMae": 44.600101151571714,
+      "hpBias": -8.634910908807973
     },
     "pinned": {
       "finishTimeMae": 0.20120154486762154,
@@ -216,7 +300,11 @@
       "orderSpearman": 0.8770833333333334,
       "spurtStartMae": 0.2575497097439236,
       "skillActivationError": 0.0,
-      "trajectoryMae": 7.906918856856923
+      "trajectoryMae": 7.728550061471265,
+      "speedMae": 0.19987348272642427,
+      "speedBias": 0.10630520541549975,
+      "hpMae": 36.04756069094302,
+      "hpBias": 3.649124649859946
     }
   },
   "Narita Taishin-74.6592s-20260830.json": {
@@ -227,7 +315,11 @@
       "orderSpearman": 0.6,
       "spurtStartMae": 0.4049157036675347,
       "skillActivationError": 0.27721088435374147,
-      "trajectoryMae": 5.371108418345536
+      "trajectoryMae": 5.223872046880771,
+      "speedMae": 0.21401387707860878,
+      "speedBias": 0.051014892762660025,
+      "hpMae": 31.060726095993953,
+      "hpBias": -17.33769841269841
     },
     "pinned": {
       "finishTimeMae": 0.22698688507080078,
@@ -236,7 +328,11 @@
       "orderSpearman": 0.7208333333333332,
       "spurtStartMae": 0.4266120062934028,
       "skillActivationError": 0.009345794392523364,
-      "trajectoryMae": 5.601689464851621
+      "trajectoryMae": 5.4238486077859225,
+      "speedMae": 0.14250561876668016,
+      "speedBias": 0.03758737182188484,
+      "hpMae": 31.67100716392752,
+      "hpBias": -14.739394577890156
     }
   },
   "Nishino Flower-74.4822s-20260823.json": {
@@ -247,7 +343,11 @@
       "orderSpearman": 0.21875,
       "spurtStartMae": 0.3752373589409722,
       "skillActivationError": 0.2727941176470588,
-      "trajectoryMae": 6.24972253454336
+      "trajectoryMae": 5.660989890539454,
+      "speedMae": 0.26315448343079895,
+      "speedBias": -0.029331871345028706,
+      "hpMae": 33.063620857699796,
+      "hpBias": 22.0026559454191
     },
     "pinned": {
       "finishTimeMae": 0.17121569315592447,
@@ -256,7 +356,11 @@
       "orderSpearman": 0.8187499999999999,
       "spurtStartMae": 0.40618896484375,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.685463856353223
+      "trajectoryMae": 3.9483886427110337,
+      "speedMae": 0.1383708492975737,
+      "speedBias": -0.019370210727969763,
+      "hpMae": 32.686222860791815,
+      "hpBias": 22.794699872286085
     }
   },
   "Nishino Flower-74.8612s-20260831.json": {
@@ -267,7 +371,11 @@
       "orderSpearman": 0.725,
       "spurtStartMae": 2.6443294949001737,
       "skillActivationError": 0.24375,
-      "trajectoryMae": 6.596794835201644
+      "trajectoryMae": 5.981652771015103,
+      "speedMae": 0.25367532467532494,
+      "speedBias": 0.10992893217893233,
+      "hpMae": 45.721464646464646,
+      "hpBias": 4.656637806637806
     },
     "pinned": {
       "finishTimeMae": 0.3605825636121962,
@@ -276,7 +384,11 @@
       "orderSpearman": 0.7375,
       "spurtStartMae": 0.2657979329427083,
       "skillActivationError": 0.0,
-      "trajectoryMae": 6.749794033237002
+      "trajectoryMae": 6.024557190973851,
+      "speedMae": 0.23608449832532435,
+      "speedBias": 0.1414259866025924,
+      "hpMae": 43.686365953109046,
+      "hpBias": 7.701139507790882
     }
   },
   "Oguri Cap-74.2531s-20260831.json": {
@@ -287,7 +399,11 @@
       "orderSpearman": 0.7979166666666667,
       "spurtStartMae": 1.404905531141493,
       "skillActivationError": 0.25234375,
-      "trajectoryMae": 5.658480131795487
+      "trajectoryMae": 5.9134685890289935,
+      "speedMae": 0.24737042328042222,
+      "speedBias": 0.014737936507936186,
+      "hpMae": 25.09212169312169,
+      "hpBias": 8.714513227513226
     },
     "pinned": {
       "finishTimeMae": 0.16193845536973742,
@@ -296,7 +412,11 @@
       "orderSpearman": 0.825,
       "spurtStartMae": 0.353515625,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.017364659845103
+      "trajectoryMae": 4.9817647449693006,
+      "speedMae": 0.19334955837173556,
+      "speedBias": 0.033751312083973514,
+      "hpMae": 24.58638099505035,
+      "hpBias": 0.980078725038403
     }
   },
   "Oguri Cap-74.2781s-20260831.json": {
@@ -307,7 +427,11 @@
       "orderSpearman": 0.7708333333333333,
       "spurtStartMae": 4.9431915283203125,
       "skillActivationError": 0.24453125,
-      "trajectoryMae": 5.457096547021081
+      "trajectoryMae": 5.016388981136895,
+      "speedMae": 0.23433609617682125,
+      "speedBias": -0.00046668586789559485,
+      "hpMae": 43.912217315241506,
+      "hpBias": 1.9593413978494623
     },
     "pinned": {
       "finishTimeMae": 0.18610636393229166,
@@ -316,7 +440,11 @@
       "orderSpearman": 0.94375,
       "spurtStartMae": 0.320343017578125,
       "skillActivationError": 0.008695652173913044,
-      "trajectoryMae": 4.438097907898769
+      "trajectoryMae": 3.963700709808646,
+      "speedMae": 0.15520814513700726,
+      "speedBias": 0.04024051490514892,
+      "hpMae": 30.698471845829566,
+      "hpBias": 2.9593119542306536
     }
   },
   "Oguri Cap-74.3331s-20260831.json": {
@@ -327,7 +455,11 @@
       "orderSpearman": 0.6541666666666667,
       "spurtStartMae": 3.6982354058159723,
       "skillActivationError": 0.22874149659863946,
-      "trajectoryMae": 5.479072291351489
+      "trajectoryMae": 5.073179273799859,
+      "speedMae": 0.2956733870967734,
+      "speedBias": 0.0927983870967742,
+      "hpMae": 49.738216845878135,
+      "hpBias": 30.87123655913979
     },
     "pinned": {
       "finishTimeMae": 0.20656394958496094,
@@ -336,7 +468,11 @@
       "orderSpearman": 0.66875,
       "spurtStartMae": 3.1053263346354165,
       "skillActivationError": 0.008849557522123894,
-      "trajectoryMae": 4.60046002413272
+      "trajectoryMae": 4.341067659671292,
+      "speedMae": 0.22453310104529592,
+      "speedBias": 0.08036946702800324,
+      "hpMae": 45.75754936120791,
+      "hpBias": 36.21024003097174
     }
   },
   "Oguri Cap-74.3391s-20260823.json": {
@@ -347,7 +483,11 @@
       "orderSpearman": 0.5812499999999999,
       "spurtStartMae": 0.3741302490234375,
       "skillActivationError": 0.2785493827160494,
-      "trajectoryMae": 6.3933785853660465
+      "trajectoryMae": 5.927255619641075,
+      "speedMae": 0.22708994708994745,
+      "speedBias": -0.013288550264550177,
+      "hpMae": 31.242220105820103,
+      "hpBias": 7.268706878306887
     },
     "pinned": {
       "finishTimeMae": 0.17492686377631295,
@@ -356,7 +496,11 @@
       "orderSpearman": 0.86875,
       "spurtStartMae": 0.3604973687065972,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.615808719875843
+      "trajectoryMae": 5.156726161992894,
+      "speedMae": 0.15264685714285742,
+      "speedBias": 0.010891534391534315,
+      "hpMae": 20.767791534391517,
+      "hpBias": -6.964991534391527
     }
   },
   "Oguri Cap-74.3566s-20260830.json": {
@@ -367,7 +511,11 @@
       "orderSpearman": 0.5437500000000001,
       "spurtStartMae": 8.00271945529514,
       "skillActivationError": 0.20209580838323354,
-      "trajectoryMae": 6.959488588009331
+      "trajectoryMae": 6.708237642713353,
+      "speedMae": 0.24949333333333343,
+      "speedBias": -0.018271851851851335,
+      "hpMae": 62.27911111111112,
+      "hpBias": 19.047481481481476
     },
     "pinned": {
       "finishTimeMae": 0.23726177215576172,
@@ -376,7 +524,11 @@
       "orderSpearman": 0.8125,
       "spurtStartMae": 0.3730417887369792,
       "skillActivationError": 0.00819672131147541,
-      "trajectoryMae": 6.098105329663717
+      "trajectoryMae": 5.786689657718052,
+      "speedMae": 0.18384589947089908,
+      "speedBias": 0.014405188598736893,
+      "hpMae": 58.3346507509814,
+      "hpBias": 16.6373047875064
     }
   },
   "Oguri Cap-74.5212s-20260831.json": {
@@ -387,7 +539,11 @@
       "orderSpearman": 0.7770833333333332,
       "spurtStartMae": 8.933537801106771,
       "skillActivationError": 0.29983660130718953,
-      "trajectoryMae": 11.208651136478514
+      "trajectoryMae": 10.99482928986413,
+      "speedMae": 0.3671487830687831,
+      "speedBias": 0.19524613756613754,
+      "hpMae": 64.71602116402117,
+      "hpBias": 18.864941798941796
     },
     "pinned": {
       "finishTimeMae": 0.4253753026326497,
@@ -396,7 +552,11 @@
       "orderSpearman": 0.8250000000000001,
       "spurtStartMae": 0.4596150716145833,
       "skillActivationError": 0.0,
-      "trajectoryMae": 7.926617542432312
+      "trajectoryMae": 7.541782814369121,
+      "speedMae": 0.26905661603721953,
+      "speedBias": 0.1865185071154901,
+      "hpMae": 47.33747149242838,
+      "hpBias": 24.23273923554096
     }
   },
   "Oguri Cap-74.5276s-20260831.json": {
@@ -407,7 +567,11 @@
       "orderSpearman": 0.81875,
       "spurtStartMae": 8.926500108506945,
       "skillActivationError": 0.28164556962025317,
-      "trajectoryMae": 5.164810373017521
+      "trajectoryMae": 4.610713471246598,
+      "speedMae": 0.2564551445578228,
+      "speedBias": 0.015738496787604417,
+      "hpMae": 50.902258125472414,
+      "hpBias": 4.567838246409673
     },
     "pinned": {
       "finishTimeMae": 0.14132118225097656,
@@ -416,7 +580,11 @@
       "orderSpearman": 0.8833333333333333,
       "spurtStartMae": 3.2509392632378473,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.41248914066364
+      "trajectoryMae": 3.9479455229460987,
+      "speedMae": 0.17323343527013288,
+      "speedBias": 0.061576962283384495,
+      "hpMae": 39.66689602446485,
+      "hpBias": 8.462682636765203
     }
   },
   "Oguri Cap-74.5545s-20260831.json": {
@@ -427,7 +595,11 @@
       "orderSpearman": 0.6166666666666668,
       "spurtStartMae": 0.6082831488715278,
       "skillActivationError": 0.24765625,
-      "trajectoryMae": 5.468161539833931
+      "trajectoryMae": 5.430542569237441,
+      "speedMae": 0.24335760345804996,
+      "speedBias": 0.01627037273242636,
+      "hpMae": 41.811773667800445,
+      "hpBias": 10.143300028344676
     },
     "pinned": {
       "finishTimeMae": 0.19524722629123265,
@@ -436,7 +608,11 @@
       "orderSpearman": 0.8770833333333333,
       "spurtStartMae": 0.4431271023220486,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.114050267319303
+      "trajectoryMae": 4.9713164528945235,
+      "speedMae": 0.2047160218253956,
+      "speedBias": 0.08014012896825377,
+      "hpMae": 38.85416666666667,
+      "hpBias": 5.647371031746032
     }
   },
   "Oguri Cap-74.6380s-20260831.json": {
@@ -447,7 +623,11 @@
       "orderSpearman": 0.46458333333333335,
       "spurtStartMae": 0.3650292290581597,
       "skillActivationError": 0.2602739726027397,
-      "trajectoryMae": 7.016410860492501
+      "trajectoryMae": 6.895305057234571,
+      "speedMae": 0.24485627663061302,
+      "speedBias": -0.008104064241232762,
+      "hpMae": 60.79634546050477,
+      "hpBias": 29.629908226810873
     },
     "pinned": {
       "finishTimeMae": 0.28889920976426864,
@@ -456,7 +636,11 @@
       "orderSpearman": 0.5708333333333333,
       "spurtStartMae": 0.3800743950737847,
       "skillActivationError": 0.0,
-      "trajectoryMae": 6.409530700817354
+      "trajectoryMae": 6.2723260477973,
+      "speedMae": 0.17803159519168266,
+      "speedBias": -0.0022941033138406943,
+      "hpMae": 50.92916318574212,
+      "hpBias": 31.06900352733686
     }
   },
   "Oguri Cap-74.6403s-20260831.json": {
@@ -467,7 +651,11 @@
       "orderSpearman": 0.55,
       "spurtStartMae": 0.6035359700520834,
       "skillActivationError": 0.27450980392156865,
-      "trajectoryMae": 5.804725806136328
+      "trajectoryMae": 5.722051253036686,
+      "speedMae": 0.2995987452065435,
+      "speedBias": 0.07576880976651618,
+      "hpMae": 44.60540993155672,
+      "hpBias": 10.826054560458234
     },
     "pinned": {
       "finishTimeMae": 0.22294235229492188,
@@ -476,7 +664,11 @@
       "orderSpearman": 0.9062500000000001,
       "spurtStartMae": 0.4407874213324653,
       "skillActivationError": 0.009523809523809525,
-      "trajectoryMae": 5.837065771937711
+      "trajectoryMae": 5.041116540516898,
+      "speedMae": 0.19425796123226033,
+      "speedBias": 0.10320396330910377,
+      "hpMae": 38.730053651782605,
+      "hpBias": 2.4807459328487362
     }
   },
   "Oguri Cap-74.6538s-20260831.json": {
@@ -487,7 +679,11 @@
       "orderSpearman": 0.8791666666666667,
       "spurtStartMae": 0.9661237928602431,
       "skillActivationError": 0.21955128205128205,
-      "trajectoryMae": 6.667188292691469
+      "trajectoryMae": 6.0969490959380215,
+      "speedMae": 0.2384501573617949,
+      "speedBias": 0.08989834199963474,
+      "hpMae": 53.261260490786356,
+      "hpBias": -3.1878363893450103
     },
     "pinned": {
       "finishTimeMae": 0.21509403652615017,
@@ -496,7 +692,11 @@
       "orderSpearman": 0.9375,
       "spurtStartMae": 0.3360477023654514,
       "skillActivationError": 0.008849557522123894,
-      "trajectoryMae": 6.514009365398609
+      "trajectoryMae": 5.943661600298601,
+      "speedMae": 0.20634048303229338,
+      "speedBias": 0.07623409277504088,
+      "hpMae": 36.28612479474549,
+      "hpBias": -0.9295292829775588
     }
   },
   "Oguri Cap-74.6961s-20260831.json": {
@@ -507,7 +707,11 @@
       "orderSpearman": 0.37500000000000006,
       "spurtStartMae": 2.4095458984375,
       "skillActivationError": 0.2869496855345912,
-      "trajectoryMae": 6.468993915613438
+      "trajectoryMae": 5.758544017692401,
+      "speedMae": 0.23179018304018326,
+      "speedBias": 0.006282175032175011,
+      "hpMae": 33.431675723342394,
+      "hpBias": 13.458774250440918
     },
     "pinned": {
       "finishTimeMae": 0.19986195034450954,
@@ -516,7 +720,11 @@
       "orderSpearman": 0.6375,
       "spurtStartMae": 0.3686336941189236,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.622804561498401
+      "trajectoryMae": 4.257101832028066,
+      "speedMae": 0.16507010582010584,
+      "speedBias": 0.0029137806637805097,
+      "hpMae": 29.739604377104364,
+      "hpBias": 11.1988395863396
     }
   },
   "Oguri Cap-74.8158s-20260831.json": {
@@ -527,7 +735,11 @@
       "orderSpearman": 0.3020833333333333,
       "spurtStartMae": 0.3549431694878472,
       "skillActivationError": 0.2903225806451613,
-      "trajectoryMae": 5.306327189215268
+      "trajectoryMae": 5.407278334216696,
+      "speedMae": 0.2454098305005384,
+      "speedBias": -0.0005446106662921603,
+      "hpMae": 41.111046729409566,
+      "hpBias": 10.862634030996865
     },
     "pinned": {
       "finishTimeMae": 0.247274292839898,
@@ -536,7 +748,11 @@
       "orderSpearman": 0.46249999999999997,
       "spurtStartMae": 0.4039035373263889,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.81302490422439
+      "trajectoryMae": 4.759414963438783,
+      "speedMae": 0.1529550383717054,
+      "speedBias": 0.035503420086753265,
+      "hpMae": 25.920628962295638,
+      "hpBias": 8.158330949997621
     }
   },
   "Oguri Cap-74.9062s-20260830.json": {
@@ -547,7 +763,11 @@
       "orderSpearman": 0.8375,
       "spurtStartMae": 0.3555755615234375,
       "skillActivationError": 0.2762738853503185,
-      "trajectoryMae": 5.816802421907921
+      "trajectoryMae": 4.997028994366606,
+      "speedMae": 0.20861122921390873,
+      "speedBias": 0.057654242252457195,
+      "hpMae": 60.38585364701436,
+      "hpBias": -7.538690476190476
     },
     "pinned": {
       "finishTimeMae": 0.1682866414388021,
@@ -556,7 +776,11 @@
       "orderSpearman": 0.9145833333333334,
       "spurtStartMae": 0.4415198432074653,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.546054511493336
+      "trajectoryMae": 3.7462767956291776,
+      "speedMae": 0.15019518849206348,
+      "speedBias": 0.05724280753968289,
+      "hpMae": 44.50081845238095,
+      "hpBias": 3.499875992063492
     }
   },
   "Oguri Cap-74.9342s-20260830.json": {
@@ -567,7 +791,11 @@
       "orderSpearman": 0.5645833333333333,
       "spurtStartMae": 0.2910970052083333,
       "skillActivationError": 0.2700617283950617,
-      "trajectoryMae": 6.173003555012875
+      "trajectoryMae": 5.756728985911545,
+      "speedMae": 0.2428151455026462,
+      "speedBias": 0.031949404761905095,
+      "hpMae": 50.82763487339384,
+      "hpBias": -17.411861063869992
     },
     "pinned": {
       "finishTimeMae": 0.2654294967651367,
@@ -576,7 +804,11 @@
       "orderSpearman": 0.6645833333333333,
       "spurtStartMae": 0.3596343994140625,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.322403190747088
+      "trajectoryMae": 5.164199496805635,
+      "speedMae": 0.16063427106953873,
+      "speedBias": 0.018220840419501047,
+      "hpMae": 44.6562322845805,
+      "hpBias": -0.20674485071806495
     }
   },
   "Oguri Cap-74.9537s-20260831.json": {
@@ -587,7 +819,11 @@
       "orderSpearman": 0.6416666666666667,
       "spurtStartMae": 5.905592176649305,
       "skillActivationError": 0.28264331210191085,
-      "trajectoryMae": 6.004836509845872
+      "trajectoryMae": 5.518594117315026,
+      "speedMae": 0.3036092477570731,
+      "speedBias": 0.06987570738440284,
+      "hpMae": 40.367846790890276,
+      "hpBias": -15.297619047619046
     },
     "pinned": {
       "finishTimeMae": 0.34380647871229386,
@@ -596,7 +832,11 @@
       "orderSpearman": 0.8125,
       "spurtStartMae": 0.3649410671657986,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.456698516033083
+      "trajectoryMae": 4.887015235038173,
+      "speedMae": 0.21521736819727783,
+      "speedBias": 0.12493108701814043,
+      "hpMae": 34.57909934807256,
+      "hpBias": -2.3514207766439914
     }
   },
   "Oguri Cap-75.0204s-20260831.json": {
@@ -607,7 +847,11 @@
       "orderSpearman": 0.7854166666666667,
       "spurtStartMae": 9.976793077256945,
       "skillActivationError": 0.2721518987341772,
-      "trajectoryMae": 4.82451504817977
+      "trajectoryMae": 4.432350415598681,
+      "speedMae": 0.2910420657726689,
+      "speedBias": 0.16363864942528716,
+      "hpMae": 52.249960089399735,
+      "hpBias": 8.089280012771392
     },
     "pinned": {
       "finishTimeMae": 0.23366101582845053,
@@ -616,7 +860,11 @@
       "orderSpearman": 0.7791666666666667,
       "spurtStartMae": 0.5020226372612847,
       "skillActivationError": 0.009009009009009009,
-      "trajectoryMae": 4.636731400683439
+      "trajectoryMae": 4.070641450316386,
+      "speedMae": 0.2335972397808672,
+      "speedBias": 0.15138204101699648,
+      "hpMae": 50.76834878494169,
+      "hpBias": 26.092305801376597
     }
   },
   "Silence Suzuka-74.0926s-20260902.json": {
@@ -627,7 +875,11 @@
       "orderSpearman": 0.4708333333333334,
       "spurtStartMae": 0.6417948404947916,
       "skillActivationError": 0.22855029585798817,
-      "trajectoryMae": 5.920821906961319
+      "trajectoryMae": 5.975178320414251,
+      "speedMae": 0.2632756719576727,
+      "speedBias": 0.002132645502645788,
+      "hpMae": 40.854638095238094,
+      "hpBias": 8.864324867724868
     },
     "pinned": {
       "finishTimeMae": 0.22303750779893664,
@@ -636,7 +888,11 @@
       "orderSpearman": 0.7770833333333333,
       "spurtStartMae": 0.4397820366753472,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.444619181498081
+      "trajectoryMae": 5.316274042118177,
+      "speedMae": 0.20858866666666684,
+      "speedBias": 0.024676666666666753,
+      "hpMae": 37.777066666666684,
+      "hpBias": 12.403199999999996
     }
   },
   "Silence Suzuka-74.2955s-20260831.json": {
@@ -647,7 +903,11 @@
       "orderSpearman": 0.5770833333333333,
       "spurtStartMae": 3.660007052951389,
       "skillActivationError": 0.22437888198757763,
-      "trajectoryMae": 5.642951560488826
+      "trajectoryMae": 5.357591386836701,
+      "speedMae": 0.2336627306749261,
+      "speedBias": 0.05510033552716465,
+      "hpMae": 35.72286746676991,
+      "hpBias": 2.415064309373254
     },
     "pinned": {
       "finishTimeMae": 0.2667740715874566,
@@ -656,7 +916,11 @@
       "orderSpearman": 0.8166666666666668,
       "spurtStartMae": 3.704676310221354,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.191438391758218
+      "trajectoryMae": 5.058728206380747,
+      "speedMae": 0.18554995519713113,
+      "speedBias": 0.071513856886841,
+      "hpMae": 39.314164106502815,
+      "hpBias": -1.4298515104966714
     }
   },
   "Silence Suzuka-74.5840s-20260830.json": {
@@ -667,7 +931,11 @@
       "orderSpearman": 0.4833333333333334,
       "spurtStartMae": 0.4682159423828125,
       "skillActivationError": 0.2507621951219512,
-      "trajectoryMae": 5.0909032084126515
+      "trajectoryMae": 4.791056639059253,
+      "speedMae": 0.21716640706126716,
+      "speedBias": 0.012477933541017424,
+      "hpMae": 34.463006230529594,
+      "hpBias": 6.1789979231568015
     },
     "pinned": {
       "finishTimeMae": 0.1744418674045139,
@@ -676,7 +944,11 @@
       "orderSpearman": 0.7416666666666667,
       "spurtStartMae": 0.2662099202473958,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.580536171865178
+      "trajectoryMae": 4.228467334628169,
+      "speedMae": 0.14477794924554127,
+      "speedBias": 0.03873885459533557,
+      "hpMae": 31.964763374485596,
+      "hpBias": 10.160065157750342
     }
   },
   "Special Week-74.1695s-20260823.json": {
@@ -687,7 +959,11 @@
       "orderSpearman": 0.5979166666666668,
       "spurtStartMae": 0.3840535481770833,
       "skillActivationError": 0.2989766081871345,
-      "trajectoryMae": 5.609666829874486
+      "trajectoryMae": 5.4046027745122975,
+      "speedMae": 0.21523108237547944,
+      "speedBias": 0.02223060344827602,
+      "hpMae": 28.51484674329502,
+      "hpBias": -1.2183908045977012
     },
     "pinned": {
       "finishTimeMae": 0.2010862562391493,
@@ -696,7 +972,11 @@
       "orderSpearman": 0.8583333333333333,
       "spurtStartMae": 0.2586313883463542,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.2483816895738675
+      "trajectoryMae": 3.9751556412605047,
+      "speedMae": 0.15313338122605308,
+      "speedBias": -0.008265086206896614,
+      "hpMae": 21.2602969348659,
+      "hpBias": 1.5390325670498084
     }
   },
   "Special Week-74.2200s-20260823.json": {
@@ -707,7 +987,11 @@
       "orderSpearman": 0.32499999999999996,
       "spurtStartMae": 0.3782958984375,
       "skillActivationError": 0.2926646706586826,
-      "trajectoryMae": 4.802305034384087
+      "trajectoryMae": 4.792782301519804,
+      "speedMae": 0.27960195627958817,
+      "speedBias": 0.017869639376218667,
+      "hpMae": 45.1590573656363,
+      "hpBias": 25.81225981620719
     },
     "pinned": {
       "finishTimeMae": 0.14442814721001518,
@@ -716,7 +1000,11 @@
       "orderSpearman": 0.8583333333333334,
       "spurtStartMae": 0.4746466742621528,
       "skillActivationError": 0.0,
-      "trajectoryMae": 3.608739526463278
+      "trajectoryMae": 3.278256331436619,
+      "speedMae": 0.16786642512077313,
+      "speedBias": -0.000308937198067402,
+      "hpMae": 40.41881642512078,
+      "hpBias": 21.029734299516907
     }
   },
   "Special Week-74.2330s-20260823.json": {
@@ -727,7 +1015,11 @@
       "orderSpearman": 0.20208333333333336,
       "spurtStartMae": 0.333465576171875,
       "skillActivationError": 0.23393854748603352,
-      "trajectoryMae": 4.256004291245137
+      "trajectoryMae": 4.045473155243948,
+      "speedMae": 0.2289027777777776,
+      "speedBias": 0.014564393939393738,
+      "hpMae": 42.708333333333336,
+      "hpBias": 16.342676767676767
     },
     "pinned": {
       "finishTimeMae": 0.16784646775987414,
@@ -736,7 +1028,11 @@
       "orderSpearman": 0.7875,
       "spurtStartMae": 0.4231160481770833,
       "skillActivationError": 0.0,
-      "trajectoryMae": 3.1379857732515792
+      "trajectoryMae": 2.78788068253765,
+      "speedMae": 0.15538510101010014,
+      "speedBias": 0.016198232323231632,
+      "hpMae": 42.47058080808081,
+      "hpBias": 13.393055555555556
     }
   },
   "Special Week-74.3402s-20260831.json": {
@@ -747,7 +1043,11 @@
       "orderSpearman": 0.6770833333333333,
       "spurtStartMae": 11.764275444878471,
       "skillActivationError": 0.235062893081761,
-      "trajectoryMae": 5.573936345683335
+      "trajectoryMae": 4.966253971667837,
+      "speedMae": 0.20301900245192864,
+      "speedBias": 0.05749293457220271,
+      "hpMae": 39.331523422377074,
+      "hpBias": 9.926387275777522
     },
     "pinned": {
       "finishTimeMae": 0.20636653900146484,
@@ -756,7 +1056,11 @@
       "orderSpearman": 0.8958333333333335,
       "spurtStartMae": 6.38484361436632,
       "skillActivationError": 0.00819672131147541,
-      "trajectoryMae": 4.820660293952765
+      "trajectoryMae": 4.082378916786923,
+      "speedMae": 0.14373860067965735,
+      "speedBias": 0.06416768830386733,
+      "hpMae": 31.135770206908404,
+      "hpBias": 7.344678883296769
     }
   },
   "Special Week-74.3953s-20260830.json": {
@@ -767,7 +1071,11 @@
       "orderSpearman": 0.8104166666666667,
       "spurtStartMae": 0.7438608805338541,
       "skillActivationError": 0.26157407407407407,
-      "trajectoryMae": 5.397815437370443
+      "trajectoryMae": 5.348691117536254,
+      "speedMae": 0.2198589065255739,
+      "speedBias": 0.025917107583774086,
+      "hpMae": 39.23636831275721,
+      "hpBias": -5.394710044511633
     },
     "pinned": {
       "finishTimeMae": 0.1943798065185547,
@@ -776,7 +1084,11 @@
       "orderSpearman": 0.89375,
       "spurtStartMae": 0.3514149983723958,
       "skillActivationError": 0.018691588785046728,
-      "trajectoryMae": 4.802120363209672
+      "trajectoryMae": 4.716343888199291,
+      "speedMae": 0.1764043209876545,
+      "speedBias": 0.04340755437977646,
+      "hpMae": 31.599316578483243,
+      "hpBias": 12.229828042328043
     }
   },
   "Special Week-74.4111s-20260831.json": {
@@ -787,7 +1099,11 @@
       "orderSpearman": 0.48125,
       "spurtStartMae": 0.5323655870225694,
       "skillActivationError": 0.2389937106918239,
-      "trajectoryMae": 5.6565995245381595
+      "trajectoryMae": 5.940166528621826,
+      "speedMae": 0.2498498193315267,
+      "speedBias": 0.0706131436314361,
+      "hpMae": 47.65176151761518,
+      "hpBias": -4.488934056007227
     },
     "pinned": {
       "finishTimeMae": 0.2094477547539605,
@@ -796,7 +1112,11 @@
       "orderSpearman": 0.7104166666666666,
       "spurtStartMae": 0.4909193250868056,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.331085699332041
+      "trajectoryMae": 5.222519905923969,
+      "speedMae": 0.19026305683563735,
+      "speedBias": 0.07461341525857645,
+      "hpMae": 36.93710530807312,
+      "hpBias": 5.826996927803379
     }
   },
   "Special Week-74.4734s-20260823.json": {
@@ -807,7 +1127,11 @@
       "orderSpearman": -0.23541666666666672,
       "spurtStartMae": 0.4515092637803819,
       "skillActivationError": 0.3177083333333333,
-      "trajectoryMae": 5.495416717930296
+      "trajectoryMae": 4.977643109181517,
+      "speedMae": 0.28480774097078504,
+      "speedBias": -0.06463189556015643,
+      "hpMae": 27.00673798021625,
+      "hpBias": 1.3245755693581776
     },
     "pinned": {
       "finishTimeMae": 0.10632695092095269,
@@ -816,7 +1140,11 @@
       "orderSpearman": 0.6645833333333333,
       "spurtStartMae": 0.4509124755859375,
       "skillActivationError": 0.0,
-      "trajectoryMae": 3.438563361637867
+      "trajectoryMae": 2.926900262072229,
+      "speedMae": 0.18273964803312634,
+      "speedBias": -0.02914889579020034,
+      "hpMae": 20.45738440303658,
+      "hpBias": 2.055003450655624
     }
   },
   "Special Week-74.5035s-20260831.json": {
@@ -827,7 +1155,11 @@
       "orderSpearman": 0.7041666666666666,
       "spurtStartMae": 0.4226938883463542,
       "skillActivationError": 0.23996913580246915,
-      "trajectoryMae": 5.762317599871389
+      "trajectoryMae": 5.447833211269699,
+      "speedMae": 0.2482821554547742,
+      "speedBias": 0.05132095616024201,
+      "hpMae": 44.840497186528935,
+      "hpBias": 14.26517594692198
     },
     "pinned": {
       "finishTimeMae": 0.23519420623779297,
@@ -836,7 +1168,11 @@
       "orderSpearman": 0.875,
       "spurtStartMae": 0.292755126953125,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.207316379942563
+      "trajectoryMae": 4.574589854091461,
+      "speedMae": 0.19349201015531714,
+      "speedBias": 0.06808803763440888,
+      "hpMae": 37.894078554360824,
+      "hpBias": 13.217853942652331
     }
   },
   "Special Week-74.5834s-20260831.json": {
@@ -847,7 +1183,11 @@
       "orderSpearman": 0.7708333333333333,
       "spurtStartMae": 0.4228396945529514,
       "skillActivationError": 0.26445086705202314,
-      "trajectoryMae": 4.712088456789945
+      "trajectoryMae": 4.498821731003153,
+      "speedMae": 0.30260315139701094,
+      "speedBias": 0.11787930474333948,
+      "hpMae": 64.97733918128654,
+      "hpBias": 37.22441520467835
     },
     "pinned": {
       "finishTimeMae": 0.17785633934868705,
@@ -856,7 +1196,11 @@
       "orderSpearman": 0.9229166666666668,
       "spurtStartMae": 0.4090711805555556,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.035606105658224
+      "trajectoryMae": 4.545885854352656,
+      "speedMae": 0.27965927550357395,
+      "speedBias": 0.1447876055880441,
+      "hpMae": 55.64770142949969,
+      "hpBias": 47.52188921377519
     }
   },
   "Special Week-74.5856s-20260830.json": {
@@ -867,7 +1211,11 @@
       "orderSpearman": 0.7791666666666666,
       "spurtStartMae": 6.864695231119792,
       "skillActivationError": 0.2483974358974359,
-      "trajectoryMae": 4.924532120329148
+      "trajectoryMae": 4.970094871661778,
+      "speedMae": 0.19873527414899086,
+      "speedBias": -0.012171103151191322,
+      "hpMae": 36.18153181626632,
+      "hpBias": -6.048748653837149
     },
     "pinned": {
       "finishTimeMae": 0.20738400353325737,
@@ -876,7 +1224,11 @@
       "orderSpearman": 0.9083333333333334,
       "spurtStartMae": 0.3506486680772569,
       "skillActivationError": 0.009900990099009901,
-      "trajectoryMae": 4.9908215835996375
+      "trajectoryMae": 4.899321520162419,
+      "speedMae": 0.17243403802032198,
+      "speedBias": -0.05314446083251362,
+      "hpMae": 27.478367748279247,
+      "hpBias": -1.2731071779744345
     }
   },
   "Special Week-74.6034s-20260831.json": {
@@ -887,7 +1239,11 @@
       "orderSpearman": 0.7958333333333332,
       "spurtStartMae": 2.32608879937066,
       "skillActivationError": 0.26633986928104575,
-      "trajectoryMae": 5.742530305005444
+      "trajectoryMae": 5.117869847537478,
+      "speedMae": 0.24399482816149454,
+      "speedBias": 0.09054554554554545,
+      "hpMae": 42.37299799799799,
+      "hpBias": -10.85531364698031
     },
     "pinned": {
       "finishTimeMae": 0.25481923421223956,
@@ -896,7 +1252,11 @@
       "orderSpearman": 0.89375,
       "spurtStartMae": 0.4069230821397569,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.535064765319388
+      "trajectoryMae": 4.862245117384858,
+      "speedMae": 0.1907775252525255,
+      "speedBias": 0.10399234006734012,
+      "hpMae": 34.55033670033669,
+      "hpBias": -2.0138383838383835
     }
   },
   "Special Week-74.6260s-20260830.json": {
@@ -907,7 +1267,11 @@
       "orderSpearman": 0.8500000000000001,
       "spurtStartMae": 0.3969540066189236,
       "skillActivationError": 0.2629573170731707,
-      "trajectoryMae": 4.701886797577822
+      "trajectoryMae": 4.21625637049997,
+      "speedMae": 0.24395520520520583,
+      "speedBias": 0.1192505005005004,
+      "hpMae": 30.007757757757762,
+      "hpBias": 0.07098765432098768
     },
     "pinned": {
       "finishTimeMae": 0.2089167700873481,
@@ -916,7 +1280,11 @@
       "orderSpearman": 0.9166666666666667,
       "spurtStartMae": 0.3869255913628472,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.341342783312934
+      "trajectoryMae": 3.7999405892544087,
+      "speedMae": 0.2061734848484845,
+      "speedBias": 0.1207164141414139,
+      "hpMae": 25.31579004329004,
+      "hpBias": 11.35396464646465
     }
   },
   "Special Week-74.6306s-20260831.json": {
@@ -927,7 +1295,11 @@
       "orderSpearman": 0.25625,
       "spurtStartMae": 3.51937018500434,
       "skillActivationError": 0.2801470588235294,
-      "trajectoryMae": 6.665441543775144
+      "trajectoryMae": 6.201796842557253,
+      "speedMae": 0.27373724146224154,
+      "speedBias": 0.065332094757095,
+      "hpMae": 34.85454425204423,
+      "hpBias": -0.9015692640692642
     },
     "pinned": {
       "finishTimeMae": 0.19558864169650608,
@@ -936,7 +1308,11 @@
       "orderSpearman": 0.8250000000000001,
       "spurtStartMae": 3.54435051812066,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.212258139301918
+      "trajectoryMae": 4.537615215856169,
+      "speedMae": 0.16743052521722243,
+      "speedBias": 0.06044518469977173,
+      "hpMae": 31.94457793311005,
+      "hpBias": 7.862045531770304
     }
   },
   "Special Week-74.6895s-20260831.json": {
@@ -947,7 +1323,11 @@
       "orderSpearman": 0.6375,
       "spurtStartMae": 0.16402689615885416,
       "skillActivationError": 0.2418154761904762,
-      "trajectoryMae": 5.76548119819397
+      "trajectoryMae": 5.330071275586074,
+      "speedMae": 0.21787733529990216,
+      "speedBias": 0.06265117994100315,
+      "hpMae": 39.617871189773844,
+      "hpBias": -9.311578171091446
     },
     "pinned": {
       "finishTimeMae": 0.18476157718234593,
@@ -956,7 +1336,11 @@
       "orderSpearman": 0.7375,
       "spurtStartMae": 0.22459242078993055,
       "skillActivationError": 0.008620689655172414,
-      "trajectoryMae": 4.838903055797586
+      "trajectoryMae": 4.497832666036722,
+      "speedMae": 0.17158771494709105,
+      "speedBias": 0.05930136290627404,
+      "hpMae": 32.66853269085413,
+      "hpBias": 6.104828042328043
     }
   },
   "Special Week-74.8247s-20260831.json": {
@@ -967,7 +1351,11 @@
       "orderSpearman": 0.5333333333333334,
       "spurtStartMae": 0.3458048502604167,
       "skillActivationError": 0.2780448717948718,
-      "trajectoryMae": 7.076260683369125
+      "trajectoryMae": 6.587621576789504,
+      "speedMae": 0.26755426823507283,
+      "speedBias": 0.06350216128117923,
+      "hpMae": 49.92124905517763,
+      "hpBias": 21.658635676492825
     },
     "pinned": {
       "finishTimeMae": 0.3303487565782335,
@@ -976,7 +1364,11 @@
       "orderSpearman": 0.9187500000000001,
       "spurtStartMae": 0.1728091769748264,
       "skillActivationError": 0.008695652173913044,
-      "trajectoryMae": 7.062548673515701
+      "trajectoryMae": 6.2441343688921975,
+      "speedMae": 0.16836876417233546,
+      "speedBias": 0.09315724206349198,
+      "hpMae": 46.64766392668178,
+      "hpBias": 23.691739890400612
     }
   },
   "Taiki Shuttle-74.4905s-20260823.json": {
@@ -987,7 +1379,11 @@
       "orderSpearman": 0.24583333333333332,
       "spurtStartMae": 0.3714616563585069,
       "skillActivationError": 0.31919642857142855,
-      "trajectoryMae": 3.674918488736024
+      "trajectoryMae": 3.021335024406836,
+      "speedMae": 0.21580683106575918,
+      "speedBias": -0.018940003779289397,
+      "hpMae": 26.9579258786848,
+      "hpBias": 1.3434630102040814
     },
     "pinned": {
       "finishTimeMae": 0.07618501451280382,
@@ -996,7 +1392,11 @@
       "orderSpearman": 0.8770833333333333,
       "spurtStartMae": 0.3220808241102431,
       "skillActivationError": 0.0,
-      "trajectoryMae": 3.002520016188444
+      "trajectoryMae": 2.205360632076566,
+      "speedMae": 0.12866650132275156,
+      "speedBias": -0.02161210317460317,
+      "hpMae": 20.694981812169313,
+      "hpBias": 6.6741484788359795
     }
   },
   "Taiki Shuttle-74.6058s-20260831.json": {
@@ -1007,7 +1407,11 @@
       "orderSpearman": 0.5562500000000001,
       "spurtStartMae": 9.719963921440971,
       "skillActivationError": 0.23166666666666666,
-      "trajectoryMae": 6.402260128290828
+      "trajectoryMae": 5.653111135500341,
+      "speedMae": 0.23371970663265293,
+      "speedBias": 0.017057291666666266,
+      "hpMae": 42.080676020408134,
+      "hpBias": 13.848781179138319
     },
     "pinned": {
       "finishTimeMae": 0.130464235941569,
@@ -1016,7 +1420,11 @@
       "orderSpearman": 0.8875000000000001,
       "spurtStartMae": 0.3779805501302083,
       "skillActivationError": 0.0,
-      "trajectoryMae": 5.489757562758212
+      "trajectoryMae": 4.9353889762179115,
+      "speedMae": 0.16252878787878755,
+      "speedBias": 0.036383333333333226,
+      "hpMae": 40.89651515151515,
+      "hpBias": 6.887474747474749
     }
   },
   "Vodka-74.5581s-20260831.json": {
@@ -1027,7 +1435,11 @@
       "orderSpearman": 0.4395833333333333,
       "spurtStartMae": 3.5210639105902777,
       "skillActivationError": 0.26048951048951047,
-      "trajectoryMae": 4.912365768615961
+      "trajectoryMae": 4.81808051582224,
+      "speedMae": 0.24632044560943697,
+      "speedBias": 0.06915137614678908,
+      "hpMae": 47.34230741226153,
+      "hpBias": -4.137123197903014
     },
     "pinned": {
       "finishTimeMae": 0.1843134562174479,
@@ -1036,7 +1448,11 @@
       "orderSpearman": 0.8333333333333334,
       "spurtStartMae": 2.7436947292751737,
       "skillActivationError": 0.0,
-      "trajectoryMae": 4.406345551029759
+      "trajectoryMae": 4.106286418496761,
+      "speedMae": 0.1631583694083692,
+      "speedBias": 0.050761904761904696,
+      "hpMae": 38.9837061087061,
+      "hpBias": -0.8665945165945167
     }
   },
   "Yukino Bijin-74.7362s-20260823.json": {
@@ -1047,7 +1463,11 @@
       "orderSpearman": 0.45416666666666666,
       "spurtStartMae": 0.3663262261284722,
       "skillActivationError": 0.26704545454545453,
-      "trajectoryMae": 6.951296519856373
+      "trajectoryMae": 6.171242336036293,
+      "speedMae": 0.27055892602767606,
+      "speedBias": 0.08719036172161188,
+      "hpMae": 48.63887617012614,
+      "hpBias": -4.179423585673587
     },
     "pinned": {
       "finishTimeMae": 0.3269193437364366,
@@ -1056,7 +1476,11 @@
       "orderSpearman": 0.5916666666666666,
       "spurtStartMae": 0.2975870768229167,
       "skillActivationError": 0.007407407407407408,
-      "trajectoryMae": 6.414407411932837
+      "trajectoryMae": 5.607940080517996,
+      "speedMae": 0.20088398692810464,
+      "speedBias": 0.06817156862745104,
+      "hpMae": 42.80297878410623,
+      "hpBias": -5.173774509803921
     }
   }
 }

@@ -68,7 +68,7 @@ Each fixture runs twice over `ACCURACY_SAMPLES` seeds (default 8, deterministic)
 - **free**: the engine rolls skill activations itself. This scores the whole model, randomness included, against one drawn outcome, so it is noisy by construction.
 - **pinned**: skills the game fired are forced at the recorded distance with `forced_positions`, skills it never fired are removed, and the last spurt starts at the recorded distance through `CreateRunner::forced_last_spurt_distance`. What remains is deterministic (speed, acceleration, HP), so a pinned residual is a formula error, not luck.
 
-Scores per run: finish time MAE and bias, winner hit rate, Spearman rank correlation of the finish order, spurt start MAE, skill activation error, and trajectory MAE over the recorded frames. A per-runner breakdown prints under each pinned run so an aggregate points at a runner.
+Scores per run: finish time MAE and bias, winner hit rate, Spearman rank correlation of the finish order, spurt start MAE, skill activation error, and per-frame trajectory, speed and HP MAE and bias over the recorded frames. Frames are matched by time, not index: the engine's replay starts at the first tick while the game records a frame at 0. A per-runner breakdown prints under each pinned run with speed and HP bias per race phase, so an aggregate points at a runner and a phase.
 
 The harness runs locally only: the test is `#[ignore]`d and runs with `cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored --nocapture`. `baseline.json` stores the last accepted scores. The test fails when finish time MAE or trajectory MAE regress past a small tolerance. Accept a new baseline with `UPDATE_ACCURACY_BASELINE=1` only in the change that moves the mechanics, and say why in that change.
 

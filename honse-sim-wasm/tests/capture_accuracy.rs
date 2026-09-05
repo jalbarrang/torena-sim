@@ -39,6 +39,8 @@ const DEFAULT_SAMPLES: usize = 8;
 /// Slack on the regression gate, so float noise across platforms never trips it.
 const FINISH_TIME_TOLERANCE: f64 = 0.02;
 const TRAJECTORY_TOLERANCE: f64 = 0.25;
+const SPEED_TOLERANCE: f64 = 0.02;
+const HP_TOLERANCE: f64 = 2.0;
 
 // ---------- fixture shape (mirrors torena-hub `export-sim-fixture.ts`) ----------
 
@@ -73,11 +75,13 @@ struct Observed {
     events: Vec<ObservedEvent>,
 }
 
-/// One recorded frame, columnar: `distance[gate]` in meters.
+/// One recorded frame, columnar per gate: meters, centimeters per second, HP.
 #[derive(Deserialize)]
 struct ObservedFrame {
     time: f64,
     distance: Vec<f64>,
+    speed: Vec<f64>,
+    hp: Vec<f64>,
 }
 
 #[derive(Deserialize)]
@@ -116,6 +120,77 @@ struct Scores {
     skill_activation_error: f64,
     /// Mean over (observed frame, runner) of |mean simulated distance - observed|, meters.
     trajectory_mae: f64,
+    /// Mean over (observed frame, runner) of |mean simulated speed - observed|, m/s.
+    #[serde(default)]
+    speed_mae: f64,
+    /// Mean over (observed frame, runner) of (mean simulated speed - observed), m/s.
+    #[serde(default)]
+    speed_bias: f64,
+    /// Mean over (observed frame, runner) of |mean simulated HP - observed|.
+    #[serde(default)]
+    hp_mae: f64,
+    /// Mean over (observed frame, runner) of (mean simulated HP - observed); negative = engine drains more.
+    #[serde(default)]
+    hp_bias: f64,
+}
+
+/// One runner's state in one frame, in engine units.
+#[derive(Debug, Clone, Copy, Default)]
+struct FrameSample {
+    /// Meters.
+    distance: f64,
+    /// Meters per second.
+    speed: f64,
+    hp: f64,
+}
+
+/// Running comparison of mean simulated samples against recorded ones.
+#[derive(Debug, Default, Clone, Copy)]
+struct FrameErrors {
+    distance_abs: f64,
+    speed_abs: f64,
+    speed_signed: f64,
+    hp_abs: f64,
+    hp_signed: f64,
+    count: usize,
+}
+
+impl FrameErrors {
+    fn add(&mut self, sim: FrameSample, observed: FrameSample) {
+        self.distance_abs += (sim.distance - observed.distance).abs();
+        self.speed_abs += (sim.speed - observed.speed).abs();
+        self.speed_signed += sim.speed - observed.speed;
+        self.hp_abs += (sim.hp - observed.hp).abs();
+        self.hp_signed += sim.hp - observed.hp;
+        self.count += 1;
+    }
+
+    fn mean(&self, sum: f64) -> f64 {
+        sum / self.count.max(1) as f64
+    }
+}
+
+/// The game's three race phases, by fraction of the course covered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Early,
+    Mid,
+    Late,
+}
+
+impl Phase {
+    const ALL: [Phase; 3] = [Phase::Early, Phase::Mid, Phase::Late];
+
+    fn of(distance: f64, course_distance: f64) -> Phase {
+        let fraction = distance / course_distance;
+        if fraction < 1.0 / 6.0 {
+            Phase::Early
+        } else if fraction < 2.0 / 3.0 {
+            Phase::Mid
+        } else {
+            Phase::Late
+        }
+    }
 }
 
 /// One accumulator per (runner) across rounds.
@@ -241,12 +316,99 @@ fn spearman(sim_order: &[i32], observed_order: &[i32]) -> f64 {
     1.0 - 6.0 * d2 / (n * (n * n - 1.0))
 }
 
-fn sim_distance_at(replay: &RaceReplay, gate: usize, time: f64) -> Option<f64> {
-    let index = (time / TICK_SECONDS).round() as usize;
-    replay
+/// The simulated sample nearest `time`, matched by frame time rather than
+/// index: the engine's replay starts at the first tick while the game records
+/// a frame at 0, so indexes are one tick apart. `None` once the replay ends.
+fn sim_sample_at(replay: &RaceReplay, gate: usize, time: f64) -> Option<FrameSample> {
+    let after = replay
         .frames
-        .get(index)
-        .map(|frame| f64::from(frame.horses[gate].distance))
+        .partition_point(|frame| f64::from(frame.time) < time);
+    let candidates = [after.checked_sub(1), Some(after)];
+    let index = candidates
+        .into_iter()
+        .flatten()
+        .filter(|&i| i < replay.frames.len())
+        .min_by(|&a, &b| {
+            let da = (f64::from(replay.frames[a].time) - time).abs();
+            let db = (f64::from(replay.frames[b].time) - time).abs();
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .filter(|&i| (f64::from(replay.frames[i].time) - time).abs() <= TICK_SECONDS)?;
+    replay.frames.get(index).map(|frame| {
+        let horse = frame.horses[gate];
+        FrameSample {
+            distance: f64::from(horse.distance),
+            speed: f64::from(horse.speed) / 100.0,
+            hp: f64::from(horse.hp),
+        }
+    })
+}
+
+fn observed_sample(frame: &ObservedFrame, gate: usize) -> FrameSample {
+    FrameSample {
+        distance: frame.distance[gate],
+        speed: frame.speed[gate] / 100.0,
+        hp: frame.hp[gate],
+    }
+}
+
+/// Mean simulated sample per (observed frame index, gate), over the rounds
+/// still running at that frame.
+fn mean_sim_samples(
+    observed: &Observed,
+    replays: &[RaceReplay],
+) -> BTreeMap<(usize, usize), FrameSample> {
+    let runners = observed.results.len();
+    let mut sums: BTreeMap<(usize, usize), (FrameSample, usize)> = BTreeMap::new();
+    for replay in replays {
+        for (frame_index, frame) in observed.frames.iter().enumerate() {
+            for gate in 0..runners {
+                if let Some(sample) = sim_sample_at(replay, gate, frame.time) {
+                    let slot = sums.entry((frame_index, gate)).or_default();
+                    slot.0.distance += sample.distance;
+                    slot.0.speed += sample.speed;
+                    slot.0.hp += sample.hp;
+                    slot.1 += 1;
+                }
+            }
+        }
+    }
+    sums.into_iter()
+        .map(|(key, (sum, count))| {
+            let n = count as f64;
+            (
+                key,
+                FrameSample {
+                    distance: sum.distance / n,
+                    speed: sum.speed / n,
+                    hp: sum.hp / n,
+                },
+            )
+        })
+        .collect()
+}
+
+/// Frame errors over the recorded frames, optionally limited to one gate and
+/// one phase (by the recorded distance).
+fn frame_errors(
+    fixture: &Fixture,
+    means: &BTreeMap<(usize, usize), FrameSample>,
+    gate: Option<usize>,
+    phase: Option<Phase>,
+) -> FrameErrors {
+    let course_distance = fixture.params.course.distance;
+    let mut errors = FrameErrors::default();
+    for (&(frame_index, sample_gate), sim) in means {
+        if gate.is_some_and(|g| g != sample_gate) {
+            continue;
+        }
+        let observed = observed_sample(&fixture.observed.frames[frame_index], sample_gate);
+        if phase.is_some_and(|p| p != Phase::of(observed.distance, course_distance)) {
+            continue;
+        }
+        errors.add(*sim, observed);
+    }
+    errors
 }
 
 fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64>]) -> Scores {
@@ -261,8 +423,6 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
         (0..runners).map(|_| RunnerAccumulator::default()).collect();
     let mut winner_hits = 0usize;
     let mut spearman_sum = 0.0;
-    // (observed frame, gate) -> (sum of simulated distance, rounds still running there).
-    let mut trajectory_sum: BTreeMap<(usize, usize), (f64, usize)> = BTreeMap::new();
 
     for replay in replays {
         let sim_order: Vec<i32> = replay.results.iter().map(|r| r.finish_order).collect();
@@ -284,17 +444,6 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
                     .fired
                     .entry(i64::from(skill))
                     .or_insert(0) += 1;
-            }
-        }
-        for (frame_index, frame) in observed.frames.iter().enumerate() {
-            for gate in 0..runners {
-                if let Some(distance) = sim_distance_at(replay, gate, frame.time) {
-                    let slot = trajectory_sum
-                        .entry((frame_index, gate))
-                        .or_insert((0.0, 0));
-                    slot.0 += distance;
-                    slot.1 += 1;
-                }
             }
         }
     }
@@ -326,13 +475,7 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
         }
     }
 
-    let mut trajectory_abs = 0.0;
-    let mut trajectory_count = 0usize;
-    for ((frame_index, gate), (sum, count)) in &trajectory_sum {
-        let observed_distance = observed.frames[*frame_index].distance[*gate];
-        trajectory_abs += (sum / *count as f64 - observed_distance).abs();
-        trajectory_count += 1;
-    }
+    let frames = frame_errors(fixture, &mean_sim_samples(observed, replays), None, None);
 
     Scores {
         finish_time_mae: finish_abs / runners as f64,
@@ -341,7 +484,11 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
         order_spearman: spearman_sum / rounds,
         spurt_start_mae: spurt_abs / spurt_count.max(1) as f64,
         skill_activation_error: skill_abs / skill_count.max(1) as f64,
-        trajectory_mae: trajectory_abs / trajectory_count.max(1) as f64,
+        trajectory_mae: frames.mean(frames.distance_abs),
+        speed_mae: frames.mean(frames.speed_abs),
+        speed_bias: frames.mean(frames.speed_signed),
+        hp_mae: frames.mean(frames.hp_abs),
+        hp_bias: frames.mean(frames.hp_signed),
     }
 }
 
@@ -362,7 +509,7 @@ fn engine_skills(params: &WasmRaceSimParams) -> Vec<Vec<i64>> {
 
 fn print_scores(label: &str, scores: &Scores) {
     println!(
-        "  {label:<7} finish MAE {:.3}s (bias {:+.3}s)  winner {:>3.0}%  spearman {:.3}  spurt MAE {:>6.1}m  skill err {:.3}  trajectory MAE {:>5.1}m",
+        "  {label:<7} finish MAE {:.3}s (bias {:+.3}s)  winner {:>3.0}%  spearman {:.3}  spurt MAE {:>6.1}m  skill err {:.3}  trajectory MAE {:>5.1}m  speed MAE {:.3} (bias {:+.3}) m/s  hp MAE {:>5.1} (bias {:+6.1})",
         scores.finish_time_mae,
         scores.finish_time_bias,
         scores.winner_hit_rate * 100.0,
@@ -370,16 +517,29 @@ fn print_scores(label: &str, scores: &Scores) {
         scores.spurt_start_mae,
         scores.skill_activation_error,
         scores.trajectory_mae,
+        scores.speed_mae,
+        scores.speed_bias,
+        scores.hp_mae,
+        scores.hp_bias,
     );
 }
 
 /// Per-runner breakdown of a run, so a bad aggregate points at a runner.
+/// Speed and HP biases are (simulated - recorded) per race phase.
 fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
     let observed = &fixture.observed;
     let rounds = replays.len() as f64;
+    let means = mean_sim_samples(observed, replays);
     println!(
-        "          {:<18} {:>5} {:>8} {:>8} {:>9} {:>9}",
-        "runner", "style", "obs fin", "sim dev", "spurt obs", "spurt dev"
+        "          {:<18} {:>5} {:>8} {:>8} {:>9}  {:^24}  {:^24}  {:>8}",
+        "runner",
+        "style",
+        "obs fin",
+        "fin dev",
+        "spurt dev",
+        "speed bias early/mid/late",
+        "hp bias early/mid/late",
+        "traj MAE"
     );
     for (gate, result) in observed.results.iter().enumerate() {
         let mean_finish = replays
@@ -392,21 +552,13 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             .map(|r| f64::from(r.results[gate].last_spurt_start_distance))
             .sum::<f64>()
             / rounds;
-        let mut trajectory_abs = 0.0;
-        let mut count = 0usize;
-        for frame in &observed.frames {
-            let sims: Vec<f64> = replays
-                .iter()
-                .filter_map(|r| sim_distance_at(r, gate, frame.time))
-                .collect();
-            if !sims.is_empty() {
-                let mean = sims.iter().sum::<f64>() / sims.len() as f64;
-                trajectory_abs += (mean - frame.distance[gate]).abs();
-                count += 1;
-            }
-        }
+        let by_phase: Vec<FrameErrors> = Phase::ALL
+            .iter()
+            .map(|&phase| frame_errors(fixture, &means, Some(gate), Some(phase)))
+            .collect();
+        let whole = frame_errors(fixture, &means, Some(gate), None);
         println!(
-            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>9.1} {:>+9.1}  trajectory MAE {:>5.1}m",
+            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>+9.1}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}  {:>7.1}m",
             fixture.horses[gate]
                 .name
                 .chars()
@@ -415,11 +567,34 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             fixture.params.runners[gate].strategy,
             result.finish_time_raw,
             mean_finish - result.finish_time_raw,
-            result.last_spurt_start_distance,
             mean_spurt - result.last_spurt_start_distance,
-            trajectory_abs / count.max(1) as f64,
+            by_phase[0].mean(by_phase[0].speed_signed),
+            by_phase[1].mean(by_phase[1].speed_signed),
+            by_phase[2].mean(by_phase[2].speed_signed),
+            by_phase[0].mean(by_phase[0].hp_signed),
+            by_phase[1].mean(by_phase[1].hp_signed),
+            by_phase[2].mean(by_phase[2].hp_signed),
+            whole.mean(whole.distance_abs),
         );
     }
+    let field: Vec<FrameErrors> = Phase::ALL
+        .iter()
+        .map(|&phase| frame_errors(fixture, &means, None, Some(phase)))
+        .collect();
+    println!(
+        "          {:<18} {:>5} {:>8} {:>8} {:>9}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}",
+        "field",
+        "",
+        "",
+        "",
+        "",
+        field[0].mean(field[0].speed_signed),
+        field[1].mean(field[1].speed_signed),
+        field[2].mean(field[2].speed_signed),
+        field[0].mean(field[0].hp_signed),
+        field[1].mean(field[1].hp_signed),
+        field[2].mean(field[2].hp_signed),
+    );
 }
 
 /// Baseline file shape: fixture file -> mode -> scores.
@@ -456,6 +631,18 @@ fn check_against_baseline(
         failures.push(format!(
             "{file} [{mode}]: trajectory MAE regressed {:.2}m -> {:.2}m",
             previous.trajectory_mae, scores.trajectory_mae
+        ));
+    }
+    if scores.speed_mae > previous.speed_mae + SPEED_TOLERANCE {
+        failures.push(format!(
+            "{file} [{mode}]: speed MAE regressed {:.3} -> {:.3} m/s",
+            previous.speed_mae, scores.speed_mae
+        ));
+    }
+    if scores.hp_mae > previous.hp_mae + HP_TOLERANCE {
+        failures.push(format!(
+            "{file} [{mode}]: HP MAE regressed {:.1} -> {:.1}",
+            previous.hp_mae, scores.hp_mae
         ));
     }
     failures
