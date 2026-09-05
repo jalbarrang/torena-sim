@@ -1268,6 +1268,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         };
         Runner::create(
             RunnerId(0),
@@ -1493,6 +1495,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         };
         let mut r = Runner::create(
             RunnerId(0),

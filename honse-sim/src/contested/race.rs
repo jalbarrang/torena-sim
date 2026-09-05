@@ -16,8 +16,9 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    build_field_snapshot, build_field_view, front_blocking_runner, is_overtaking_runner,
-    proximity_snapshots, resolve_debuff_targets, FieldOrderTracker, FieldSnapshot,
+    assign_gates, build_field_snapshot, build_field_view, front_blocking_runner,
+    is_overtaking_runner, proximity_snapshots, resolve_debuff_targets, FieldOrderTracker,
+    FieldSnapshot,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
 use uma_sim_primitives::runner::physics::{
@@ -264,12 +265,8 @@ impl Race {
         let base_speed = self.base_speed();
         let parser = ConditionParser::new(&self.catalog);
 
-        // Fisher-Yates gate shuffle (one gate per runner) seeded from the race RNG.
-        let mut gates: Vec<i64> = (0..self.runners.len() as i64).collect();
-        for i in (1..gates.len()).rev() {
-            let j = self.rng.uniform(i as u32 + 1) as usize;
-            gates.swap(i, j);
-        }
+        let fixed_gates: Vec<Option<i64>> = self.runners.iter().map(|r| r.fixed_gate).collect();
+        let gates = assign_gates(&fixed_gates, self.runners.len(), &mut *self.rng);
 
         let mut runners = std::mem::take(&mut self.runners);
         for (idx, runner) in runners.iter_mut().enumerate() {
@@ -985,6 +982,8 @@ mod tests {
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
             forced_rank: vec![],
+            gate: None,
+            forced_start_delay: None,
         }
     }
 

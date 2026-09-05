@@ -17,3 +17,5 @@
 /.issues/
 /.pi/context-folders.json
 /.pi/discord.json
+
+.claude/settings.local.json

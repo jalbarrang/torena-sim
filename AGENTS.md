@@ -28,6 +28,8 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 | Validate release version | `./scripts/validate-release-version.sh <version>` |
 | Run quick gates | `./scripts/quality-gates.sh --quick` |
 | Run full gates | `./scripts/quality-gates.sh` |
+| Score captured races | `cargo test -p honse-sim-wasm --test capture_accuracy -- --nocapture` |
+| Accept a new accuracy baseline | `UPDATE_ACCURACY_BASELINE=1 cargo test -p honse-sim-wasm --test capture_accuracy` |
 
 ## Rules
 
@@ -43,6 +45,7 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 - **Optional DTO fields:** Use `Option<T>` for optional WASM DTO fields. Serde defaults apply to absent keys, not present keys with `undefined` values.
 - **Generated npm package:** Use `scripts/package-npm.sh`. Preserve the `uma_sim_wasm` entry point and asset names. Generated files under `honse-sim-wasm/pkg/` are not source files.
 - **Release safety:** Do not publish, tag, or create a GitHub Release outside the manual release workflow. The first crates.io publish uses the bootstrap token; later releases use OIDC.
+- **Capture accuracy:** `honse-sim-wasm/tests/capture_accuracy.rs` replays real game races and gates against `baseline.json`. A mechanics change that moves the scores on purpose must update the baseline in the same change and say why. Fixtures come from torena-hub's `pnpm run race:fixture`, never by hand.
 - **Delegated verification:** Re-run the relevant Cargo gates and inspect risky diffs before accepting delegated work.
 
 ## Key paths
@@ -55,6 +58,7 @@ honse-sim-wasm/            external DTO and WebAssembly adapter
 docs/mechanics/            mechanics evidence, formulas, and limitations
 docs/simulation/           engine design patterns
 scripts/                   local quality, package, release, and hook scripts
+honse-sim-wasm/tests/fixtures/captures/  real game races (engine input + decoded replay) and the accuracy baseline
 tools/                     standalone capture utilities, outside the Rust workspace
 ```
 

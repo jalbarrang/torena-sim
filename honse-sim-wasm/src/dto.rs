@@ -810,6 +810,13 @@ pub struct WasmCreateRunner {
     /// Scripted forced-rank regions.
     #[serde(default)]
     pub forced_rank: Vec<WasmForcedRank>,
+    /// Fixed 0-based gate. Omitted/`null` = shuffled with the field. Must stay
+    /// `Option` so a present-but-`undefined` key deserializes to `None`.
+    #[serde(default)]
+    pub gate: Option<i64>,
+    /// Scripted start delay in seconds. Omitted/`null` = the engine's draw.
+    #[serde(default)]
+    pub forced_start_delay: Option<f64>,
 }
 
 impl WasmCreateRunner {
@@ -873,6 +880,8 @@ impl WasmCreateRunner {
                     rank: r.rank,
                 })
                 .collect(),
+            gate: self.gate,
+            forced_start_delay: self.forced_start_delay,
         })
     }
 }
@@ -2621,6 +2630,42 @@ mod tests {
         .expect("contested compare params deserialize with both fill fields");
         let domain = dto.into_domain().expect("params convert to domain");
         assert_eq!(domain.fill_to, Some(11));
+    }
+
+    #[test]
+    fn create_runner_carries_gate_and_forced_start_delay_when_present() {
+        let pinned: WasmCreateRunner = serde_json::from_str(
+            r#"{
+                "outfitId": "test-outfit",
+                "name": "Alpha",
+                "mood": 0,
+                "strategy": 1,
+                "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 },
+                "gate": 6,
+                "forcedStartDelay": 0.0333
+            }"#,
+        )
+        .expect("pinned runner parses");
+        let domain = pinned.into_domain().expect("converts");
+        assert_eq!(domain.gate, Some(6));
+        assert_eq!(domain.forced_start_delay, Some(0.0333));
+
+        let free: WasmCreateRunner = serde_json::from_str(
+            r#"{
+                "outfitId": "test-outfit",
+                "name": "Beta",
+                "mood": 0,
+                "strategy": 1,
+                "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
+                "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 },
+                "gate": null
+            }"#,
+        )
+        .expect("free runner parses");
+        let domain = free.into_domain().expect("converts");
+        assert_eq!(domain.gate, None);
+        assert_eq!(domain.forced_start_delay, None);
     }
 
     #[test]

@@ -57,6 +57,8 @@ fn mob_runner(index: usize, strategy: Strategy, stats: i32) -> CreateRunner {
         forced_dueling_regions: Vec::new(),
         forced_spot_struggle_regions: Vec::new(),
         forced_rank: Vec::new(),
+        gate: None,
+        forced_start_delay: None,
     }
 }
 

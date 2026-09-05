@@ -52,6 +52,28 @@ Shared observer and projection code:
 - `honse-sim/src/primitives/compare.rs`
 - `honse-sim/src/primitives/projection.rs`
 
+## Capture accuracy harness
+
+`honse-sim-wasm/tests/capture_accuracy.rs` replays real game races through the contested engine and scores the result against the game's own replay. It is the feedback loop for reducing model error: every fixture is one race the game actually ran.
+
+A fixture holds two things:
+
+- The `WasmRaceSimParams` a downstream would send for that race, with every runner pinned to its recorded gate and start delay through `CreateRunner::gate` and `CreateRunner::forced_start_delay`.
+- The decoded `RaceSimulateData` payload: per-frame distance, speed, and HP, per-runner results, and every skill activation with its time.
+
+torena-hub's `pnpm run race:fixture <horseACT capture> --out honse-sim-wasm/tests/fixtures/captures` writes them. The Rust side only reads JSON, so the game data decoder and skill resolution stay outside this workspace.
+
+Each fixture runs twice over `ACCURACY_SAMPLES` seeds (default 8, deterministic). `ACCURACY_FIXTURE=<substring>` narrows a run to matching files, and a higher sample count is the right tool when digging into one race. The engine packages build with `opt-level = 3` under the test profile so the suite stays under a minute.
+
+- **free**: the engine rolls skill activations itself. This scores the whole model, randomness included, against one drawn outcome, so it is noisy by construction.
+- **pinned**: skills the game fired are forced at the recorded distance with `forced_positions`, and skills it never fired are removed. What remains is deterministic (speed, acceleration, HP, spurt), so a pinned residual is a formula error, not luck.
+
+Scores per run: finish time MAE and bias, winner hit rate, Spearman rank correlation of the finish order, spurt start MAE, skill activation error, and trajectory MAE over the recorded frames. A per-runner breakdown prints under each pinned run so an aggregate points at a runner.
+
+`baseline.json` stores the last accepted scores. The test fails when finish time MAE or trajectory MAE regress past a small tolerance. Accept a new baseline with `UPDATE_ACCURACY_BASELINE=1` only in the change that moves the mechanics, and say why in that change.
+
+Outcomes the replay records but the engine still rolls itself: last spurt candidate selection, per-section wit variance, lane targets, and blocking. Pin those next when a pinned residual needs isolating further.
+
 ## Add a simulation use case
 
 1. Choose the contested engine or the vacuum engine.
