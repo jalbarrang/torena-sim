@@ -807,6 +807,9 @@ pub struct WasmCreateRunner {
     /// Scripted spot-struggle regions.
     #[serde(default)]
     pub forced_spot_struggle_regions: Vec<WasmForcedRegion>,
+    /// Scripted downhill-mode regions; any present replaces the per-second roll.
+    #[serde(default)]
+    pub forced_downhill_regions: Vec<WasmForcedRegion>,
     /// Scripted forced-rank regions.
     #[serde(default)]
     pub forced_rank: Vec<WasmForcedRank>,
@@ -868,6 +871,14 @@ impl WasmCreateRunner {
                 .collect(),
             forced_spot_struggle_regions: self
                 .forced_spot_struggle_regions
+                .into_iter()
+                .map(|r| ForcedRegion {
+                    start: r.start,
+                    end: r.end,
+                })
+                .collect(),
+            forced_downhill_regions: self
+                .forced_downhill_regions
                 .into_iter()
                 .map(|r| ForcedRegion {
                     start: r.start,
