@@ -225,7 +225,7 @@ impl Runner {
         self.apply_forces();
         match field_inputs.lane_neighbors {
             Some(neighbors) => self.apply_lane_movement_live(neighbors, field_inputs, ctx, dt),
-            None => self.apply_lane_movement(field_inputs, ctx),
+            None => self.apply_lane_movement(field_inputs, ctx, dt),
         }
 
         // ---- integrate speed ----
@@ -492,18 +492,48 @@ impl Runner {
         }
     }
 
+    /// Arm the final-corner lane on entering the final corner (mechanics
+    /// § Extra Move Lane): `clamp(lane / 0.1, 0, 1) * 0.5 + random(0.1)` in
+    /// course widths, kept here in meters.
+    fn arm_extra_move_lane(&mut self, course: &CourseData) {
+        if self.extra_move_lane >= 0.0 || !self.is_after_final_corner_or_in_final_straight(course) {
+            return;
+        }
+        let lane_widths = self.current_lane / course.course_width;
+        let target_widths =
+            (lane_widths / 0.1).clamp(0.0, 1.0) * 0.5 + self.lane_movement_rng.random() * 0.1;
+        self.extra_move_lane = (target_widths * course.course_width).min(course.max_lane_distance);
+    }
+
+    /// Advance the lane toward the target by one tick at `actual_speed`
+    /// course widths per second (mechanics § Lane Change Speed). Moving in is
+    /// faster by `1 + lane` with the lane in course widths.
+    fn step_lane(&mut self, actual_speed: f64, course: &CourseData, dt: f64) {
+        let current_lane = self.current_lane;
+        let step = actual_speed * dt * course.course_width;
+        if self.target_lane > current_lane {
+            self.current_lane = self.target_lane.min(current_lane + step);
+        } else {
+            self.current_lane = self
+                .target_lane
+                .max(current_lane - step * (1.0 + current_lane / course.course_width));
+        }
+    }
+
     /// Update lateral lane position (and side-block / overtake telemetry).
-    fn apply_lane_movement(&mut self, field_inputs: &FieldInputs<'_>, ctx: &UpdateContext<'_>) {
+    fn apply_lane_movement(
+        &mut self,
+        field_inputs: &FieldInputs<'_>,
+        ctx: &UpdateContext<'_>,
+        dt: f64,
+    ) {
         let course = ctx.course;
         let current_lane = self.current_lane;
 
         let side_blocked = field_inputs.side_blocked;
         let overtake = field_inputs.overtaking;
 
-        if self.extra_move_lane < 0.0 && self.is_after_final_corner_or_in_final_straight(course) {
-            self.extra_move_lane = (current_lane / 0.1).min(course.max_lane_distance) * 0.5
-                + self.lane_movement_rng.random() * 0.1;
-        }
+        self.arm_extra_move_lane(course);
 
         if !self.change_lane_skills_active.is_empty() {
             self.target_lane = 9.5 * course.horse_lane;
@@ -541,14 +571,7 @@ impl Runner {
                 .map(|s| s.modifier)
                 .sum();
             let actual_speed = (self.lane_change_speed + lane_skill_bonus).min(0.6);
-
-            if self.target_lane > current_lane {
-                self.current_lane = self.target_lane.min(current_lane + actual_speed);
-            } else {
-                self.current_lane = self
-                    .target_lane
-                    .max(current_lane - actual_speed * (1.0 + current_lane));
-            }
+            self.step_lane(actual_speed, course, dt);
         }
 
         self.is_side_blocked = side_blocked;
@@ -571,13 +594,11 @@ impl Runner {
         };
         let course = ctx.course;
         let lane_course = LaneCourse {
+            course_width: course.course_width,
             horse_lane: course.horse_lane,
             max_lane_distance: course.max_lane_distance,
         };
-        if self.extra_move_lane < 0.0 && self.is_after_final_corner_or_in_final_straight(course) {
-            self.extra_move_lane = (self.current_lane / 0.1).min(course.max_lane_distance) * 0.5
-                + self.lane_movement_rng.random() * 0.1;
-        }
+        self.arm_extra_move_lane(course);
         let me = |runner: &Self| LaneSelf {
             id: runner.id,
             position: runner.position,
@@ -625,7 +646,7 @@ impl Runner {
             }
         }
 
-        self.move_toward_target_lane(neighbors, field_inputs, course, &lane_course);
+        self.move_toward_target_lane(neighbors, field_inputs, course, &lane_course, dt);
         self.is_side_blocked = field_inputs.side_blocked;
         self.front_blocker = field_inputs.front_block.map(|block| block.id);
         self.is_overtaking = self.lane_mode == LaneMode::Overtake;
@@ -640,6 +661,7 @@ impl Runner {
         field_inputs: &FieldInputs<'_>,
         course: &CourseData,
         lane_course: &crate::runner::lane::LaneCourse,
+        dt: f64,
     ) {
         use crate::runner::lane::{side_space_free, LaneSelf};
         let current_lane = self.current_lane;
@@ -680,13 +702,7 @@ impl Runner {
             .map(|s| s.modifier)
             .sum();
         let actual_speed = (self.lane_change_speed + lane_skill_bonus).clamp(0.0, 0.6);
-        if self.target_lane > current_lane {
-            self.current_lane = self.target_lane.min(current_lane + actual_speed);
-        } else {
-            self.current_lane = self
-                .target_lane
-                .max(current_lane - actual_speed * (1.0 + current_lane));
-        }
+        self.step_lane(actual_speed, course, dt);
     }
 
     pub fn is_on_final_straight(&self, course: &CourseData) -> bool {

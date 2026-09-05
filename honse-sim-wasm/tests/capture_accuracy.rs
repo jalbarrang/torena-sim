@@ -21,6 +21,7 @@
 //!
 //! `ACCURACY_TRACE=<gate>` prints every recorded frame for that gate against
 //! the mean pinned simulation, for reading one runner's race line by line.
+//! `ACCURACY_TRACE=field` prints every runner's position and lane per frame.
 //!
 //! This is a local harness, not a CI gate: the test is `#[ignore]`d so
 //! `cargo test --workspace` skips it, and `-- --ignored` runs it. The scores
@@ -881,6 +882,36 @@ fn print_trace(fixture: &Fixture, result: &RaceSimResult, gate: usize) {
     }
 }
 
+/// Every runner's recorded and mean simulated position and lane per frame,
+/// for `ACCURACY_TRACE=field`: the field geometry the lane rules react to.
+fn print_field_trace(fixture: &Fixture, result: &RaceSimResult) {
+    let means = mean_sim_samples(fixture, &result.replays);
+    let course_width = fixture.params.course.course_width;
+    let gates = fixture.horses.len();
+    println!(
+        "          field trace: time | per gate: distance obs/sim  lane m obs/sim  blocked obs/sim"
+    );
+    for (frame_index, frame) in fixture.observed.frames.iter().enumerate() {
+        let mut line = format!("          {:6.2} |", frame.time);
+        for gate in 0..gates {
+            let Some(sim) = means.get(&(frame_index, gate)) else {
+                continue;
+            };
+            let obs = observed_sample(frame, gate, course_width);
+            line.push_str(&format!(
+                " {gate}:{:6.1}/{:6.1} {:4.2}/{:4.2} b{:.0}/{:.2}|",
+                obs.distance,
+                sim.distance,
+                obs.lane.unwrap_or(f64::NAN),
+                sim.lane.unwrap_or(f64::NAN),
+                obs.blocked,
+                sim.blocked,
+            ));
+        }
+        println!("{line}");
+    }
+}
+
 /// Baseline file shape: fixture file -> mode -> scores.
 type Baseline = BTreeMap<String, BTreeMap<String, Scores>>;
 
@@ -1005,12 +1036,18 @@ fn captured_races_score_no_worse_than_baseline() {
         let pinned = score(fixture, &pinned_replays, &engine_skills(&pinned_params));
         print_scores("pinned", &pinned);
         print_runner_report(fixture, &pinned_replays);
-        if let Some(gate) = std::env::var("ACCURACY_TRACE")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|&g| g < fixture.horses.len())
-        {
-            print_trace(fixture, &pinned_result, gate);
+        match std::env::var("ACCURACY_TRACE").ok().as_deref() {
+            Some("field") => print_field_trace(fixture, &pinned_result),
+            Some(gate) => {
+                if let Some(gate) = gate
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&g| g < fixture.horses.len())
+                {
+                    print_trace(fixture, &pinned_result, gate);
+                }
+            }
+            None => {}
         }
         // The pinning seams must hold or the pinned scores mean nothing.
         assert!(

@@ -5,9 +5,13 @@
 //! the other runners. The step calls [`resolve_target_lane`] once per tick when
 //! a live field is present; the synthetic engine keeps its approximation.
 //!
-//! Two numbers the doc leaves open are fixed here and named as assumptions:
-//! the longitudinal reach for the "inside uma" of normal-mode rule 5, taken as
-//! the crowd distance (3 m), and the pace-down target lane 0.18, read as meters.
+//! The doc measures lanes in course widths; this module keeps lanes in meters
+//! and scales the doc's constants by the course width where it reads them.
+//!
+//! Two numbers are fixed here and named as assumptions: the longitudinal
+//! reach for the "inside uma" of normal-mode rule 5, taken as the crowd
+//! distance (3 m), and the pace-down lane 0.18, read as meters against the
+//! doc's unit because the captures score worse with it in widths.
 
 use crate::runner::physics::RunnerSnapshot;
 use crate::shared_kernel::ids::RunnerId;
@@ -21,10 +25,14 @@ const CROWD_DISTANCE: f64 = 3.0;
 const CANDIDATE_HALF_WIDTH_LANES: f64 = 0.8;
 /// Side blocking reach along the course (mechanics § Side Blocking).
 const SIDE_BLOCK_DISTANCE: f64 = 1.05;
-/// Normal-mode rule 2: the lane a pace-down runner steers to, in meters.
+/// Normal-mode rule 2: the lane a pace-down runner steers to.
+/// ASSUMPTION: read as meters. The doc's lane unit is the course width, but
+/// 0.18 widths (2.0 m) parks the paced-down runner inside the bunch and caps
+/// the field behind it (capture-findings § Lane units).
 const PACE_DOWN_LANE: f64 = 0.18;
-/// Normal-mode rule 4: the inward drift per update in early and mid race.
-const INWARD_DRIFT: f64 = 0.05;
+/// Normal-mode rule 4: the inward drift per update in early and mid race, in
+/// course widths.
+const INWARD_DRIFT_WIDTHS: f64 = 0.05;
 /// Seconds overtake mode lingers after its last target is lost.
 pub const OVERTAKE_LINGER_SECONDS: f64 = 1.5;
 /// Overlap bump, in horse lanes (mechanics § Overlapping).
@@ -60,6 +68,8 @@ pub struct LaneSelf {
 /// Course constants the lane rules read.
 #[derive(Debug, Clone, Copy)]
 pub struct LaneCourse {
+    /// Width of the course in meters; the doc's lane unit.
+    pub course_width: f64,
     /// Width of one horse lane in meters.
     pub horse_lane: f64,
     /// Widest lane offset a runner can take.
@@ -292,7 +302,7 @@ pub fn normal_target_lane(me: &LaneSelf, others: &[RunnerSnapshot], course: &Lan
     }
     if me.phase_index <= 1 {
         // Rule 4: drift in while the inside is open.
-        let inward = (me.current_lane - INWARD_DRIFT).max(0.0);
+        let inward = (me.current_lane - INWARD_DRIFT_WIDTHS * course.course_width).max(0.0);
         if side_space_free(me, others, inward, course) {
             return inward;
         }
@@ -358,6 +368,7 @@ mod tests {
 
     fn course() -> LaneCourse {
         LaneCourse {
+            course_width: 11.25,
             horse_lane: HL,
             max_lane_distance: 14.0625,
         }
@@ -487,7 +498,8 @@ mod tests {
         let c = course();
         let m = me(100.0, 1.0);
         let lane = normal_target_lane(&m, &[], &c);
-        assert!((lane - 0.95).abs() < 1e-9);
+        // 0.05 course widths of 11.25 m.
+        assert!((lane - 0.4375).abs() < 1e-9, "lane {lane}");
         let held = LaneSelf {
             phase_index: 2,
             ..m
