@@ -157,6 +157,12 @@ impl RaceObservation for Race {
     fn accumulated_time(&self) -> f64 {
         self.accumulated_time
     }
+    fn max_lane_distance(&self) -> f64 {
+        self.course.max_lane_distance
+    }
+    fn course_width(&self) -> f64 {
+        self.course.course_width
+    }
 }
 
 impl Race {
@@ -545,7 +551,7 @@ fn resolve_field_inputs<'a>(
 ) -> FieldInputs<'a> {
     FieldInputs {
         side_blocked: condition_value(runner, "blocked_side") == 1,
-        front_blocker: None,
+        front_block: None,
         overtaking: condition_value(runner, "overtake") == 1,
         dueling: DuelingInput::Artificial(dueling_rates),
         position_keep,

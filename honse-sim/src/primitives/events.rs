@@ -74,6 +74,10 @@ pub trait RaceObservation {
     fn max_lane_distance(&self) -> f64 {
         0.0
     }
+    /// Course width in meters: the game's lane unit is one ten-thousandth of it.
+    fn course_width(&self) -> f64 {
+        0.0
+    }
 }
 
 /// Read-only view of a `Runner` entity exposed to observers.
