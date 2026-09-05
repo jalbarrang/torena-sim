@@ -346,12 +346,13 @@ impl Runner {
             .get(self.forced_downhill_index)
             .is_some_and(|region| self.position >= region.start);
         let on_downhill = self.current_hill_index != -1 && self.slope_per < 0.0;
-        self.is_downhill_mode = inside && on_downhill;
-        self.downhill_mode_start = if self.is_downhill_mode {
-            Some((self.accumulate_time.t * 15.0).floor() as i64)
-        } else {
-            None
-        };
+        let active = inside && on_downhill;
+        if active && !self.is_downhill_mode {
+            self.downhill_mode_start = Some((self.accumulate_time.t * 15.0).floor() as i64);
+        } else if !active {
+            self.downhill_mode_start = None;
+        }
+        self.is_downhill_mode = active;
     }
 
     fn exit_downhill(&mut self) {
@@ -817,6 +818,35 @@ mod tests {
         r.update_downhill_mode(false);
         assert!(!r.is_downhill_mode);
         assert_eq!(r.forced_downhill_index, 1);
+    }
+
+    #[test]
+    fn forced_downhill_keeps_its_entry_frame_while_active() {
+        use crate::runner::ForcedRegion;
+        let mut r = test_runner(0, Strategy::PaceChaser);
+        r.forced_downhill_regions = vec![ForcedRegion {
+            start: 1000.0,
+            end: 1300.0,
+        }];
+        r.current_hill_index = 0;
+        r.slope_per = -1.0;
+        r.position = 1100.0;
+        r.accumulate_time.t = 2.0;
+        r.update_downhill_mode(false);
+        assert_eq!(r.downhill_mode_start, Some(30));
+
+        for tick in 1..=10 {
+            r.accumulate_time.t = 2.0 + f64::from(tick) / 15.0;
+            r.position += 1.5;
+            r.update_downhill_mode(false);
+            assert!(r.is_downhill_mode);
+            assert_eq!(r.downhill_mode_start, Some(30));
+        }
+
+        r.position = 1300.0;
+        r.update_downhill_mode(false);
+        assert!(!r.is_downhill_mode);
+        assert_eq!(r.downhill_mode_start, None);
     }
 
     #[test]
