@@ -159,6 +159,8 @@ pub struct Runner {
     pub fixed_gate: Option<i64>,
     /// Scripted start delay in seconds (see `CreateRunner::forced_start_delay`).
     pub forced_start_delay: Option<f64>,
+    /// Scripted last-spurt transition (see `CreateRunner::forced_last_spurt_distance`).
+    pub forced_last_spurt_distance: Option<f64>,
 
     // --- stamina ---
     /// The HP-budget policy (strategy object).
@@ -596,6 +598,7 @@ pub mod test_support {
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,
+            forced_last_spurt_distance: None,
         };
         Runner::create(
             RunnerId(id),

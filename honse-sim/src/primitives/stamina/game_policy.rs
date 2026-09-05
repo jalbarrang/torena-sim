@@ -15,6 +15,8 @@ use crate::stamina::spurt::get_ground_consumption_coef;
 
 /// Buffer distance (meters) the game keeps before the finish in spurt math.
 const SPURT_BUFFER_METERS: f64 = 60.0;
+/// A pinned transition this close past the late-race line is a full spurt.
+const PINNED_FULL_SPURT_TOLERANCE_METERS: f64 = 3.0;
 /// The runner's wisdom roll is compared against `subpar_accept_chance` out of
 /// this denominator.
 const WIT_ROLL_DENOMINATOR: u32 = 100_000;
@@ -261,6 +263,34 @@ impl StaminaPolicy for GameStaminaPolicy {
         self.select_candidate(&candidates, max_speed)
     }
 
+    fn pin_last_spurt_pair(
+        &mut self,
+        state: &RaceStateSlice,
+        max_speed: f64,
+        base_target_speed2: f64,
+        transition: f64,
+    ) -> (f64, f64) {
+        // The game logs the first frame past the late-race line for a full
+        // spurt, so anything within a frame of it is the full spurt.
+        let late_start = phase_start(self.distance, Phase::LateRace);
+        if transition <= late_start + PINNED_FULL_SPURT_TOLERANCE_METERS {
+            self.achieved_max_spurt = true;
+            return (-1.0, max_speed);
+        }
+        let last_leg = Self::last_leg_state(state);
+        let candidates = self.build_candidates(state, &last_leg, max_speed, base_target_speed2);
+        candidates
+            .iter()
+            .copied()
+            .min_by(|a, b| {
+                (a.0 - transition)
+                    .abs()
+                    .partial_cmp(&(b.0 - transition).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or((-1.0, max_speed))
+    }
+
     fn is_max_spurt(&self) -> bool {
         self.achieved_max_spurt
     }
@@ -384,6 +414,45 @@ mod tests {
         assert_eq!(transition, -1.0);
         assert_eq!(speed, 24.0);
         assert!(p.is_max_spurt());
+    }
+
+    #[test]
+    fn pinned_spurt_at_the_late_race_line_is_the_full_spurt() {
+        let mut p = policy();
+        p.tick(&slice(Phase::LateRace, 30.0), 100.0);
+        let state = RaceStateSlice {
+            pos: 1600.0,
+            ..slice(Phase::LateRace, 20.0)
+        };
+        // 2400 * 2/3 = 1600; the game records the first frame past it.
+        let (transition, speed) = p.pin_last_spurt_pair(&state, 24.0, 20.0, 1601.5);
+        assert_eq!((transition, speed), (-1.0, 24.0));
+        assert!(p.is_max_spurt());
+    }
+
+    #[test]
+    fn pinned_spurt_picks_the_candidate_nearest_the_recorded_distance() {
+        let mut p = policy();
+        let state = RaceStateSlice {
+            pos: 1600.0,
+            ..slice(Phase::LateRace, 20.0)
+        };
+        let last_leg = GameStaminaPolicy::last_leg_state(&state);
+        // Drain a second at a time until the candidates spread over partial
+        // spurts: HP too high collapses them onto a full spurt, too low onto
+        // "no spurt" at the 60 m buffer.
+        let target = loop {
+            p.tick(&slice(Phase::LateRace, 30.0), 1.0);
+            let candidates = p.build_candidates(&state, &last_leg, 24.0, 20.0);
+            let (first, last) = (candidates[0].0, candidates[candidates.len() - 1].0);
+            if first > 1603.0 && (last - first).abs() > 50.0 {
+                break candidates[candidates.len() / 2];
+            }
+            assert!(p.current_health() > 100.0, "never found a partial spread");
+        };
+        let picked = p.pin_last_spurt_pair(&state, 24.0, 20.0, target.0 + 0.4);
+        assert_eq!(picked, target);
+        assert!(!p.is_max_spurt());
     }
 
     #[test]

@@ -817,6 +817,9 @@ pub struct WasmCreateRunner {
     /// Scripted start delay in seconds. Omitted/`null` = the engine's draw.
     #[serde(default)]
     pub forced_start_delay: Option<f64>,
+    /// Scripted last-spurt transition in meters. Omitted/`null` = the wit roll.
+    #[serde(default)]
+    pub forced_last_spurt_distance: Option<f64>,
 }
 
 impl WasmCreateRunner {
@@ -882,6 +885,7 @@ impl WasmCreateRunner {
                 .collect(),
             gate: self.gate,
             forced_start_delay: self.forced_start_delay,
+            forced_last_spurt_distance: self.forced_last_spurt_distance,
         })
     }
 }
@@ -2643,13 +2647,15 @@ mod tests {
                 "aptitudes": { "distance": 1, "strategy": 1, "surface": 1 },
                 "stats": { "speed": 900, "stamina": 800, "power": 700, "guts": 600, "wit": 500 },
                 "gate": 6,
-                "forcedStartDelay": 0.0333
+                "forcedStartDelay": 0.0333,
+                "forcedLastSpurtDistance": 1068.6
             }"#,
         )
         .expect("pinned runner parses");
         let domain = pinned.into_domain().expect("converts");
         assert_eq!(domain.gate, Some(6));
         assert_eq!(domain.forced_start_delay, Some(0.0333));
+        assert_eq!(domain.forced_last_spurt_distance, Some(1068.6));
 
         let free: WasmCreateRunner = serde_json::from_str(
             r#"{
@@ -2666,6 +2672,7 @@ mod tests {
         let domain = free.into_domain().expect("converts");
         assert_eq!(domain.gate, None);
         assert_eq!(domain.forced_start_delay, None);
+        assert_eq!(domain.forced_last_spurt_distance, None);
     }
 
     #[test]

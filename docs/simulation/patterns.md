@@ -66,13 +66,13 @@ torena-hub's `pnpm run race:fixture <horseACT capture> --out honse-sim-wasm/test
 Each fixture runs twice over `ACCURACY_SAMPLES` seeds (default 8, deterministic). `ACCURACY_FIXTURE=<substring>` narrows a run to matching files, and a higher sample count is the right tool when digging into one race. The engine packages build with `opt-level = 3` under the test profile so the suite stays under a minute.
 
 - **free**: the engine rolls skill activations itself. This scores the whole model, randomness included, against one drawn outcome, so it is noisy by construction.
-- **pinned**: skills the game fired are forced at the recorded distance with `forced_positions`, and skills it never fired are removed. What remains is deterministic (speed, acceleration, HP, spurt), so a pinned residual is a formula error, not luck.
+- **pinned**: skills the game fired are forced at the recorded distance with `forced_positions`, skills it never fired are removed, and the last spurt starts at the recorded distance through `CreateRunner::forced_last_spurt_distance`. What remains is deterministic (speed, acceleration, HP), so a pinned residual is a formula error, not luck.
 
 Scores per run: finish time MAE and bias, winner hit rate, Spearman rank correlation of the finish order, spurt start MAE, skill activation error, and trajectory MAE over the recorded frames. A per-runner breakdown prints under each pinned run so an aggregate points at a runner.
 
 `baseline.json` stores the last accepted scores. The test fails when finish time MAE or trajectory MAE regress past a small tolerance. Accept a new baseline with `UPDATE_ACCURACY_BASELINE=1` only in the change that moves the mechanics, and say why in that change.
 
-Outcomes the replay records but the engine still rolls itself: last spurt candidate selection, per-section wit variance, lane targets, and blocking. Pin those next when a pinned residual needs isolating further.
+Outcomes the replay does not record and the engine still rolls in pinned mode: per-section wit variance, lane targets, and blocking. The recorded spurt distance pins the transition only; the spurt speed follows from the HP formula for that transition.
 
 ## Add a simulation use case
 

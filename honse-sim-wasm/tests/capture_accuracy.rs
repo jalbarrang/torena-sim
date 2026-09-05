@@ -12,10 +12,10 @@
 //!
 //! - **free**: the engine rolls its own skill activations. Scores the whole
 //!   model, randomness included, against one drawn outcome.
-//! - **pinned**: skills the game fired are forced at the recorded distance
-//!   and skills it never fired are removed. What is left is the deterministic
-//!   part (speed, acceleration, HP, spurt), so a residual here is a formula
-//!   error, not luck.
+//! - **pinned**: skills the game fired are forced at the recorded distance,
+//!   skills it never fired are removed, and the last spurt starts where the
+//!   game recorded it. What is left is the deterministic part (speed,
+//!   acceleration, HP), so a residual here is a formula error, not luck.
 //!
 //! The scores print with `--nocapture` and gate against `baseline.json`; run
 //! with `UPDATE_ACCURACY_BASELINE=1` to accept a new baseline after a change
@@ -194,9 +194,18 @@ fn observed_distance_at(observed: &Observed, gate: usize, time: f64) -> f64 {
     }
 }
 
-/// Force the observed activations and drop every skill the game never fired.
-fn pin_skills(params: &mut WasmRaceSimParams, activations: &[HashMap<i64, f64>]) {
-    for (runner, fired) in params.runners.iter_mut().zip(activations) {
+/// Force the observed activations, drop every skill the game never fired, and
+/// start each last spurt where the game recorded it.
+fn pin_outcomes(params: &mut WasmRaceSimParams, observed: &Observed) {
+    let activations = observed_activations(observed);
+    for ((runner, fired), result) in params
+        .runners
+        .iter_mut()
+        .zip(&activations)
+        .zip(&observed.results)
+    {
+        runner.forced_last_spurt_distance =
+            Some(result.last_spurt_start_distance).filter(|d| *d > 0.0);
         runner.skills.retain(|skill| {
             skill_base_id(&skill.skill_id).is_some_and(|id| fired.contains_key(&id))
         });
@@ -503,7 +512,7 @@ fn captured_races_score_no_worse_than_baseline() {
         print_scores("free", &free);
 
         let mut pinned_params = fixture.params.clone();
-        pin_skills(&mut pinned_params, &observed_activations(&fixture.observed));
+        pin_outcomes(&mut pinned_params, &fixture.observed);
         let started = std::time::Instant::now();
         let pinned_replays = run(&pinned_params, nsamples);
         let simulated = started.elapsed();
