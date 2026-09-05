@@ -1270,6 +1270,7 @@ mod tests {
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,
+            forced_last_spurt_distance: None,
         };
         Runner::create(
             RunnerId(0),
@@ -1497,6 +1498,7 @@ mod tests {
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,
+            forced_last_spurt_distance: None,
         };
         let mut r = Runner::create(
             RunnerId(0),

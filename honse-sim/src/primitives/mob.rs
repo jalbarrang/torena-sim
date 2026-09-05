@@ -59,6 +59,7 @@ fn mob_runner(index: usize, strategy: Strategy, stats: i32) -> CreateRunner {
         forced_rank: Vec::new(),
         gate: None,
         forced_start_delay: None,
+        forced_last_spurt_distance: None,
     }
 }
 

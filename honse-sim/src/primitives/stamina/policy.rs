@@ -103,6 +103,20 @@ pub trait StaminaPolicy {
         max_speed: f64,
         base_target_speed2: f64,
     ) -> (f64, f64);
+    /// Scripted variant of [`get_last_spurt_pair`](Self::get_last_spurt_pair):
+    /// commit to the spurt whose transition sits at `transition` meters, the
+    /// distance a replay recorded, instead of rolling one. Policies without a
+    /// spurt model keep their unconditional answer.
+    fn pin_last_spurt_pair(
+        &mut self,
+        state: &RaceStateSlice,
+        max_speed: f64,
+        base_target_speed2: f64,
+        transition: f64,
+    ) -> (f64, f64) {
+        let _ = transition;
+        self.get_last_spurt_pair(state, max_speed, base_target_speed2)
+    }
     /// Whether the runner committed to a full max-speed spurt.
     fn is_max_spurt(&self) -> bool;
     /// Current absolute HP.

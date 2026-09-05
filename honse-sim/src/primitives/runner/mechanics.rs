@@ -616,11 +616,19 @@ impl Runner {
                 speed_contributions: self.speed_contributions,
             };
             let late_race_target_speed = self.base_target_speed_per_phase[2];
-            let (transition, speed) = self.health_policy.get_last_spurt_pair(
-                &state,
-                self.last_spurt_speed,
-                late_race_target_speed,
-            );
+            let (transition, speed) = match self.forced_last_spurt_distance {
+                Some(pinned) => self.health_policy.pin_last_spurt_pair(
+                    &state,
+                    self.last_spurt_speed,
+                    late_race_target_speed,
+                    pinned,
+                ),
+                None => self.health_policy.get_last_spurt_pair(
+                    &state,
+                    self.last_spurt_speed,
+                    late_race_target_speed,
+                ),
+            };
             self.last_spurt_transition = transition;
             self.last_spurt_speed = speed;
 

@@ -118,6 +118,7 @@ fn runner(skills: Vec<Skill>) -> CreateRunner {
         forced_rank: vec![],
         gate: None,
         forced_start_delay: None,
+        forced_last_spurt_distance: None,
     }
 }
 

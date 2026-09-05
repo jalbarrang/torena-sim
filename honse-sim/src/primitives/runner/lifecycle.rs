@@ -92,6 +92,10 @@ pub struct CreateRunner {
     /// and any gate-skill override. Replaying a captured race pins the
     /// recorded `startDelayTime`.
     pub forced_start_delay: Option<f64>,
+    /// Scripted last-spurt transition in meters, replacing the wit roll over
+    /// spurt candidates. Replaying a captured race pins the recorded
+    /// `lastSpurtStartDistance`.
+    pub forced_last_spurt_distance: Option<f64>,
 }
 
 /// The race-derived inputs `on_prepare` needs without a `&Race` back-pointer.
@@ -194,6 +198,7 @@ impl Runner {
             forced_rank: props.forced_rank,
             fixed_gate: props.gate,
             forced_start_delay: props.forced_start_delay,
+            forced_last_spurt_distance: props.forced_last_spurt_distance,
             health_policy,
             rng,
             rushed_rng: placeholder_rng(),
@@ -482,6 +487,7 @@ mod tests {
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,
+            forced_last_spurt_distance: None,
         }
     }
 
