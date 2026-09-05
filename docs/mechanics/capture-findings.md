@@ -90,7 +90,7 @@ With `forcedLastSpurtDistance` set from the recording, spurt-start MAE is
 0.96 m over 53 fixtures. The remainder is the game logging the first frame past
 the transition rather than the transition itself.
 
-## Rushed: pinned exactly
+## Rushed: pinned with 0.999 frame agreement
 
 With `forcedRushedRegions` from the recorded `temptationMode` and the engine's
 roll disabled, frame agreement on rushed state is 0.999.
