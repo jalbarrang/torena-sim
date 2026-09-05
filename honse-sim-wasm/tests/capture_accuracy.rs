@@ -212,8 +212,13 @@ impl FrameErrors {
         sum / self.count.max(1) as f64
     }
 
+    /// Lane MAE over frames that carried a lane on both sides; `NaN` when
+    /// there were none, so a missing lane column can never score as perfect.
     fn lane_mae(&self) -> f64 {
-        self.lane_abs / self.lane_count.max(1) as f64
+        if self.lane_count == 0 {
+            return f64::NAN;
+        }
+        self.lane_abs / self.lane_count as f64
     }
 }
 
@@ -979,6 +984,11 @@ fn captured_races_score_no_worse_than_baseline() {
         let free_replays = run(&fixture.params, nsamples);
         let simulated = started.elapsed();
         let free = score(fixture, &free_replays, &engine_skills(&fixture.params));
+        assert!(
+            free.lane_mae.is_finite(),
+            "{}: no lane data in the recording; regenerate the fixture with `pnpm run race:fixture`",
+            fixture.source.file
+        );
         println!(
             "  timing  simulate {:.2}s  score {:.2}s",
             simulated.as_secs_f64(),
