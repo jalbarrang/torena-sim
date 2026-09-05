@@ -166,7 +166,7 @@ unscaled. Fixture `10903-mihono-bourbon-74-2859s-20260831`, gate 2, power 1140:
 - Inward drift. Normal-mode rule 4 moves the target 0.05 widths in, 0.56 m;
   the engine had used 0.05 m.
 
-With the three in widths (torena-sim#101), pinned means over 53 fixtures:
+With the three in widths (torena-sim#102), pinned means over 53 fixtures:
 finish MAE 0.205 to 0.203 s, trajectory 4.61 to 4.55 m, lane MAE 1.00 to
 0.98 m, Spearman 0.815 to 0.809.
 
@@ -211,6 +211,6 @@ Means over the 53 fixtures, pinned mode, 8 seeds.
 | Rushed pinned (#96) | 0.226 s | −0.094 s | 0.824 | | 4.72 m | 33.3 |
 | Downhill pinned (#97) | 0.212 s | −0.068 s | 0.835 | | 4.67 m | 22.3 |
 | Target-lane rules and blocking cap (#100) | 0.205 s | +0.007 s | 0.815 | | 4.61 m | 21.5 |
-| Lane constants in course widths (#101) | 0.203 s | −0.003 s | 0.809 | | 4.55 m | 21.1 |
+| Lane constants in course widths (#102) | 0.203 s | −0.003 s | 0.809 | | 4.55 m | 21.1 |
 
 Speed bias by phase after #97, early / mid / late: +0.031 / +0.043 / +0.055 m/s.
