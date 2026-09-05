@@ -83,6 +83,11 @@ pub struct CreateRunner {
     pub forced_dueling_regions: Vec<ForcedRegion>,
     /// Scripted spot-struggle regions.
     pub forced_spot_struggle_regions: Vec<ForcedRegion>,
+    /// Scripted downhill-mode regions. When any are given the per-second
+    /// roll is skipped entirely; the mode runs exactly where scripted, and
+    /// only while the runner is on a downhill. Replaying a captured race
+    /// pins the spells read off the recorded HP drain.
+    pub forced_downhill_regions: Vec<ForcedRegion>,
     /// Scripted forced-rank regions.
     pub forced_rank: Vec<ForcedRank>,
     /// Fixed 0-based gate. `None` lets the round's gate shuffle place the
@@ -195,6 +200,8 @@ impl Runner {
             forced_rushed_regions: props.forced_rushed_regions,
             forced_dueling_regions: props.forced_dueling_regions,
             forced_spot_struggle_regions: props.forced_spot_struggle_regions,
+            forced_downhill_regions: props.forced_downhill_regions,
+            forced_downhill_index: 0,
             forced_rank: props.forced_rank,
             fixed_gate: props.gate,
             forced_start_delay: props.forced_start_delay,
@@ -484,6 +491,7 @@ mod tests {
             forced_rushed_regions: vec![],
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
+            forced_downhill_regions: vec![],
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,

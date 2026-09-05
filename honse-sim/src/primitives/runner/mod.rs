@@ -155,6 +155,10 @@ pub struct Runner {
     pub forced_dueling_regions: Vec<ForcedRegion>,
     /// Scripted spot-struggle regions.
     pub forced_spot_struggle_regions: Vec<ForcedRegion>,
+    /// Scripted downhill-mode regions (see `CreateRunner::forced_downhill_regions`).
+    pub forced_downhill_regions: Vec<ForcedRegion>,
+    /// Index of the next scripted downhill region to enter.
+    pub forced_downhill_index: usize,
     /// Fixed 0-based gate, exempt from the round's gate shuffle.
     pub fixed_gate: Option<i64>,
     /// Scripted start delay in seconds (see `CreateRunner::forced_start_delay`).
@@ -595,6 +599,7 @@ pub mod test_support {
             forced_rushed_regions: vec![],
             forced_dueling_regions: vec![],
             forced_spot_struggle_regions: vec![],
+            forced_downhill_regions: vec![],
             forced_rank: vec![],
             gate: None,
             forced_start_delay: None,

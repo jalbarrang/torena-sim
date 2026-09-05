@@ -14,9 +14,10 @@
 //!   model, randomness included, against one drawn outcome.
 //! - **pinned**: skills the game fired are forced at the recorded distance,
 //!   skills it never fired are removed, the last spurt starts where the game
-//!   recorded it, and rushed spells run where the game recorded them. What is
-//!   left is the deterministic part (speed, acceleration, HP) plus the rolls
-//!   the replay does not record (section variance, downhill, dueling).
+//!   recorded it, rushed spells run where the game recorded them, and downhill
+//!   mode runs where the recorded HP drain shows it. What is left is the
+//!   deterministic part (speed, acceleration, HP) plus the rolls the replay
+//!   does not record (section variance, dueling).
 //!
 //! `ACCURACY_TRACE=<gate>` prints every recorded frame for that gate against
 //! the mean pinned simulation, for reading one runner's race line by line.
@@ -32,7 +33,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use honse_sim::contested::replay::RaceReplay;
-use honse_sim::contested::run_race_sim;
+use honse_sim::contested::{run_race_sim, RaceSimResult};
 use serde::{Deserialize, Serialize};
 use uma_sim_wasm::dto::{WasmForcedRegion, WasmRaceSimParams};
 
@@ -89,6 +90,9 @@ struct ObservedFrame {
     /// `temptationMode` per gate: 0 calm, otherwise rushing. Absent in older fixtures.
     #[serde(default)]
     rushed: Vec<i64>,
+    /// Gate blocking each runner in front, or -1. Absent in older fixtures.
+    #[serde(default)]
+    blocker: Vec<i64>,
 }
 
 #[derive(Deserialize)]
@@ -155,6 +159,8 @@ struct FrameSample {
     hp: f64,
     /// 1 when rushed; averaged over rounds it is the rushed rate.
     rushed: f64,
+    /// 1 when a runner in front blocks this one; averaged it is the blocked rate.
+    blocked: f64,
 }
 
 /// Running comparison of mean simulated samples against recorded ones.
@@ -166,6 +172,8 @@ struct FrameErrors {
     hp_abs: f64,
     hp_signed: f64,
     rushed_agreement: f64,
+    blocked_sim: f64,
+    blocked_observed: f64,
     count: usize,
 }
 
@@ -177,6 +185,8 @@ impl FrameErrors {
         self.hp_abs += (sim.hp - observed.hp).abs();
         self.hp_signed += sim.hp - observed.hp;
         self.rushed_agreement += 1.0 - (sim.rushed - observed.rushed).abs();
+        self.blocked_sim += sim.blocked;
+        self.blocked_observed += observed.blocked;
         self.count += 1;
     }
 
@@ -321,21 +331,97 @@ fn observed_rushed_regions(observed: &Observed) -> Vec<Vec<WasmForcedRegion>> {
     regions
 }
 
+/// Documented HP drain per second at `speed`, before status modifiers.
+fn documented_drain(speed: f64, course_distance: f64) -> f64 {
+    let base_speed = 20.0 - (course_distance - 2000.0) / 1000.0;
+    20.0 * (speed - base_speed + 12.0).powi(2) / 144.0
+}
+
+/// Downhill-mode spells per gate, read off the recorded HP drain.
+///
+/// The game never records the mode, but it records its effect: a one-second
+/// sample on a downhill draining under half the documented rate (after the
+/// guts multiplier from two-thirds on) is the mode's 0.4 factor and nothing
+/// else. Pace-down is 0.6 and never gets that low. Rushed samples are skipped.
+fn observed_downhill_regions(fixture: &Fixture) -> Vec<Vec<WasmForcedRegion>> {
+    let observed = &fixture.observed;
+    let course = &fixture.params.course;
+    let on_downhill = |distance: f64| {
+        course
+            .slopes
+            .iter()
+            .any(|s| s.slope < 0.0 && distance >= s.start && distance < s.start + s.length)
+    };
+    let mood_coefficient = |mood: i32| 1.0 + f64::from(mood) * 0.02;
+    let runners = observed.results.len();
+    let mut regions: Vec<Vec<WasmForcedRegion>> = vec![Vec::new(); runners];
+    for (gate, spells) in regions.iter_mut().enumerate() {
+        let runner = &fixture.params.runners[gate];
+        let guts = f64::from(runner.stats.guts) * mood_coefficient(runner.mood);
+        let guts_modifier = 1.0 + 200.0 / (600.0 * guts).sqrt();
+        let mut open: Option<f64> = None;
+        for pair in observed.frames.windows(2) {
+            let (a, b) = (&pair[0], &pair[1]);
+            let dt = b.time - a.time;
+            let (x0, x1) = (a.distance[gate], b.distance[gate]);
+            let usable = dt >= 0.5
+                && on_downhill(x0)
+                && on_downhill(x1)
+                && a.rushed.get(gate).is_none_or(|&m| m == 0)
+                && b.rushed.get(gate).is_none_or(|&m| m == 0)
+                && b.hp[gate] > 0.0;
+            let mut in_mode = false;
+            if usable {
+                let speed = (a.speed[gate] + b.speed[gate]) / 200.0;
+                let rate = (a.hp[gate] - b.hp[gate]) / dt;
+                let mut expected = documented_drain(speed, course.distance);
+                if (x0 + x1) / 2.0 >= course.distance * 2.0 / 3.0 {
+                    expected *= guts_modifier;
+                }
+                in_mode = rate > 0.0 && rate / expected < 0.5;
+            }
+            match (open, in_mode) {
+                (None, true) => open = Some(x0),
+                (Some(start), false) if usable || !on_downhill(x1) => {
+                    spells.push(WasmForcedRegion { start, end: x0 });
+                    open = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(start) = open {
+            let end = observed
+                .frames
+                .last()
+                .map_or(start + 1.0, |f| f.distance[gate]);
+            spells.push(WasmForcedRegion {
+                start,
+                end: end.max(start + 1.0),
+            });
+        }
+    }
+    regions
+}
+
 /// Force the observed activations, drop every skill the game never fired,
 /// start each last spurt where the game recorded it, and script the recorded
-/// rushed spells in place of the engine's roll.
-fn pin_outcomes(params: &mut WasmRaceSimParams, observed: &Observed) {
+/// rushed and downhill spells in place of the engine's rolls.
+fn pin_outcomes(params: &mut WasmRaceSimParams, observed: &Observed, fixture: &Fixture) {
     let activations = observed_activations(observed);
     let rushed = observed_rushed_regions(observed);
+    let downhill = observed_downhill_regions(fixture);
     params.settings.rushed_runners = Some(vec![false; params.runners.len()]);
-    for (((runner, fired), result), spells) in params
+    params.settings.downhill_runners = Some(vec![false; params.runners.len()]);
+    for ((((runner, fired), result), spells), descents) in params
         .runners
         .iter_mut()
         .zip(&activations)
         .zip(&observed.results)
         .zip(rushed)
+        .zip(downhill)
     {
         runner.forced_rushed_regions = spells;
+        runner.forced_downhill_regions = descents;
         runner.forced_last_spurt_distance =
             Some(result.last_spurt_start_distance).filter(|d| *d > 0.0);
         runner.skills.retain(|skill| {
@@ -352,13 +438,17 @@ fn skill_base_id(skill_id: &str) -> Option<i64> {
     skill_id.split('-').next()?.parse().ok()
 }
 
-fn run(params: &WasmRaceSimParams, nsamples: usize) -> Vec<RaceReplay> {
+fn run_full(params: &WasmRaceSimParams, nsamples: usize) -> RaceSimResult {
     let mut domain = params
         .clone()
         .into_domain()
         .expect("fixture params convert");
     domain.nsamples = nsamples;
-    run_race_sim(domain).expect("race runs").replays
+    run_race_sim(domain).expect("race runs")
+}
+
+fn run(params: &WasmRaceSimParams, nsamples: usize) -> Vec<RaceReplay> {
+    run_full(params, nsamples).replays
 }
 
 fn spearman(sim_order: &[i32], observed_order: &[i32]) -> f64 {
@@ -396,6 +486,11 @@ fn sim_sample_at(replay: &RaceReplay, gate: usize, time: f64) -> Option<FrameSam
             speed: f64::from(horse.speed) / 100.0,
             hp: f64::from(horse.hp),
             rushed: if horse.temptation_mode != 0 { 1.0 } else { 0.0 },
+            blocked: if horse.block_front_horse_index >= 0 {
+                1.0
+            } else {
+                0.0
+            },
         }
     })
 }
@@ -406,6 +501,11 @@ fn observed_sample(frame: &ObservedFrame, gate: usize) -> FrameSample {
         speed: frame.speed[gate] / 100.0,
         hp: frame.hp[gate],
         rushed: if frame.rushed.get(gate).is_some_and(|&mode| mode != 0) {
+            1.0
+        } else {
+            0.0
+        },
+        blocked: if frame.blocker.get(gate).is_some_and(|&b| b >= 0) {
             1.0
         } else {
             0.0
@@ -430,6 +530,7 @@ fn mean_sim_samples(
                     slot.0.speed += sample.speed;
                     slot.0.hp += sample.hp;
                     slot.0.rushed += sample.rushed;
+                    slot.0.blocked += sample.blocked;
                     slot.1 += 1;
                 }
             }
@@ -445,6 +546,7 @@ fn mean_sim_samples(
                     speed: sum.speed / n,
                     hp: sum.hp / n,
                     rushed: sum.rushed / n,
+                    blocked: sum.blocked / n,
                 },
             )
         })
@@ -606,6 +708,10 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
         "hp bias early/mid/late",
         "traj MAE"
     );
+    println!(
+        "          {:<18} {:>5} {:>8} {:>8} {:>9}  {:^24}  {:^24}  {:>8}  {:>17}",
+        "", "", "", "", "", "", "", "", "blocked mid/late"
+    );
     for (gate, result) in observed.results.iter().enumerate() {
         let mean_finish = replays
             .iter()
@@ -623,7 +729,7 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             .collect();
         let whole = frame_errors(fixture, &means, Some(gate), None);
         println!(
-            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>+9.1}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}  {:>7.1}m",
+            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>+9.1}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}  {:>7.1}m  obs {:.2}/{:.2} sim {:.2}/{:.2}",
             fixture.horses[gate]
                 .name
                 .chars()
@@ -640,6 +746,10 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             by_phase[1].mean(by_phase[1].hp_signed),
             by_phase[2].mean(by_phase[2].hp_signed),
             whole.mean(whole.distance_abs),
+            by_phase[1].mean(by_phase[1].blocked_observed),
+            by_phase[2].mean(by_phase[2].blocked_observed),
+            by_phase[1].mean(by_phase[1].blocked_sim),
+            by_phase[2].mean(by_phase[2].blocked_sim),
         );
     }
     let field: Vec<FrameErrors> = Phase::ALL
@@ -664,8 +774,29 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
 
 /// One runner's recorded frames against the mean simulated state, line by
 /// line, for `ACCURACY_TRACE=<gate>`.
-fn print_trace(fixture: &Fixture, replays: &[RaceReplay], gate: usize) {
+fn print_trace(fixture: &Fixture, result: &RaceSimResult, gate: usize) {
+    let replays = &result.replays;
     let means = mean_sim_samples(&fixture.observed, replays);
+    // The engine's own effect windows for this gate in the first round, so a
+    // speed or acceleration excess can be matched to the skill behind it.
+    if let Some(trace) = result
+        .collected
+        .rounds
+        .first()
+        .and_then(|round| round.focus.iter().find(|t| t.runner_id.0 as usize == gate))
+    {
+        let mut logs: Vec<_> = trace
+            .skill_activations
+            .values()
+            .flatten()
+            .map(|log| (log.start, log.end, log.skill_id.clone(), log.effect_type))
+            .collect();
+        logs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        println!("          engine effect windows (round 0): start-end m  skill  effect type");
+        for (start, end, skill_id, effect_type) in logs {
+            println!("          {start:7.1}-{end:7.1}  {skill_id:>8}  type {effect_type}");
+        }
+    }
     println!(
         "          trace gate {gate} {}: time | distance obs sim dev | speed obs sim dev | hp obs sim dev | rushed obs sim",
         fixture.horses[gate].name
@@ -798,9 +929,10 @@ fn captured_races_score_no_worse_than_baseline() {
         print_scores("free", &free);
 
         let mut pinned_params = fixture.params.clone();
-        pin_outcomes(&mut pinned_params, &fixture.observed);
+        pin_outcomes(&mut pinned_params, &fixture.observed, fixture);
         let started = std::time::Instant::now();
-        let pinned_replays = run(&pinned_params, nsamples);
+        let pinned_result = run_full(&pinned_params, nsamples);
+        let pinned_replays = pinned_result.replays.clone();
         let simulated = started.elapsed();
         let pinned = score(fixture, &pinned_replays, &engine_skills(&pinned_params));
         print_scores("pinned", &pinned);
@@ -810,7 +942,7 @@ fn captured_races_score_no_worse_than_baseline() {
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&g| g < fixture.horses.len())
         {
-            print_trace(fixture, &pinned_replays, gate);
+            print_trace(fixture, &pinned_result, gate);
         }
         // The pinning seams must hold or the pinned scores mean nothing.
         assert!(

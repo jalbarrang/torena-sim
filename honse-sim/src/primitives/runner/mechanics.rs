@@ -112,6 +112,7 @@ impl Runner {
         self.is_downhill_mode = false;
         self.downhill_mode_start = None;
         self.last_downhill_check_frame = 0;
+        self.forced_downhill_index = 0;
     }
 
     /// `initializeDueling`.
@@ -295,6 +296,10 @@ impl Runner {
 
     /// `updateDownhillMode`: enter/exit downhill (HP-saving) mode.
     pub(crate) fn update_downhill_mode(&mut self, downhill_enabled: bool) {
+        if !self.forced_downhill_regions.is_empty() {
+            self.update_forced_downhill();
+            return;
+        }
         if !downhill_enabled {
             self.exit_downhill();
             return;
@@ -323,6 +328,30 @@ impl Runner {
             self.downhill_mode_start = None;
             self.is_downhill_mode = false;
         }
+    }
+
+    /// Scripted downhill mode: on inside the current region and on a
+    /// downhill, off otherwise. Regions are consumed in order as the runner
+    /// passes their ends.
+    fn update_forced_downhill(&mut self) {
+        while self
+            .forced_downhill_regions
+            .get(self.forced_downhill_index)
+            .is_some_and(|region| self.position >= region.end)
+        {
+            self.forced_downhill_index += 1;
+        }
+        let inside = self
+            .forced_downhill_regions
+            .get(self.forced_downhill_index)
+            .is_some_and(|region| self.position >= region.start);
+        let on_downhill = self.current_hill_index != -1 && self.slope_per < 0.0;
+        self.is_downhill_mode = inside && on_downhill;
+        self.downhill_mode_start = if self.is_downhill_mode {
+            Some((self.accumulate_time.t * 15.0).floor() as i64)
+        } else {
+            None
+        };
     }
 
     fn exit_downhill(&mut self) {
@@ -758,6 +787,36 @@ mod tests {
         r.current_hill_index = -1;
         r.update_downhill_mode(true);
         assert!(!r.is_downhill_mode);
+    }
+
+    #[test]
+    fn forced_downhill_runs_only_inside_its_region_and_on_a_downhill() {
+        use crate::runner::ForcedRegion;
+        let mut r = test_runner(0, Strategy::PaceChaser);
+        r.forced_downhill_regions = vec![ForcedRegion {
+            start: 1000.0,
+            end: 1300.0,
+        }];
+        r.current_hill_index = 0;
+        r.slope_per = -1.0;
+
+        r.position = 900.0;
+        r.update_downhill_mode(false); // the roll is disabled; the script still applies
+        assert!(!r.is_downhill_mode);
+
+        r.position = 1100.0;
+        r.update_downhill_mode(false);
+        assert!(r.is_downhill_mode);
+
+        r.slope_per = 0.0; // the downhill ended before the recorded spell did
+        r.update_downhill_mode(false);
+        assert!(!r.is_downhill_mode);
+
+        r.slope_per = -1.0;
+        r.position = 1350.0;
+        r.update_downhill_mode(false);
+        assert!(!r.is_downhill_mode);
+        assert_eq!(r.forced_downhill_index, 1);
     }
 
     #[test]
