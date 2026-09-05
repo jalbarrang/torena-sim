@@ -28,6 +28,10 @@ Primary code:
 - `honse-sim/src/contested/simulation.rs`
 - `honse-sim/src/contested/collectors.rs`
 
+### Lane movement
+
+Over a live field the runner step resolves its target lane with the documented rules (`honse-sim/src/primitives/runner/lane.rs`): vision cone, overtake targets, candidate lanes around each target's crowd scored by distance with the early-race outside penalty, the six normal-mode rules, the extra move lane from the final corner, a 1.5 s overtake linger, the overlap bump, and side blocking as the test for whether a move is possible. Front blocking caps speed at 0.988 to 1.0 times the blocker's speed. Two numbers the doc leaves open are named as assumptions in that module: the longitudinal reach of the "inside uma" in normal-mode rule 5 (3 m, the crowd distance) and the pace-down target lane 0.18 read as meters. The vacuum engine keeps its approximate lane path; `FieldInputs::lane_neighbors` is `None` there.
+
 ## Vacuum engine
 
 `honse_sim::vacuum` models a primary runner with synthetic field conditions. Use it for isolated comparisons where emergent field interaction is not necessary.

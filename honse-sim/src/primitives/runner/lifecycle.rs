@@ -243,6 +243,8 @@ impl Runner {
             extra_move_lane: -1.0,
             lane_change_speed: 0.0,
             is_side_blocked: false,
+            lane_mode: crate::runner::lane::LaneMode::Normal,
+            overtake_linger_left: 0.0,
             front_blocker: None,
             is_overtaking: false,
             first_position_in_late_race: false,

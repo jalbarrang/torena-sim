@@ -14,6 +14,7 @@
 //! and the construction / lifecycle reset are added by t-013..t-016. New fields
 //! are additive — they do not invalidate the position-keep behavior defined here.
 
+pub mod lane;
 pub mod lifecycle;
 pub mod mechanics;
 pub mod observation;
@@ -255,6 +256,10 @@ pub struct Runner {
     pub front_blocker: Option<RunnerId>,
     /// Whether this runner is overtaking this tick (telemetry).
     pub is_overtaking: bool,
+    /// Which target-lane rule set is in force (live field only).
+    pub lane_mode: lane::LaneMode,
+    /// Seconds of overtake mode left after the last target was lost.
+    pub overtake_linger_left: f64,
 
     // --- race awareness ---
     /// Whether this runner is marked leader in the late race.

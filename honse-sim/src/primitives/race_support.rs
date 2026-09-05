@@ -57,6 +57,10 @@ pub struct SnapEntry {
     pub current_lane: f64,
     /// Current speed.
     pub current_speed: f64,
+    /// Target speed.
+    pub target_speed: f64,
+    /// Whether a runner blocked this one in front last tick.
+    pub is_front_blocked: bool,
     /// Immutable running style.
     pub strategy: Strategy,
     /// Starting gate.
@@ -134,6 +138,8 @@ pub fn build_field_snapshot(
             position: r.position,
             current_lane: r.current_lane,
             current_speed: r.current_speed,
+            target_speed: r.target_speed,
+            is_front_blocked: r.front_blocker.is_some(),
             strategy: r.strategy,
             gate: r.gate,
             is_rushed: r.is_rushed,
@@ -205,6 +211,8 @@ pub fn proximity_snapshots(snapshot: &FieldSnapshot) -> Vec<RunnerSnapshot> {
             position: e.position,
             current_lane: e.current_lane,
             current_speed: e.current_speed,
+            target_speed: e.target_speed,
+            is_front_blocked: e.is_front_blocked,
         })
         .collect()
 }
@@ -395,6 +403,8 @@ mod tests {
             position,
             current_lane: 0.0,
             current_speed: 20.0,
+            target_speed: 20.0,
+            is_front_blocked: false,
             strategy,
             gate: 0,
             is_rushed: false,
