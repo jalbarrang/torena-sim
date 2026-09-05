@@ -170,8 +170,8 @@ struct FrameSample {
     rushed: f64,
     /// 1 when a runner in front blocks this one; averaged it is the blocked rate.
     blocked: f64,
-    /// Meters from the inner rail.
-    lane: f64,
+    /// Meters from the inner rail; `None` when the recording has no lane column.
+    lane: Option<f64>,
 }
 
 /// Running comparison of mean simulated samples against recorded ones.
@@ -186,6 +186,8 @@ struct FrameErrors {
     blocked_sim: f64,
     blocked_observed: f64,
     lane_abs: f64,
+    /// Frames that carried a lane on both sides; lane MAE averages over these.
+    lane_count: usize,
     count: usize,
 }
 
@@ -199,12 +201,19 @@ impl FrameErrors {
         self.rushed_agreement += 1.0 - (sim.rushed - observed.rushed).abs();
         self.blocked_sim += sim.blocked;
         self.blocked_observed += observed.blocked;
-        self.lane_abs += (sim.lane - observed.lane).abs();
+        if let (Some(sim_lane), Some(observed_lane)) = (sim.lane, observed.lane) {
+            self.lane_abs += (sim_lane - observed_lane).abs();
+            self.lane_count += 1;
+        }
         self.count += 1;
     }
 
     fn mean(&self, sum: f64) -> f64 {
         sum / self.count.max(1) as f64
+    }
+
+    fn lane_mae(&self) -> f64 {
+        self.lane_abs / self.lane_count.max(1) as f64
     }
 }
 
@@ -509,7 +518,7 @@ fn sim_sample_at(
             } else {
                 0.0
             },
-            lane: f64::from(horse.lane_position) / LANE_UNITS_PER_COURSE_WIDTH * course_width,
+            lane: Some(f64::from(horse.lane_position) / LANE_UNITS_PER_COURSE_WIDTH * course_width),
         }
     })
 }
@@ -529,8 +538,10 @@ fn observed_sample(frame: &ObservedFrame, gate: usize, course_width: f64) -> Fra
         } else {
             0.0
         },
-        lane: frame.lane.get(gate).copied().unwrap_or(0.0) / LANE_UNITS_PER_COURSE_WIDTH
-            * course_width,
+        lane: frame
+            .lane
+            .get(gate)
+            .map(|units| units / LANE_UNITS_PER_COURSE_WIDTH * course_width),
     }
 }
 
@@ -554,7 +565,11 @@ fn mean_sim_samples(
                     slot.0.hp += sample.hp;
                     slot.0.rushed += sample.rushed;
                     slot.0.blocked += sample.blocked;
-                    slot.0.lane += sample.lane;
+                    slot.0.lane = match (slot.0.lane, sample.lane) {
+                        (Some(sum), Some(lane)) => Some(sum + lane),
+                        (None, Some(lane)) => Some(lane),
+                        (sum, None) => sum,
+                    };
                     slot.1 += 1;
                 }
             }
@@ -571,7 +586,7 @@ fn mean_sim_samples(
                     hp: sum.hp / n,
                     rushed: sum.rushed / n,
                     blocked: sum.blocked / n,
-                    lane: sum.lane / n,
+                    lane: sum.lane.map(|lane| lane / n),
                 },
             )
         })
@@ -684,7 +699,7 @@ fn score(fixture: &Fixture, replays: &[RaceReplay], skills_per_runner: &[Vec<i64
         hp_mae: frames.mean(frames.hp_abs),
         hp_bias: frames.mean(frames.hp_signed),
         rushed_agreement: frames.mean(frames.rushed_agreement),
-        lane_mae: frames.mean(frames.lane_abs),
+        lane_mae: frames.lane_mae(),
     }
 }
 
@@ -740,8 +755,8 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
         "traj MAE"
     );
     println!(
-        "          {:<18} {:>5} {:>8} {:>8} {:>9}  {:^24}  {:^24}  {:>8}  {:>17}",
-        "", "", "", "", "", "", "", "", "blocked mid/late"
+        "          {:<18} {:>5} {:>8} {:>8} {:>9}  {:^24}  {:^24}  {:>8}  {:>17}  {:>23}",
+        "", "", "", "", "", "", "", "", "blocked mid/late", "lane MAE early/mid/late"
     );
     for (gate, result) in observed.results.iter().enumerate() {
         let mean_finish = replays
@@ -760,7 +775,7 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             .collect();
         let whole = frame_errors(fixture, &means, Some(gate), None);
         println!(
-            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>+9.1}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}  {:>7.1}m  obs {:.2}/{:.2} sim {:.2}/{:.2}  lane MAE {:.2}m",
+            "          {:<18} {:>5} {:>8.3} {:>+8.3} {:>+9.1}  {:>+7.3} {:>+7.3} {:>+7.3}  {:>+7.1} {:>+7.1} {:>+7.1}  {:>7.1}m  obs {:.2}/{:.2} sim {:.2}/{:.2}  lane MAE {:.2}/{:.2}/{:.2}m",
             fixture.horses[gate]
                 .name
                 .chars()
@@ -781,7 +796,9 @@ fn print_runner_report(fixture: &Fixture, replays: &[RaceReplay]) {
             by_phase[2].mean(by_phase[2].blocked_observed),
             by_phase[1].mean(by_phase[1].blocked_sim),
             by_phase[2].mean(by_phase[2].blocked_sim),
-            whole.mean(whole.lane_abs),
+            by_phase[0].lane_mae(),
+            by_phase[1].lane_mae(),
+            by_phase[2].lane_mae(),
         );
     }
     let field: Vec<FrameErrors> = Phase::ALL
@@ -853,8 +870,8 @@ fn print_trace(fixture: &Fixture, result: &RaceSimResult, gate: usize) {
             sim.hp - obs.hp,
             obs.rushed,
             sim.rushed,
-            obs.lane,
-            sim.lane,
+            obs.lane.unwrap_or(f64::NAN),
+            sim.lane.unwrap_or(f64::NAN),
         );
     }
 }
