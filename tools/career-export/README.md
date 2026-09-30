@@ -59,6 +59,28 @@ Start it, then open the skill-learning screen of a running career. The hook
 fires on `BeginView`, the file is written, and the script exits. Add `--debug`
 to write `career_export.log`.
 
+### Linux: Proton and Wine
+
+Under Proton or Wine the client is a Windows PE inside a Linux process. A plain
+Frida attach injects Frida's *Linux* agent there and crashes the client with
+`bootstrapper crashed with signal 11` (see
+[frida/frida#3339](https://github.com/frida/frida/issues/3339)). The script
+handles this automatically: it finds the running Wine/Proton prefix, runs
+Frida's *Windows* server inside it, and attaches through the remote device it
+exposes, so the Windows agent is injected instead.
+
+The matching `frida-server-<version>-windows-x86_64.exe` is downloaded once and
+cached in `~/.cache/career-export/`. If auto-detection fails (a non-steam Wine
+prefix, for example), point at the prefix directly:
+
+```bash
+python3 career_export.py --wine-prefix /path/to/pfx --out career-export.json
+```
+
+`--wine-binary` overrides the Wine loader, `--frida-server` reuses a server
+you already have, and `--remote HOST:PORT` attaches through a server that is
+already running. `--debug` is the fastest way to see which path was taken.
+
 If it says the career object is not latched yet, leave the skill screen and
 open it again. `WorkSingleModeData` goes quiet while a screen sits idle, so the
 pointer it needs only appears once a career screen redraws.
@@ -88,6 +110,14 @@ through `get_Character` and completes the export.
 List counts from the shop hook are clamped before use. A garbage count there
 loops into the millions and builds a payload past Frida's 128 MiB IPC limit,
 which drops the message and hangs the game.
+
+On Windows and macOS the script attaches to the client directly. On Linux it
+first checks whether the target is a Wine/Proton process by reading
+`WINEPREFIX` and `WINELOADER` from `/proc/<pid>/environ` (falling back to the
+wineserver that owns the prefix). When it is, the script starts a Windows
+`frida-server.exe` under the same loader and prefix, connects to it as a
+remote device, and does all enumeration and attachment through it. The Linux
+local device is never used for injection.
 
 ## Verification status
 

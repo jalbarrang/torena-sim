@@ -21,6 +21,13 @@ Usage:
 Then, in game, open the skill-learning screen of an active career. The hook
 fires on `BeginView`, the file is written, and the script exits.
 
+On Linux the client is a Windows PE running under Proton or Wine. A plain
+Frida attach would inject Frida's Linux agent into that process and crash it,
+so the script detects the Wine prefix, starts a Windows `frida-server` inside
+it, and attaches through that. The server binary is downloaded once and cached
+under `~/.cache/career-export/`; pass `--frida-server` to reuse one, or
+`--wine-prefix` / `--remote` to point at a prefix or server explicitly.
+
 Field offsets come from the `SingleModeSkillLearningViewController.SkillInfo`
 layout reverse-engineered by UmaExtractor (github.com/xancia/UmaExtractor).
 Career state is read through the `WorkDataManager -> WorkSingleModeData ->
@@ -30,9 +37,14 @@ WorkSingleModeCharaData` accessor chain used by honse-tracker.
 import argparse
 import json
 import logging
+import lzma
 import os
+import shutil
+import socket
+import subprocess
 import sys
 import time
+import urllib.request
 
 import frida
 
@@ -41,6 +53,8 @@ import frida
 TARGET_PROCESS_NAMES = ["UmamusumePrettyDerby.exe", "UmamusumePrettyDerby"]
 PROCESS_KEYWORDS = ["uma", "musume", "derby", "cygames"]
 MAX_WAIT_SECONDS = 3600
+WINE_SERVER_WAIT_SECONDS = 60
+FRIDA_SERVER_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "career-export")
 
 # `single_mode_chara_effect` id for the SP-discount condition. Only its presence
 # matters here; the planner applies the discount itself.
@@ -57,6 +71,22 @@ STRATEGY_BY_APTITUDE_FIELD = {
 _parser = argparse.ArgumentParser(description="Career exporter")
 _parser.add_argument("--out", default="career-export.json", help="Output path")
 _parser.add_argument("--debug", action="store_true", help="Write career_export.log")
+_parser.add_argument(
+    "--wine-prefix", metavar="PATH",
+    help="Attach through a Wine/Proton prefix (auto-detected on Linux)",
+)
+_parser.add_argument(
+    "--wine-binary", metavar="PATH",
+    help="Wine loader to run the Windows frida-server with",
+)
+_parser.add_argument(
+    "--frida-server", metavar="PATH",
+    help="Existing Windows frida-server.exe to use instead of downloading one",
+)
+_parser.add_argument(
+    "--remote", metavar="HOST:PORT",
+    help="Attach through an already-running frida-server",
+)
 _args = _parser.parse_args()
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -508,13 +538,156 @@ FRIDA_SCRIPT = r"""
 # --- Host side -------------------------------------------------------------
 
 
-def find_process():
-    """Return the running game's pid, waiting for it to appear.
+# --- Wine / Proton attachment ---------------------------------------------
+#
+# On Linux the Windows client runs as a PE under Wine or Proton, which is a
+# normal Linux process. Attaching the local Frida device to it injects Frida's
+# *Linux* agent into a Wine process, which crashes it (frida/frida#3339, seen
+# as "bootstrapper crashed with signal 11"). The supported path is to run
+# Frida's *Windows* server inside the same prefix and attach through the remote
+# device it exposes, so the Windows agent is injected instead.
 
-    Enumeration goes through the local device rather than a module-level
-    helper; `frida.enumerate_processes()` does not exist in frida 17.
+
+def _read_proc_environ(pid):
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            raw = f.read()
+    except OSError:
+        return None
+    env = {}
+    for entry in raw.split(b"\0"):
+        key, sep, value = entry.partition(b"=")
+        if not sep:
+            continue
+        env[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+    return env
+
+
+def _exe_path(pid):
+    try:
+        return os.readlink(f"/proc/{pid}/exe")
+    except OSError:
+        return ""
+
+
+def _strip_container_prefix(path):
+    # Proton runs the client inside a pressure-vessel container, so the paths
+    # its processes report carry a /run/host prefix that is not on the host.
+    if path.startswith("/run/host"):
+        return path[len("/run/host"):]
+    return path
+
+
+def _wineserver_contexts():
+    """Map every running prefix to the Wine loader that owns it."""
+    contexts = {}
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return contexts
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        if "wineserver" not in os.path.basename(_exe_path(entry)):
+            continue
+        env = _read_proc_environ(entry)
+        if not env:
+            continue
+        prefix = _strip_container_prefix(env.get("WINEPREFIX", ""))
+        loader = _strip_container_prefix(env.get("WINELOADER", ""))
+        if prefix and loader:
+            contexts[prefix] = loader
+    return contexts
+
+
+def find_wine_context(pid):
+    """Return (prefix, wine_loader) when `pid` is a Wine/Proton process."""
+    env = _read_proc_environ(pid)
+    if not env:
+        return None
+    prefix = _strip_container_prefix(env.get("WINEPREFIX", ""))
+    loader = _strip_container_prefix(env.get("WINELOADER", ""))
+    if prefix and loader:
+        return prefix, loader
+    # Not every Proton build exports WINELOADER to the client itself, so fall
+    # back to the wineserver that owns the prefix.
+    contexts = _wineserver_contexts()
+    if prefix and prefix in contexts:
+        return prefix, contexts[prefix]
+    if env.get("STEAM_COMPAT_PROTON") == "1" and contexts:
+        return next(iter(contexts.items()))
+    return None
+
+
+def _free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _frida_server_binary():
+    """Return a Windows frida-server.exe, downloading it when necessary."""
+    if _args.frida_server:
+        return os.path.abspath(_args.frida_server)
+    version = frida.__version__
+    dest = os.path.join(
+        FRIDA_SERVER_CACHE, f"frida-server-{version}-windows-x86_64.exe"
+    )
+    if os.path.exists(dest):
+        return dest
+    os.makedirs(FRIDA_SERVER_CACHE, exist_ok=True)
+    asset = f"frida-server-{version}-windows-x86_64.exe.xz"
+    url = f"https://github.com/frida/frida/releases/download/{version}/{asset}"
+    log(f"Downloading {asset} ...")
+    archive = dest + ".xz"
+    try:
+        with urllib.request.urlopen(url) as response, open(archive, "wb") as out:
+            shutil.copyfileobj(response, out)
+        with lzma.open(archive, "rb") as src, open(dest, "wb") as out:
+            shutil.copyfileobj(src, out)
+    finally:
+        if os.path.exists(archive):
+            os.remove(archive)
+    return dest
+
+
+def start_frida_server(prefix, wine_loader):
+    """Run frida-server.exe inside `prefix`; return (process, port)."""
+    server = _frida_server_binary()
+    port = _free_port()
+    env = dict(os.environ)
+    env["WINEPREFIX"] = prefix
+    env["WINEDEBUG"] = "-all"
+    log(f"Starting the Windows frida-server in {prefix} ...")
+    proc = subprocess.Popen(
+        [wine_loader, server, "--listen", f"127.0.0.1:{port}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+    )
+    return proc, port
+
+
+def connect_remote(address):
+    """Connect to a frida-server, waiting for it to come up."""
+    device = frida.get_device_manager().add_remote_device(address)
+    deadline = time.time() + WINE_SERVER_WAIT_SECONDS
+    while True:
+        try:
+            device.enumerate_processes()
+            return device
+        except Exception:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.5)
+
+
+def find_process(device):
+    """Return the running game's pid on `device`, waiting for it to appear.
+
+    Enumeration goes through the device rather than a module-level helper;
+    `frida.enumerate_processes()` does not exist in frida 17.
     """
-    device = frida.get_local_device()
     deadline = time.time() + MAX_WAIT_SECONDS
     announced = False
     while time.time() < deadline:
@@ -529,6 +702,44 @@ def find_process():
             announced = True
         time.sleep(2)
     raise SystemExit("Game process not found.")
+
+
+def resolve_target():
+    """Pick a Frida device and pid for the running client.
+
+    Returns (device, pid, server_process_or_None). The Wine/Proton path leaves
+    a frida-server child running so the caller can stop it on exit.
+    """
+    if _args.remote:
+        device = connect_remote(_args.remote)
+        return device, find_process(device), None
+
+    local = frida.get_local_device()
+    local_pid = find_process(local)
+
+    context = None
+    if _args.wine_prefix:
+        context = (_args.wine_prefix, _args.wine_binary or "wine")
+    elif sys.platform.startswith("linux"):
+        context = find_wine_context(local_pid)
+
+    if not context:
+        if sys.platform.startswith("linux") and _exe_path(local_pid).lower().endswith(".exe"):
+            log("This looks like a Wine/Proton process, but its prefix could not be")
+            log("detected. Re-run with --wine-prefix /path/to/pfx if the client crashes.")
+        return local, local_pid, None
+
+    prefix, wine_loader = context
+    log("Wine/Proton client detected. Attaching through a Windows frida-server;")
+    log("a plain local attach would inject the Linux agent and crash the game.")
+    server, port = start_frida_server(prefix, wine_loader)
+    try:
+        device = connect_remote(f"127.0.0.1:{port}")
+        pid = find_process(device)
+    except Exception:
+        server.terminate()
+        raise
+    return device, pid, server
 
 
 def build_export(skills, career):
@@ -621,9 +832,9 @@ def report(export, effect_ids, strategy_source):
 
 
 def main():
-    pid = find_process()
+    device, pid, server = resolve_target()
     log(f"Attaching to pid {pid}...")
-    session = frida.attach(pid)
+    session = device.attach(pid)
     script = session.create_script(FRIDA_SCRIPT)
 
     done = {"written": False}
@@ -671,6 +882,8 @@ def main():
         log("\nInterrupted.")
     finally:
         session.detach()
+        if server is not None:
+            server.terminate()
 
 
 if __name__ == "__main__":
