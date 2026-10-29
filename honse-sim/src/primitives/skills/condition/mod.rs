@@ -57,7 +57,9 @@ pub struct SkillEvalRunner {
     /// Motivation.
     pub mood: Mood,
     /// Betting popularity rank (1 = most popular). `0` means unknown/unset and
-    /// is treated as "no constraint" by the `popularity` condition.
+    /// is treated as "no constraint" by the `popularity` condition. Vacuum
+    /// (static) races have no ranking model and always treat it as no
+    /// constraint, so a popularity-gated skill passes there.
     pub popularity: i64,
 }
 

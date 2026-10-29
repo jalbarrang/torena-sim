@@ -472,6 +472,9 @@ fn run_full(params: &WasmRaceSimParams, nsamples: usize) -> RaceSimResult {
         .into_domain()
         .expect("fixture params convert");
     domain.nsamples = nsamples;
+    // The harness scores the per-frame trajectory, so it needs the replay
+    // projection the app's batch run leaves off.
+    domain.include_replays = true;
     run_race_sim(domain).expect("race runs")
 }
 
@@ -972,7 +975,16 @@ fn check_against_baseline(
 #[test]
 #[ignore = "local accuracy harness; run with `cargo test -p honse-sim-wasm --test capture_accuracy -- --ignored`"]
 fn captured_races_score_no_worse_than_baseline() {
-    let fixtures = load_fixtures();
+    let mut fixtures = load_fixtures();
+    // Diagnostic knob in the same family as `ACCURACY_SAMPLES` / `ACCURACY_FIXTURE`:
+    // force dueling off to measure how much of the speed error it accounts for.
+    // Expect the regression gate to fail when this is set; read the printed
+    // scores rather than the exit status.
+    if std::env::var_os("ACCURACY_NO_DUELING").is_some() {
+        for fixture in &mut fixtures {
+            fixture.params.settings.dueling = Some(false);
+        }
+    }
     assert!(!fixtures.is_empty(), "no capture fixtures found");
     let nsamples = samples();
     let update = std::env::var_os("UPDATE_ACCURACY_BASELINE").is_some();

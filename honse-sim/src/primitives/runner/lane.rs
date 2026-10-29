@@ -28,7 +28,7 @@ const SIDE_BLOCK_DISTANCE: f64 = 1.05;
 /// Normal-mode rule 2: the lane a pace-down runner steers to.
 /// ASSUMPTION: read as meters. The doc's lane unit is the course width, but
 /// 0.18 widths (2.0 m) parks the paced-down runner inside the bunch and caps
-/// the field behind it (capture-findings § Lane units).
+/// the field behind it (capture accuracy harness, lane units).
 const PACE_DOWN_LANE: f64 = 0.18;
 /// Normal-mode rule 4: the inward drift per update in early and mid race, in
 /// course widths.

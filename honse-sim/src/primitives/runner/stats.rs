@@ -9,7 +9,7 @@
 
 use crate::course::coefficients::{ground_power_modifier, ground_speed_modifier, strategy_module};
 use crate::course::model::CourseData;
-use crate::shared_kernel::language::{Aptitude, GroundCondition, Mood, ThresholdStat};
+use crate::shared_kernel::language::{Aptitude, GroundCondition, Mood, Surface, ThresholdStat};
 use crate::shared_kernel::params::StatLine;
 
 /// A runner's five core stats as floating-point values (post mood / course
@@ -56,7 +56,7 @@ pub fn build_base_stats(stats: &StatLine, mood: Mood) -> RunnerStats {
 
 /// The course "set status" speed multiplier: each bonus stat contributes
 /// `(1 + floor(min(stat, 901) / 300.01)) * 0.05`, averaged over the bonus list.
-fn speed_modifier(course: &CourseData, stats: &RunnerStats) -> f64 {
+fn speed_modifier(course_set_status: &[ThresholdStat], stats: &RunnerStats) -> f64 {
     let stat_value = |stat: ThresholdStat| -> f64 {
         let raw = match stat {
             ThresholdStat::Speed => stats.speed,
@@ -68,7 +68,7 @@ fn speed_modifier(course: &CourseData, stats: &RunnerStats) -> f64 {
         raw.min(901.0)
     };
 
-    let bonus_list = &course.course_set_status;
+    let bonus_list = course_set_status;
     let divisor = bonus_list.len().max(1) as f64;
     let sum: f64 = bonus_list
         .iter()
@@ -84,9 +84,33 @@ pub fn build_adjusted_stats(
     ground: GroundCondition,
     strategy_aptitude: Aptitude,
 ) -> RunnerStats {
-    let speed_mod = speed_modifier(course, base);
-    let ground_speed = f64::from(ground_speed_modifier(course.surface, ground));
-    let ground_power = f64::from(ground_power_modifier(course.surface, ground));
+    build_adjusted_stats_from_course_facts(
+        base,
+        course.surface,
+        ground,
+        &course.course_set_status,
+        strategy_aptitude,
+    )
+}
+
+/// [`build_adjusted_stats`] from the course facts it actually reads, for a
+/// caller holding scalars (a course id resolved to data) rather than a whole
+/// [`CourseData`].
+///
+/// The engines build a course up front, so they call
+/// [`build_adjusted_stats`]; a pre-race planner that only knows the course's
+/// surface, ground, and threshold stats calls this. Both reach the same numbers
+/// because this is the only body that does the arithmetic.
+pub fn build_adjusted_stats_from_course_facts(
+    base: &RunnerStats,
+    surface: Surface,
+    ground: GroundCondition,
+    course_set_status: &[ThresholdStat],
+    strategy_aptitude: Aptitude,
+) -> RunnerStats {
+    let speed_mod = speed_modifier(course_set_status, base);
+    let ground_speed = f64::from(ground_speed_modifier(surface, ground));
+    let ground_power = f64::from(ground_power_modifier(surface, ground));
     let aptitude_mod = strategy_module::aptitude_modifier(strategy_aptitude);
 
     RunnerStats {

@@ -9,8 +9,6 @@
 //! drift between engines; each engine differs only in how it *produces*
 //! [`FieldInputs`](crate::runner::physics::FieldInputs) from this support.
 
-use std::collections::HashMap;
-
 use crate::pacing::select_pacer;
 use crate::runner::physics::{FrontBlock, RunnerSnapshot};
 use crate::runner::skills::FieldView;
@@ -21,14 +19,71 @@ use crate::shared_kernel::rng::Prng;
 use crate::skills::condition::dynamic::{ActiveRunner, RunnerSnapshot as DynRunnerSnapshot};
 use crate::skills::effect::SkillTarget;
 
+/// Dense per-runner finishing order, indexed by runner id.
+///
+/// Runner ids are assigned densely from zero and runners are never removed, so
+/// an order lookup is an array index instead of a hash probe. The tick used to
+/// rebuild a `HashMap` here and clone it twice per frame, and every field-order
+/// read (one per runner per tick, plus the dueling pass) paid for hashing.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct OrderMap {
+    slots: Vec<Option<i64>>,
+}
+
+impl OrderMap {
+    /// A fresh, empty map.
+    pub fn new() -> Self {
+        OrderMap::default()
+    }
+
+    /// Drop every entry, keeping the allocation for reuse.
+    pub fn clear(&mut self) {
+        self.slots.clear();
+    }
+
+    /// The order assigned to `id`, if any.
+    pub fn get(&self, id: RunnerId) -> Option<i64> {
+        self.slots.get(id.0 as usize).copied().flatten()
+    }
+
+    /// Assign `order` to `id`, growing the backing store as needed.
+    pub fn insert(&mut self, id: RunnerId, order: i64) {
+        let slot = id.0 as usize;
+        if self.slots.len() <= slot {
+            self.slots.resize(slot + 1, None);
+        }
+        self.slots[slot] = Some(order);
+    }
+
+    /// How many runners have an assigned order.
+    pub fn len(&self) -> usize {
+        self.slots.iter().filter(|slot| slot.is_some()).count()
+    }
+
+    /// Whether no runner has an assigned order.
+    pub fn is_empty(&self) -> bool {
+        self.slots.iter().all(Option::is_none)
+    }
+}
+
+impl FromIterator<(RunnerId, i64)> for OrderMap {
+    fn from_iter<T: IntoIterator<Item = (RunnerId, i64)>>(iter: T) -> Self {
+        let mut map = OrderMap::new();
+        for (id, order) in iter {
+            map.insert(id, order);
+        }
+        map
+    }
+}
+
 /// A read-only snapshot of the whole field, frozen at the start of a frame.
 pub struct FieldSnapshot {
     /// Active (unfinished) runners' frozen per-frame state.
     pub entries: Vec<SnapEntry>,
     /// Current finishing order (1-based), with forced-rank overrides applied.
-    pub order: HashMap<RunnerId, i64>,
+    pub order: OrderMap,
     /// Previous-frame finishing order.
-    pub previous_order: HashMap<RunnerId, i64>,
+    pub previous_order: OrderMap,
     /// The selected pacer, if any.
     pub pacer: Option<RunnerId>,
     /// The pacer's current position.
@@ -39,6 +94,10 @@ pub struct FieldSnapshot {
     pub second_place_position: Option<f64>,
     /// Position of the furthest-forward runner.
     pub leader_position: Option<f64>,
+    /// Position of the rearmost active runner. Pairs with `leader_position` to
+    /// give the field's current spread, which `distance_diff_rate` normalises
+    /// against.
+    pub last_position: Option<f64>,
     /// Number of active runners.
     pub num_active: i64,
     /// Total field size (finished + active). Used as `num_umas` for order
@@ -81,9 +140,7 @@ pub struct FieldOrderTracker {
     /// Current pacer position (for the observation view).
     pub pacer_position: Option<f64>,
     /// Current finishing order.
-    pub runner_order: HashMap<RunnerId, i64>,
-    /// Previous-tick finishing order.
-    pub previous_runner_order: HashMap<RunnerId, i64>,
+    pub runner_order: OrderMap,
 }
 
 impl FieldOrderTracker {
@@ -97,7 +154,6 @@ impl FieldOrderTracker {
         self.pacer = None;
         self.pacer_position = None;
         self.runner_order.clear();
-        self.previous_runner_order.clear();
     }
 }
 
@@ -113,13 +169,15 @@ pub fn build_field_snapshot(
     let selection = select_pacer(runners, tracker.pacer);
     let mut pacer_strategy = None;
     if let Some(sel) = selection {
+        // Direct index: ids are dense, so a runner's id is its slot in the field.
+        let slot = sel.runner_id.0 as usize;
         if sel.promote_to_front_runner {
-            if let Some(runner) = runners.iter_mut().find(|r| r.id == sel.runner_id) {
+            if let Some(runner) = runners.get_mut(slot) {
                 runner.position_keep_strategy = Strategy::FrontRunner;
             }
         }
         tracker.pacer = Some(sel.runner_id);
-        if let Some(runner) = runners.iter().find(|r| r.id == sel.runner_id) {
+        if let Some(runner) = runners.get(slot) {
             tracker.pacer_position = Some(runner.position);
             pacer_strategy = Some(runner.position_keep_strategy);
         } else {
@@ -130,9 +188,18 @@ pub fn build_field_snapshot(
         tracker.pacer_position = None;
     }
 
+    // Finished membership as a dense bitmask. The per-runner test used to be a
+    // linear scan of `finished_runners`, which made snapshot building O(n^2) per
+    // tick. Runner ids are assigned densely from zero and runners are never
+    // removed, so one bit per id is enough for any legal field.
+    let mut finished_mask: u64 = 0;
+    for id in finished_runners {
+        finished_mask |= 1_u64 << id.0;
+    }
+
     let entries: Vec<SnapEntry> = runners
         .iter()
-        .filter(|r| !finished_runners.contains(&r.id))
+        .filter(|r| finished_mask & (1_u64 << r.id.0) == 0)
         .map(|r| SnapEntry {
             id: r.id,
             position: r.position,
@@ -148,16 +215,22 @@ pub fn build_field_snapshot(
         })
         .collect();
 
-    // Order by position descending.
+    // Order by position descending, ties by ascending runner id.
+    //
+    // `sort_unstable_by` with an explicit id tiebreak produces exactly the order
+    // the previous stable sort did — `entries` is built in ascending id order,
+    // so stability resolved ties to the lower id — without the merge sort's
+    // temporary allocation on every tick.
     let mut sorted: Vec<&SnapEntry> = entries.iter().collect();
-    sorted.sort_by(|a, b| {
+    sorted.sort_unstable_by(|a, b| {
         b.position
             .partial_cmp(&a.position)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.id.cmp(&b.id))
     });
 
     let previous_order = std::mem::take(&mut tracker.runner_order);
-    let mut order: HashMap<RunnerId, i64> = HashMap::new();
+    let mut order = OrderMap::new();
     // Finished runners hold the top places (in finish order); runners still on
     // course are ranked behind them. Without this, the order map only ranks
     // active runners, so a trailing runner becomes "order 1" the moment the real
@@ -180,10 +253,10 @@ pub fn build_field_snapshot(
         }
     }
     tracker.runner_order = order.clone();
-    tracker.previous_runner_order = previous_order.clone();
 
     let leader_position = sorted.first().map(|e| e.position);
     let second_place_position = sorted.get(1).map(|e| e.position);
+    let last_position = sorted.last().map(|e| e.position);
 
     let num_active = entries.len() as i64;
     FieldSnapshot {
@@ -197,6 +270,7 @@ pub fn build_field_snapshot(
         pacer_strategy,
         second_place_position,
         leader_position,
+        last_position,
     }
 }
 
@@ -218,21 +292,45 @@ pub fn proximity_snapshots(snapshot: &FieldSnapshot) -> Vec<RunnerSnapshot> {
 }
 
 /// Build the per-runner [`FieldView`] from the frozen snapshot.
+///
+/// Convenience wrapper over [`refill_field_view`] for callers with no view to
+/// reuse. The engines keep one view per runner and refill it, because this
+/// projection is built once per runner per tick and allocating its two series
+/// every time is O(n^2) allocations per tick.
 pub fn build_field_view(self_id: RunnerId, snapshot: &FieldSnapshot) -> FieldView {
-    let other_snapshots: Vec<DynRunnerSnapshot> = snapshot
-        .entries
-        .iter()
-        .filter(|e| e.id != self_id)
-        .map(|e| DynRunnerSnapshot {
-            position: e.position,
-            current_lane: e.current_lane,
-            current_speed: e.current_speed,
-        })
-        .collect();
-    let active_runners: Vec<ActiveRunner> = snapshot
-        .entries
-        .iter()
-        .map(|e| ActiveRunner {
+    let mut view = FieldView::default();
+    refill_field_view(&mut view, self_id, snapshot);
+    view
+}
+
+/// Fill `view` for `self_id` from the frozen snapshot, reusing its allocations.
+///
+/// Produces exactly the values [`build_field_view`] does; only the storage is
+/// reused. `clear` + `extend` keeps the backing capacity, so a steady-state tick
+/// performs no allocation here.
+pub fn refill_field_view(view: &mut FieldView, self_id: RunnerId, snapshot: &FieldSnapshot) {
+    view.self_order = snapshot.order.get(self_id);
+    view.self_previous_order = snapshot.previous_order.get(self_id);
+    view.num_umas = snapshot.num_total;
+    view.leader_position = snapshot.leader_position;
+    view.last_position = snapshot.last_position;
+
+    view.other_snapshots.clear();
+    view.other_snapshots.extend(
+        snapshot
+            .entries
+            .iter()
+            .filter(|e| e.id != self_id)
+            .map(|e| DynRunnerSnapshot {
+                position: e.position,
+                current_lane: e.current_lane,
+                current_speed: e.current_speed,
+            }),
+    );
+
+    view.active_runners.clear();
+    view.active_runners
+        .extend(snapshot.entries.iter().map(|e| ActiveRunner {
             is_self: e.id == self_id,
             position: e.position,
             strategy: e.strategy,
@@ -240,16 +338,7 @@ pub fn build_field_view(self_id: RunnerId, snapshot: &FieldSnapshot) -> FieldVie
             is_rushed: e.is_rushed,
             is_dueling: e.is_dueling,
             activated_advantage_effect_types: e.activated_advantage_effect_types,
-        })
-        .collect();
-    FieldView {
-        self_order: snapshot.order.get(&self_id).copied(),
-        self_previous_order: snapshot.previous_order.get(&self_id).copied(),
-        num_umas: snapshot.num_total,
-        leader_position: snapshot.leader_position,
-        other_snapshots,
-        active_runners,
-    }
+        }));
 }
 
 /// Resolve the target runner ids for an external debuff emitted by `source_id`,
@@ -395,7 +484,6 @@ pub fn assign_gates(fixed: &[Option<i64>], gate_count: usize, rng: &mut dyn Prng
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn entry(id: u32, position: f64, strategy: Strategy) -> SnapEntry {
         SnapEntry {
@@ -418,13 +506,14 @@ mod tests {
             num_total: entries.len() as i64,
             num_active: entries.len() as i64,
             entries,
-            order: HashMap::new(),
-            previous_order: HashMap::new(),
+            order: OrderMap::new(),
+            previous_order: OrderMap::new(),
             pacer: None,
             pacer_position: None,
             pacer_strategy: None,
             second_place_position: None,
             leader_position: None,
+            last_position: None,
         }
     }
 

@@ -18,6 +18,7 @@ use crate::shared_kernel::region::{Region, RegionList};
 use crate::skills::activation::ActivationSamplePolicy;
 use crate::skills::condition::dynamic::DynamicCondition;
 use crate::skills::effect::{SkillRarity, SkillTarget, SkillType};
+use crate::skills::level_scaling::level_multiplier;
 use crate::skills::value_scaling::ValueScalingPolicy;
 
 /// Raw effect as it appears in the skill data, before duration is attached and
@@ -81,8 +82,20 @@ pub struct Skill {
     /// Authoritative master-data tags carried from `skill_data.tag_id`.
     #[serde(default)]
     pub tags: Vec<i32>,
+    /// `skill_data.activate_lot`: `Some(1)` rolls the pre-race wit lottery,
+    /// `Some(0)` is guaranteed eligible. `None` = master data did not describe
+    /// the skill, so the engine keeps its legacy effect-type heuristic.
+    #[serde(default)]
+    pub activate_lot: Option<i32>,
+    /// `value_level_usage == 1` per the mechanics table; 1 is the unscaled row.
+    #[serde(default = "default_skill_level")]
+    pub level: u8,
     /// Condition branches; the first satisfiable one is used.
     pub alternatives: Vec<SkillAlternative>,
+}
+
+fn default_skill_level() -> u8 {
+    1
 }
 
 /// A built, **normalized** effect specification (value object). `base_duration`
@@ -103,8 +116,8 @@ pub struct SkillEffectSpec {
     pub modifier: f64,
     /// How the runtime modifier is derived from `modifier`.
     pub value_scaling: ValueScalingPolicy,
-    /// Optional level-usage discriminator (carried only; level scaling is out of
-    /// scope for value resolution).
+    /// Optional level-usage discriminator. `Some(1)` means the skill level was
+    /// already folded into `modifier` when this spec was built.
     pub value_level_usage: Option<i32>,
 }
 
@@ -159,6 +172,7 @@ pub enum UnmodeledEffect {
 fn classify_effect(
     effect: &RawSkillEffect,
     base_duration: f64,
+    level: u8,
 ) -> Result<SkillEffectSpec, UnmodeledEffect> {
     let effect_type = SkillType::try_from(effect.effect_type)
         .map_err(|_| UnmodeledEffect::EffectType(effect.effect_type))?;
@@ -175,20 +189,29 @@ fn classify_effect(
             effect.value_usage.unwrap_or_default(),
         ));
     }
+    // Level scaling is a fixed per-skill multiplier with no caster context, so
+    // it folds into the base modifier here rather than at value resolution.
+    // Only usage 1 is level-scaled; the data carries no other usage value.
+    let level_scale = if effect.value_level_usage == Some(1) {
+        level_multiplier(effect_type, level)
+    } else {
+        1.0
+    };
     Ok(SkillEffectSpec {
         target: effect.target,
         effect_type,
         base_duration,
-        modifier: effect.modifier / 10000.0,
+        modifier: effect.modifier / 10000.0 * level_scale,
         value_scaling,
         value_level_usage: effect.value_level_usage,
     })
 }
 
-/// Build the scaled [`SkillEffectSpec`]s for one alternative.
+/// Build the scaled [`SkillEffectSpec`]s for one alternative at skill `level`.
 ///
 /// Port of `buildSkillEffects`: `base_duration` and every `modifier` are divided
-/// by `10000`, and the raw type id is resolved to a [`SkillType`].
+/// by `10000`, the raw type id is resolved to a [`SkillType`], and level-scaled
+/// effects are multiplied by [`level_multiplier`].
 ///
 /// Effects the engine cannot model are **skipped**, not fatal — see
 /// [`UnmodeledEffect`] for the two reasons. The game bundles unmodeled effects
@@ -205,11 +228,11 @@ fn classify_effect(
 /// [`ValueScalingPolicy::PreAppliedTier`] when the mechanics reference
 /// documents the tier the extract bakes in. [`unmodeled_effects`] reports what
 /// was lost.
-pub fn build_skill_effects(alt: &SkillAlternative) -> Vec<SkillEffectSpec> {
+pub fn build_skill_effects(alt: &SkillAlternative, level: u8) -> Vec<SkillEffectSpec> {
     let base_duration = alt.base_duration / 10000.0;
     alt.effects
         .iter()
-        .filter_map(|effect| classify_effect(effect, base_duration).ok())
+        .filter_map(|effect| classify_effect(effect, base_duration, level).ok())
         .collect()
 }
 
@@ -225,7 +248,8 @@ pub fn unmodeled_effects(alt: &SkillAlternative) -> Vec<(usize, UnmodeledEffect)
         .iter()
         .enumerate()
         .filter_map(|(index, effect)| {
-            classify_effect(effect, base_duration)
+            // Level never decides whether an effect is modeled, so level 1 suffices.
+            classify_effect(effect, base_duration, 1)
                 .err()
                 .map(|reason| (index, reason))
         })
@@ -256,6 +280,8 @@ pub struct SkillTrigger {
     /// Authoritative master-data tags (`skill_data.tag_id`), carried so the
     /// activated-skill ledger can classify green activations.
     pub tags: Vec<i32>,
+    /// `skill_data.activate_lot` (see [`Skill::activate_lot`]).
+    pub activate_lot: Option<i32>,
     /// How activation windows are sampled.
     pub sample_policy: ActivationSamplePolicy,
     /// Candidate activation windows.
@@ -269,6 +295,12 @@ pub struct SkillTrigger {
     /// (`running_style_count_<style>_otherself`), since the effect data does not
     /// carry it. `None` for skills whose targeting needs no strategy.
     pub target_strategy: Option<Strategy>,
+    /// Cooldown between activations in seconds (raw `×10000` units divided by
+    /// `10000`, scaled by course distance at activation time). `None` when the
+    /// alternative carries no cooldown. A cooldown skill whose realization
+    /// carries several trigger windows can activate again at a later window
+    /// once this has elapsed since the previous activation.
+    pub cooldown: Option<f64>,
 }
 
 /// A skill whose trigger point has been fixed, awaiting the runner reaching it.
@@ -283,6 +315,8 @@ pub struct PendingSkill {
     /// Authoritative master-data tags (`skill_data.tag_id`), recorded into the
     /// activated-skill ledger when this skill activates.
     pub tags: Vec<i32>,
+    /// `skill_data.activate_lot` (see [`Skill::activate_lot`]).
+    pub activate_lot: Option<i32>,
     /// The concrete trigger window.
     pub trigger: Region,
     /// Effects applied on activation.
@@ -297,6 +331,10 @@ pub struct PendingSkill {
     /// condition gates and the wit check are bypassed, matching injected-debuff
     /// semantics.
     pub forced: bool,
+    /// Cooldown between activations in seconds (see
+    /// [`SkillTrigger::cooldown`]). Carried per pending trigger so every
+    /// window of a cooldown skill arms the same gate.
+    pub cooldown: Option<f64>,
 }
 
 /// An opponent-facing (external) debuff a runner emitted this frame, awaiting the
@@ -392,7 +430,7 @@ mod tests {
                 },
             ],
         };
-        let effects = build_skill_effects(&alt);
+        let effects = build_skill_effects(&alt, 1);
         assert_eq!(effects.len(), 2);
         assert_eq!(effects[0].base_duration, 3.0);
         assert_eq!(effects[0].modifier, 0.45);
@@ -432,7 +470,7 @@ mod tests {
                 },
             ],
         };
-        let effects = build_skill_effects(&alt);
+        let effects = build_skill_effects(&alt, 1);
         assert_eq!(effects.len(), 1, "the unmodeled type-8 effect is dropped");
         assert_eq!(effects[0].effect_type, SkillType::WisdomUp);
         assert_eq!(effects[0].modifier, 60.0);
@@ -495,7 +533,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            build_skill_effects(&alt).len() + unmodeled_effects(&alt).len(),
+            build_skill_effects(&alt, 1).len() + unmodeled_effects(&alt).len(),
             alt.effects.len(),
             "every raw effect is either built or reported, never both or neither"
         );
@@ -536,7 +574,7 @@ mod tests {
                 pre_applied_multiplier: None,
             }],
         };
-        assert!(build_skill_effects(&alt).is_empty());
+        assert!(build_skill_effects(&alt, 1).is_empty());
     }
 
     #[test]
@@ -549,6 +587,8 @@ mod tests {
             skill_id: SkillId::new("100012"),
             rarity: SkillRarity::Gold,
             tags: vec![401, 608],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 12000.0,
                 cooldown_time: Some(2000.0),

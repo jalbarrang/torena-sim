@@ -32,7 +32,7 @@ use crate::shared_kernel::rng::Prng;
 use crate::skills::condition::approximate::ApproximateCondition;
 use crate::skills::effect::{PositionKeepState, SkillTarget, SkillType};
 use crate::skills::model::{
-    ActiveSkill, ActiveTargetedSkill, PendingSkill, PendingTargetedSkill, Skill,
+    ActiveSkill, ActiveTargetedSkill, PendingSkill, PendingTargetedSkill, Skill, SkillTrigger,
 };
 use crate::stamina::policy::{SpeedContributions, StaminaPolicy};
 
@@ -120,7 +120,8 @@ pub struct Runner {
     /// Motivation.
     pub mood: Mood,
     /// Betting popularity rank (1 = most popular). `0` means unknown/unset.
-    /// Static for the race; read by the `popularity` skill condition.
+    /// Static for the race; read by the `popularity` skill condition under the
+    /// contested resolution only (vacuum ignores it).
     pub popularity: i64,
     /// CM/LoH team grouping (1-based). `None` = no team. Read by the external
     /// debuff coordinator: teammates are excluded from debuff effects.
@@ -144,6 +145,11 @@ pub struct Runner {
     /// Pristine course/ground/strategy-adjusted stats (the build-time value).
     /// `adjusted_stats` is reset to this each round (see above).
     pub pristine_adjusted_stats: RunnerStats,
+    /// Sum of `PowerUp` (type 3) skill modifiers applied this round. Charge Up
+    /// reads it as the `SkillModifier` half of its own Power stat
+    /// (mechanics § Charge Up / Fully Charged), which excludes the ground power
+    /// penalty that `adjusted_stats` carries.
+    pub power_skill_modifier: f64,
     /// Pre-resolved skills this runner carries.
     pub skills: Vec<Skill>,
     /// Skill-base-id -> forced activation position overrides.
@@ -172,6 +178,14 @@ pub struct Runner {
     pub health_policy: Box<dyn StaminaPolicy>,
 
     // --- randomness ---
+    /// The seed `prepare_round` used for this runner's master stream. The
+    /// compare-only placement isolation derives each skill's sub-seed from it.
+    pub runner_seed: u32,
+    /// Whether every skill samples its own placement from a seed derived from
+    /// `(runner_seed, skill id)` instead of consuming the shared skill stream.
+    /// Compare paths only: it measures a skill's marginal without re-rolling the
+    /// rest of the build, and is not the game's draw order.
+    pub isolate_skill_rng: bool,
     /// The runner's master RNG stream (substreams are spawned from it).
     pub rng: Box<dyn Prng>,
     /// Dedicated RNG sub-stream for rushed checks (t-016).
@@ -218,7 +232,17 @@ pub struct Runner {
     pub section_modifiers: Vec<f64>,
 
     // --- timers / phase ---
-    /// Per-runner elapsed timer (drives downhill cadence).
+    /// Elapsed race time in seconds: the same clock as the replay's frame time
+    /// (it starts at `0` at the gate frame and advances by one tick per step).
+    /// Skill conditions (`accumulateTime`, `*_continue`) and the downhill
+    /// cadence read it, and it drives the collected per-tick time series.
+    ///
+    /// Captures pin the convention: a skill gated by `accumulatetime>=5` whose
+    /// other conditions already hold fires at a recorded frame time of
+    /// `5.06s` (75 events across the fixtures), not `6.06s`, so the game's
+    /// clock and the recorded frame time are the same axis. A pre-gate offset
+    /// here shifts every time-gated skill by a second and puts timer-driven
+    /// mechanics (position keep's 2 s roll grid) off that axis.
     pub accumulate_time: Timer,
     /// Approximate-condition cadence timer (ticks once per second).
     pub condition_timer: Timer,
@@ -264,6 +288,18 @@ pub struct Runner {
     // --- race awareness ---
     /// Whether this runner is marked leader in the late race.
     pub first_position_in_late_race: bool,
+
+    // --- order band history (order_rate_inXX/outXX_continue) ---
+    /// Best (lowest) finishing order held since the `*_continue` grace period.
+    ///
+    /// `None` until the grace period ends; folded once per tick from the field
+    /// view by `observe_order_history`. Pairs with
+    /// [`order_max_since_grace`](Self::order_max_since_grace) to let a
+    /// `*_continue` condition ask whether a position band *held*, instead of
+    /// only where the runner is at the activating tick.
+    pub order_min_since_grace: Option<i64>,
+    /// Worst (highest) finishing order held since the `*_continue` grace period.
+    pub order_max_since_grace: Option<i64>,
 
     // --- hills ---
     /// Resolved hill segments (sorted by start).
@@ -328,8 +364,12 @@ pub struct Runner {
     pub conserve_power_stat: f64,
     /// Accumulated conserved-power gauge.
     pub conserved_power: f64,
-    /// Last frame at which a conserve-power check ran.
-    pub last_conserve_power_check_frame: i64,
+    /// Seconds left before conserving may restart after it was stopped.
+    pub conserve_power_restart_left: f64,
+    /// Whether the runner was rushed on the previous tick (entry-edge decay).
+    pub conserve_power_was_rushed: bool,
+    /// Whether the runner was in a spot struggle on the previous tick (entry-edge decay).
+    pub conserve_power_was_spot_struggling: bool,
     /// Whether this runner has ever rushed this round (for release activity coef).
     pub conserve_power_saw_rushed: bool,
     /// Whether this runner has ever spot-struggled this round (for release activity coef).
@@ -358,6 +398,12 @@ pub struct Runner {
     pub rushed_timer: Timer,
     /// Maximum rushed duration in seconds.
     pub rushed_max_duration: f64,
+    /// Whether a Frenzied-family debuff has overwritten the rushed timer.
+    ///
+    /// While set the spell cannot end any other way: the 3-second snap-out roll
+    /// is skipped and only `rushed_max_duration` — the debuff's fixed window —
+    /// ends it. Cleared when the spell ends, so the 12s cap does not re-apply.
+    pub rushed_timer_locked: bool,
     /// Log of `[start, end]` rushed activations.
     pub rushed_activations: Vec<(f64, f64)>,
     /// Position-keep strategy before rushing (restored on exit).
@@ -442,8 +488,17 @@ pub struct Runner {
     pub skills_activated_half_race_map: [i64; 2],
     /// Recovery (heal) skills activated.
     pub heals_activated_count: i64,
-    /// Skill ids already used this round.
-    pub used_skills: HashSet<String>,
+    /// Every activation in order. One entry per activation: a cooldown skill's
+    /// second proc appears again (conditions like `is_used_skill_id` only ever
+    /// read presence, so duplicates are harmless there).
+    pub used_skills: Vec<String>,
+    /// Base-skill-id → race time when the skill's cooldown ends. Armed on each
+    /// activation of a cooldown skill; cleared each round.
+    pub skill_cooldown_until: HashMap<String, f64>,
+    /// Base-skill-id → cached result of the skill's Wit eligibility check. The
+    /// game rolls activation chance before the race, so all trigger windows of
+    /// a skill share one roll (taken at the first qualifying window).
+    pub skill_wit_passes: HashMap<String, bool>,
     /// Ledger of activated skills carrying green master-data tags, used by
     /// caster-context value scaling (usage 14). Reset each round.
     pub activated_ledger: crate::skills::activated_ledger::ActivatedSkillLedger,
@@ -459,6 +514,14 @@ pub struct Runner {
     pub emitted_debuffs: Vec<crate::skills::model::EmittedDebuff>,
     /// Pending self-skills awaiting their trigger.
     pub pending_skills: Vec<PendingSkill>,
+    /// Parsed skill triggers, built once per runner from its skills and the
+    /// static race context, then reused every round.
+    ///
+    /// `build_skill_data` (condition parsing) depends only on the runner's
+    /// pristine stats/strategy/popularity and the course/race parameters, all of
+    /// which `on_prepare` resets or leaves untouched each round — so rebuilding
+    /// it per round was pure overhead that scaled with the runner's skill count.
+    pub compiled_skill_triggers: Option<Vec<SkillTrigger>>,
     /// Pending targeted skills awaiting their trigger.
     pub pending_targeted_skills: Vec<PendingTargetedSkill>,
     /// Skill ids flagged for removal next activation pass.

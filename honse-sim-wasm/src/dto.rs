@@ -10,18 +10,21 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use wasm_bindgen::{JsError, JsValue};
+
+use crate::to_js;
+
+use honse_sim::compare::{BasinRound, BasinRoundData, PositionRound, PositionRoundData};
 use honse_sim::contested::collectors::{
     CollectedData, RaceEventLog, RaceLogEvent, RaceLogEventKind,
 };
-use honse_sim::contested::replay::{
-    RaceReplay, ReplayEvent, ReplayFrame, ReplayHorseFrame, ReplayHorseResult,
-};
 use honse_sim::contested::simulation::{
-    ContestedCompareParams, FinishEntry, RaceSimParams, RaceSimResult,
+    ContestedCompareParams, FinishEntry, RaceReplayParams, RaceSimParams, RaceSimResult,
 };
 use honse_sim::contested::SimulationSettings as RaceSettings;
 use honse_sim::course::model::{Corner, CourseData, Slope, Straight};
 use honse_sim::projection::{EffectPerspective, SkillEffectLog};
+use honse_sim::readouts::{StaminaBudget, StaminaBudgetInput};
 use honse_sim::runner::lifecycle::{CreateRunner, RunnerAptitudes};
 use honse_sim::runner::mechanics::DuelingRates;
 use honse_sim::runner::{ForcedRank, ForcedRegion, InjectedDebuff};
@@ -31,11 +34,14 @@ use honse_sim::shared_kernel::language::{
     ThresholdStat, TimeOfDay, Weather,
 };
 use honse_sim::shared_kernel::params::{RaceParameters, StatLine};
+use honse_sim::skill_bashin::{EvaluationWindow, FallbackEffect};
 use honse_sim::skills::effect::{SkillRarity, SkillTarget};
+use honse_sim::skills::level_scaling::MAX_SKILL_LEVEL;
 use honse_sim::skills::model::{RawSkillEffect, Skill, SkillAlternative};
 use honse_sim::skills::value_scaling::ValueScalingPolicy;
 use honse_sim::stamina::ledger::StaminaLedger;
-use honse_sim::vacuum::collectors::{CompareData, CompareRoundData};
+use honse_sim::vacuum::collectors::{BasinData, CompareData, CompareRoundData, PositionData};
+use honse_sim::vacuum::ranking::{RankCandidate, SkillRankData, SkillRankParams};
 use honse_sim::vacuum::simulation::CompareSimParams;
 use honse_sim::vacuum::SimulationSettings as VacuumSettings;
 
@@ -485,13 +491,31 @@ pub struct WasmSkillInput {
     /// Authoritative master-data tags from `skill_data.tag_id`.
     #[serde(default)]
     pub tags: Vec<i32>,
+    /// Skill level (`1..=10`). Omitted/`null` = 1, the unscaled row. Must stay
+    /// `Option` so a present-but-`undefined` key deserializes to `None`.
+    #[serde(default)]
+    pub level: Option<u8>,
+    /// `skill_data.activate_lot`: `Some(1)` rolls the pre-race wit lottery,
+    /// `Some(0)` is guaranteed eligible. `None` = master data did not describe
+    /// this skill, so the engine keeps its effect-type heuristic.
+    #[serde(default)]
+    pub activate_lot: Option<i32>,
     /// Condition branches.
     pub alternatives: Vec<WasmSkillAlternative>,
+}
+
+fn to_skill_level(v: Option<u8>) -> Result<u8, DtoError> {
+    match v {
+        None => Ok(1),
+        Some(level) if (1..=MAX_SKILL_LEVEL).contains(&level) => Ok(level),
+        Some(level) => Err(invalid("skill level", i32::from(level))),
+    }
 }
 
 impl WasmSkillInput {
     fn into_domain(self) -> Result<Skill, DtoError> {
         let skill_id = self.skill_id;
+        let level = to_skill_level(self.level)?;
         let alternatives = self
             .alternatives
             .into_iter()
@@ -527,6 +551,8 @@ impl WasmSkillInput {
             skill_id: SkillId::new(skill_id),
             rarity: to_rarity(self.rarity)?,
             tags: self.tags,
+            activate_lot: self.activate_lot,
+            level,
             alternatives,
         })
     }
@@ -675,7 +701,7 @@ pub fn build_skill_support_report(
                 precondition: alternative.precondition.clone(),
                 effects: kept,
             };
-            modeled += build_skill_effects(&domain).len();
+            modeled += build_skill_effects(&domain, input.level.unwrap_or(1)).len();
             for (domain_index, reason) in unmodeled_effects(&domain) {
                 let (reason, value) = match reason {
                     UnmodeledEffect::EffectType(id) => {
@@ -978,15 +1004,26 @@ pub struct WasmSettings {
     /// Dueling.
     #[serde(default)]
     pub dueling: Option<bool>,
+    /// Per-runner dueling settings, by runner insertion index.
+    #[serde(default)]
+    pub dueling_runners: Option<Vec<bool>>,
     /// Wit checks default.
     #[serde(default)]
     pub wit_checks: Option<bool>,
     /// Per-runner wit-check settings, by runner insertion index.
     #[serde(default)]
     pub wit_checks_runners: Option<Vec<bool>>,
+    /// Runners that share one RNG stream, by runner insertion index. Absent
+    /// leaves every runner on its own stream.
+    #[serde(default)]
+    pub sync_rng_runners: Option<Vec<bool>>,
     /// Skill sample budget.
     #[serde(default)]
     pub skill_samples: Option<usize>,
+    /// Sample each skill's placement from its own seed so adding a skill cannot
+    /// re-roll the rest of the build. Compare paths only; absent is off.
+    #[serde(default)]
+    pub isolate_skill_rng: Option<bool>,
     /// Per-section wisdom variance.
     #[serde(default)]
     pub section_modifier: Option<bool>,
@@ -1011,10 +1048,13 @@ struct ResolvedSettings {
     conserve_power_runners: Vec<bool>,
     spot_struggle: bool,
     dueling: bool,
+    dueling_runners: Vec<bool>,
     wit_checks: bool,
     wit_checks_runners: Vec<bool>,
+    sync_rng_runners: Vec<bool>,
     position_keep_mode: i32,
     skill_samples: usize,
+    isolate_skill_rng: bool,
     stamina_drain_overrides: HashMap<String, f64>,
 }
 
@@ -1031,10 +1071,13 @@ impl WasmSettings {
             conserve_power_runners: self.conserve_power_runners.unwrap_or_default(),
             spot_struggle: self.spot_struggle.unwrap_or(true),
             dueling: self.dueling.unwrap_or(true),
+            dueling_runners: self.dueling_runners.unwrap_or_default(),
             wit_checks: self.wit_checks.unwrap_or(true),
             wit_checks_runners: self.wit_checks_runners.unwrap_or_default(),
+            sync_rng_runners: self.sync_rng_runners.unwrap_or_default(),
             position_keep_mode: self.position_keep_mode.unwrap_or(2),
             skill_samples: self.skill_samples.map_or(1, |v| v.max(1)),
+            isolate_skill_rng: self.isolate_skill_rng.unwrap_or(false),
             stamina_drain_overrides: self.stamina_drain_overrides.unwrap_or_default(),
         }
     }
@@ -1052,10 +1095,12 @@ impl WasmSettings {
             conserve_power_runners: r.conserve_power_runners,
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
+            dueling_runners: r.dueling_runners,
             wit_checks: r.wit_checks,
             wit_checks_runners: r.wit_checks_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
+            isolate_skill_rng: r.isolate_skill_rng,
             stamina_drain_overrides: r.stamina_drain_overrides,
         }
     }
@@ -1073,10 +1118,13 @@ impl WasmSettings {
             conserve_power_runners: r.conserve_power_runners,
             spot_struggle: r.spot_struggle,
             dueling: r.dueling,
+            dueling_runners: r.dueling_runners,
             wit_checks: r.wit_checks,
             wit_checks_runners: r.wit_checks_runners,
+            sync_rng_runners: r.sync_rng_runners,
             position_keep_mode: r.position_keep_mode,
             skill_samples: r.skill_samples,
+            isolate_skill_rng: r.isolate_skill_rng,
             stamina_drain_overrides: r.stamina_drain_overrides,
         }
     }
@@ -1136,9 +1184,26 @@ pub struct WasmCompareParams {
     pub nsamples: usize,
     /// Master seed.
     pub master_seed: u64,
+    /// Run only these round indices instead of `0..nsamples`.
+    ///
+    /// Round `i` is seeded `master_seed + i` and pins its own round counter, so
+    /// asking for one index reproduces that exact round of the batch. Omit to
+    /// run the whole batch; a summary names representative rounds this way
+    /// instead of carrying every round across the boundary.
+    #[serde(default)]
+    pub round_indices: Vec<usize>,
 }
 
 impl WasmCompareParams {
+    /// The named round indices, or `None` for the whole batch.
+    pub fn round_indices(&self) -> Option<&[usize]> {
+        if self.round_indices.is_empty() {
+            None
+        } else {
+            Some(self.round_indices.as_slice())
+        }
+    }
+
     /// Convert to the domain [`CompareSimParams`].
     pub fn into_domain(self) -> Result<CompareSimParams, DtoError> {
         let settings = self.settings.into_vacuum_settings();
@@ -1174,6 +1239,35 @@ impl WasmCompareParams {
     }
 }
 
+/// Inputs to a paired vacuum compare: two independently-raced fields.
+///
+/// The classic vacuum compare races each contestant in its own field and diffs
+/// the two position series. A paired-delta summary needs both sides, so they
+/// arrive together rather than as two calls whose alignment a caller has to
+/// guarantee.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmPairedCompareParams {
+    /// The first contestant's field.
+    pub first: WasmCompareParams,
+    /// The second contestant's field, on the same seed schedule.
+    pub second: WasmCompareParams,
+}
+
+impl WasmPairedCompareParams {
+    /// Convert both sides to domain params, rejecting a sample-count mismatch.
+    pub fn into_domain(self) -> Result<(CompareSimParams, CompareSimParams), DtoError> {
+        if self.first.nsamples != self.second.nsamples {
+            return Err(DtoError(format!(
+                "a paired compare needs one sample count, got {} and {}",
+                self.first.nsamples, self.second.nsamples
+            )));
+        }
+
+        Ok((self.first.into_domain()?, self.second.into_domain()?))
+    }
+}
+
 /// Inputs to a same-race compare-family run.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1205,9 +1299,24 @@ pub struct WasmContestedCompareParams {
     pub nsamples: usize,
     /// Master seed.
     pub master_seed: u64,
+    /// Run only these round indices instead of `0..nsamples`.
+    ///
+    /// Round `i` is seeded `master_seed + i` and pins its own round counter, so
+    /// asking for one index reproduces that exact round of the batch.
+    #[serde(default)]
+    pub round_indices: Vec<usize>,
 }
 
 impl WasmContestedCompareParams {
+    /// The named round indices, or `None` for the whole batch.
+    pub fn round_indices(&self) -> Option<&[usize]> {
+        if self.round_indices.is_empty() {
+            None
+        } else {
+            Some(self.round_indices.as_slice())
+        }
+    }
+
     /// Convert to the domain [`ContestedCompareParams`].
     pub fn into_domain(self) -> Result<ContestedCompareParams, DtoError> {
         let settings = self.settings.into_race_settings();
@@ -1283,6 +1392,61 @@ impl WasmRaceSimParams {
             nsamples: self.nsamples,
             master_seed: self.master_seed,
             focus_runner_ids: self.focus_runner_ids.into_iter().map(RunnerId).collect(),
+            // The batch run only produces finish orders, telemetry, and event
+            // logs; a caller that wants a replay asks for one round through
+            // [`WasmRaceReplayParams`] instead of paying for every round here.
+            include_replays: false,
+        })
+    }
+}
+
+/// Inputs to a single-round replay projection.
+///
+/// The same field as [`WasmRaceSimParams`] without the batch sampling: one
+/// round, named by index, returned as the packed capture bytes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmRaceReplayParams {
+    /// The course.
+    pub course: WasmCourseData,
+    /// Race parameters.
+    pub parameters: WasmRaceParameters,
+    /// Optional settings. `Option` because a present-but-`undefined` key
+    /// deserializes as a unit value rather than an absent key (see
+    /// `honse-sim` AGENTS.md), so a caller that leaves settings out still
+    /// converts.
+    #[serde(default)]
+    pub settings: Option<WasmSettings>,
+    /// The field to race (2..=12 runners).
+    pub runners: Vec<WasmCreateRunner>,
+    /// Master seed of the round (round `i` of a batch run uses `masterSeed + i`).
+    pub master_seed: u64,
+    /// Absolute index of the round to reproduce.
+    pub round_index: usize,
+}
+
+impl WasmRaceReplayParams {
+    /// Convert to the domain [`RaceReplayParams`].
+    pub fn into_domain(self) -> Result<RaceReplayParams, DtoError> {
+        let settings = self
+            .settings
+            .map_or_else(RaceSettings::default, WasmSettings::into_race_settings);
+        let parameters = self.parameters.to_domain()?;
+        let ground = to_ground(self.parameters.ground)?;
+        let course = self.course.into_domain()?;
+        let runners = self
+            .runners
+            .into_iter()
+            .map(WasmCreateRunner::into_domain)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(RaceReplayParams {
+            course,
+            ground,
+            parameters,
+            settings,
+            runners,
+            master_seed: self.master_seed,
+            round_index: self.round_index,
         })
     }
 }
@@ -1317,44 +1481,29 @@ impl From<&FinishEntry> for WasmFinishEntry {
     }
 }
 
-/// A per-tick focus sample crossing back to JS.
+/// The metadata half of a focus runner's per-round trace.
+///
+/// The per-tick series are attached as `Float32Array`s by [`collected_to_js`].
+/// A trace is one of the largest payloads the app holds — every focused runner,
+/// every tick, every round, on the main thread — so a column of typed numbers
+/// beats one JS object per sample by a wide margin.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmTickSample {
-    /// Time in seconds.
-    pub time: f64,
-    /// Position in meters.
-    pub position: f64,
-    /// Speed in m/s.
-    pub speed: f64,
-    /// Lane offset.
-    pub lane: f64,
-    /// Remaining HP.
-    pub health: f64,
-}
-
-/// A focus runner's trace for a round.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmFocusTrace {
+struct FocusTraceMeta {
     /// Runner id.
-    pub runner_id: u32,
-    /// Per-tick samples.
-    pub samples: Vec<WasmTickSample>,
+    runner_id: u32,
     /// Self-cast skill-effect activation logs (`[start, end]` position ranges),
     /// keyed by skill id. Serialized as a JS object (not a Map) via
     /// `serialize_maps_as_objects(true)` in `to_js`.
-    pub skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
+    skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
 }
 
-/// One round's collected data.
+/// The metadata half of one round's collected data.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmRoundData {
+struct RoundMeta {
     /// Round seed.
-    pub seed: u64,
-    /// Focus traces.
-    pub focus: Vec<WasmFocusTrace>,
+    seed: u64,
 }
 
 /// Optional detail payload for a logged event.
@@ -1451,205 +1600,86 @@ fn event_logs_to_wasm(logs: &RaceEventLog) -> Vec<Vec<WasmRaceEvent>> {
         .collect()
 }
 
-/// One gate's sample within a replay frame, in the game's units.
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmReplayHorseFrame {
-    /// Meters from the start.
-    pub distance: f32,
-    /// 0 at the inner rail, 9999 at the outer.
-    pub lane_position: u16,
-    /// Meters per second, times 100.
-    pub speed: u16,
-    /// Remaining HP.
-    pub hp: u16,
-    /// 0 when calm; the rushed style otherwise.
-    pub temptation_mode: i8,
-    /// Gate index of the runner blocking in front, or -1.
-    pub block_front_horse_index: i8,
-}
-
-impl From<&ReplayHorseFrame> for WasmReplayHorseFrame {
-    fn from(h: &ReplayHorseFrame) -> Self {
-        WasmReplayHorseFrame {
-            distance: h.distance,
-            lane_position: h.lane_position,
-            speed: h.speed,
-            hp: h.hp,
-            temptation_mode: h.temptation_mode,
-            block_front_horse_index: h.block_front_horse_index,
-        }
-    }
-}
-
-/// One tick of a replay, every gate sampled.
+/// The serialized simulation result, minus the collected telemetry.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmReplayFrame {
-    /// Raw seconds since the gates opened.
-    pub time: f32,
-    /// One per gate, in gate order.
-    pub horse_frame: Vec<WasmReplayHorseFrame>,
-}
-
-impl From<&ReplayFrame> for WasmReplayFrame {
-    fn from(f: &ReplayFrame) -> Self {
-        WasmReplayFrame {
-            time: f.time,
-            horse_frame: f.horses.iter().map(WasmReplayHorseFrame::from).collect(),
-        }
-    }
-}
-
-/// One gate's result row in a replay.
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmReplayHorseResult {
-    /// 0 is the winner.
-    pub finish_order: i32,
-    /// Displayed (scaled) finish time.
-    pub finish_time: f32,
-    /// Displayed gap to the runner one place ahead.
-    pub finish_diff_time: f32,
-    /// Seconds lost at the gate.
-    pub start_delay_time: f32,
-    /// 0-based guts rank in the field.
-    pub guts_order: u8,
-    /// 0-based wit rank in the field.
-    pub wiz_order: u8,
-    /// Where the last spurt began; 0 when it never did.
-    pub last_spurt_start_distance: f32,
-    /// NIGE 1, SENKO 2, SASHI 3, OIKOMI 4.
-    pub running_style: u8,
-    /// Carried for shape parity.
-    pub defeat: i32,
-    /// Raw finish time in seconds.
-    pub finish_time_raw: f32,
-}
-
-impl From<&ReplayHorseResult> for WasmReplayHorseResult {
-    fn from(r: &ReplayHorseResult) -> Self {
-        WasmReplayHorseResult {
-            finish_order: r.finish_order,
-            finish_time: r.finish_time,
-            finish_diff_time: r.finish_diff_time,
-            start_delay_time: r.start_delay_time,
-            guts_order: r.guts_order,
-            wiz_order: r.wiz_order,
-            last_spurt_start_distance: r.last_spurt_start_distance,
-            running_style: r.running_style,
-            defeat: r.defeat,
-            finish_time_raw: r.finish_time_raw,
-        }
-    }
-}
-
-/// A point event in a replay.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmReplayEvent {
-    /// Raw seconds since the gates opened.
-    pub frame_time: f32,
-    /// `SimulateEventType` discriminant.
-    #[serde(rename = "type")]
-    pub kind: i8,
-    /// Event-specific parameters.
-    pub param: Vec<i32>,
-}
-
-impl From<&ReplayEvent> for WasmReplayEvent {
-    fn from(e: &ReplayEvent) -> Self {
-        WasmReplayEvent {
-            frame_time: e.frame_time,
-            kind: e.kind,
-            param: e.params.clone(),
-        }
-    }
-}
-
-/// One round in the game's `RaceSimulateData` shape. Field names follow the
-/// replay viewers' decoded form (`frame`, `horseFrame`, `horseResult`,
-/// `event`) so a consumer can hand it to code written for a capture.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmRaceReplay {
-    /// Widest leader-to-tail gap seen in any frame, in meters.
-    pub distance_diff_max: f32,
-    /// Every tick, in order.
-    pub frame: Vec<WasmReplayFrame>,
-    /// One per gate, in gate order.
-    pub horse_result: Vec<WasmReplayHorseResult>,
-    /// Chronological.
-    pub event: Vec<WasmReplayEvent>,
-}
-
-impl From<&RaceReplay> for WasmRaceReplay {
-    fn from(r: &RaceReplay) -> Self {
-        WasmRaceReplay {
-            distance_diff_max: r.distance_diff_max,
-            frame: r.frames.iter().map(WasmReplayFrame::from).collect(),
-            horse_result: r.results.iter().map(WasmReplayHorseResult::from).collect(),
-            event: r.events.iter().map(WasmReplayEvent::from).collect(),
-        }
-    }
-}
-
-/// The serialized simulation result.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WasmRaceSimResult {
+struct RaceSimResultMeta {
     /// Per-round finish orders.
-    pub finish_orders: Vec<Vec<WasmFinishEntry>>,
-    /// Collected focus telemetry.
-    pub collected: Vec<WasmRoundData>,
+    finish_orders: Vec<Vec<WasmFinishEntry>>,
     /// Per-round logged race events.
-    pub event_logs: Vec<Vec<WasmRaceEvent>>,
-    /// Per-round replays in the game's own result shape.
-    pub replays: Vec<WasmRaceReplay>,
+    event_logs: Vec<Vec<WasmRaceEvent>>,
 }
 
-impl WasmRaceSimResult {
-    /// Build the output DTO from a domain result.
-    pub fn from_domain(result: &RaceSimResult) -> Self {
-        WasmRaceSimResult {
-            finish_orders: result
-                .finish_orders
-                .iter()
-                .map(|order| order.iter().map(WasmFinishEntry::from).collect())
-                .collect(),
-            collected: collected_to_wasm(&result.collected),
-            event_logs: event_logs_to_wasm(&result.event_logs),
-            replays: result.replays.iter().map(WasmRaceReplay::from).collect(),
+/// Build the JS value for a race-sim result: serde for the metadata, typed
+/// arrays for the per-tick focus telemetry.
+pub fn race_sim_result_to_js(
+    finish_orders: Vec<Vec<WasmFinishEntry>>,
+    collected: &CollectedData,
+    event_logs: &RaceEventLog,
+) -> Result<JsValue, JsError> {
+    let meta = RaceSimResultMeta {
+        finish_orders,
+        event_logs: event_logs_to_wasm(event_logs),
+    };
+    let object = to_js(&meta)?;
+    let collected = collected_to_js(collected)?;
+    js_sys::Reflect::set(&object, &JsValue::from_str("collected"), collected.as_ref())
+        .map_err(|err| JsError::new(&format!("failed to set collected: {err:?}")))?;
+    Ok(object)
+}
+
+/// Build the output JS value from a domain [`RaceSimResult`].
+pub fn race_sim_result_from_domain(result: &RaceSimResult) -> Result<JsValue, JsError> {
+    race_sim_result_to_js(
+        result
+            .finish_orders
+            .iter()
+            .map(|order| order.iter().map(WasmFinishEntry::from).collect())
+            .collect(),
+        &result.collected,
+        &result.event_logs,
+    )
+}
+
+/// Build the `collected` array: one round object per round, one trace object per
+/// focused runner, each carrying its per-tick series as typed arrays.
+fn collected_to_js(data: &CollectedData) -> Result<js_sys::Array, JsError> {
+    let rounds = js_sys::Array::new();
+    for round in &data.rounds {
+        let focus = js_sys::Array::new();
+        for trace in &round.focus {
+            let mut time: Vec<f64> = Vec::with_capacity(trace.samples.len());
+            let mut position: Vec<f64> = Vec::with_capacity(trace.samples.len());
+            let mut speed: Vec<f64> = Vec::with_capacity(trace.samples.len());
+            let mut lane: Vec<f64> = Vec::with_capacity(trace.samples.len());
+            let mut health: Vec<f64> = Vec::with_capacity(trace.samples.len());
+            for sample in &trace.samples {
+                time.push(sample.time);
+                position.push(sample.position);
+                speed.push(sample.speed);
+                lane.push(sample.lane);
+                health.push(sample.health);
+            }
+
+            let meta = FocusTraceMeta {
+                runner_id: trace.runner_id.0,
+                skill_activations: skill_activation_map_to_wasm(&trace.skill_activations),
+            };
+            let object = to_js(&meta)?;
+            set_f32_series(&object, "time", &time)?;
+            set_f32_series(&object, "position", &position)?;
+            set_f32_series(&object, "speed", &speed)?;
+            set_f32_series(&object, "lane", &lane)?;
+            set_f32_series(&object, "health", &health)?;
+            focus.push(&object);
         }
-    }
-}
 
-fn collected_to_wasm(data: &CollectedData) -> Vec<WasmRoundData> {
-    data.rounds
-        .iter()
-        .map(|round| WasmRoundData {
-            seed: round.seed,
-            focus: round
-                .focus
-                .iter()
-                .map(|trace| WasmFocusTrace {
-                    runner_id: trace.runner_id.0,
-                    samples: trace
-                        .samples
-                        .iter()
-                        .map(|s| WasmTickSample {
-                            time: s.time,
-                            position: s.position,
-                            speed: s.speed,
-                            lane: s.lane,
-                            health: s.health,
-                        })
-                        .collect(),
-                    skill_activations: skill_activation_map_to_wasm(&trace.skill_activations),
-                })
-                .collect(),
-        })
-        .collect()
+        let round_object = to_js(&RoundMeta { seed: round.seed })?;
+        js_sys::Reflect::set(&round_object, &JsValue::from_str("focus"), focus.as_ref())
+            .map_err(|err| JsError::new(&format!("failed to set focus: {err:?}")))?;
+        rounds.push(&round_object);
+    }
+    Ok(rounds)
 }
 
 // --------- compare output DTOs ---------
@@ -1740,6 +1770,16 @@ pub struct WasmStaminaLedger {
     pub recovery_procs: u32,
     /// Max HP for this run.
     pub max_hp: f64,
+    /// HP left over when the last-spurt decision was made, after the spurt's
+    /// own cost. Negative is the deficit to a full spurt. Absent when the
+    /// policy never reached the decision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spurt_margin: Option<f64>,
+    /// HP that decision charged for the remainder of the race: the bill the
+    /// margin above was measured against, at the status the runner was in when
+    /// it crossed the line. Absent when the policy never reached the decision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spurt_hp_required: Option<f64>,
 }
 
 impl From<&StaminaLedger> for WasmStaminaLedger {
@@ -1757,30 +1797,36 @@ impl From<&StaminaLedger> for WasmStaminaLedger {
             total_drained_by_effects: l.total_drained_by_effects,
             recovery_procs: l.recovery_procs,
             max_hp: l.max_hp,
+            spurt_margin: l.spurt_margin,
+            spurt_hp_required: l.spurt_hp_required,
         }
     }
 }
 
-/// Rich per-runner, per-round compare data crossing back to JS.
+/// One position-keep region, in metres and the engine's state discriminant.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmPositionKeepRegion {
+    /// Position the state began, in metres.
+    pub start: f64,
+    /// Position the state ended, in metres.
+    pub end: f64,
+    /// `PositionKeepState` discriminant: 1 pace up, 2 pace down, 3 speed up,
+    /// 4 overtake, 5 pace up ex. 0 (no state) is never emitted as a region.
+    pub state: i32,
+}
+
+/// The metadata half of a rich per-runner, per-round compare payload.
+///
+/// The per-tick series are attached as typed arrays by [`compare_data_to_js`],
+/// not serialized field by field: a compare round is almost entirely numbers, so
+/// a `Float32Array` crosses the boundary in one bulk copy instead of one
+/// `Array::push` per sample, and lives off the JS heap instead of in it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmCompareRoundData {
+pub struct CompareRunnerMeta {
     /// Runner id.
     pub runner_id: u32,
-    /// Per-tick elapsed time.
-    pub time: Vec<f64>,
-    /// Per-tick position.
-    pub position: Vec<f64>,
-    /// Per-tick velocity.
-    pub velocity: Vec<f64>,
-    /// Per-tick HP.
-    pub hp: Vec<f64>,
-    /// Per-tick lane.
-    pub current_lane: Vec<f64>,
-    /// Per-tick gap to the pacer.
-    pub pacer_gap: Vec<f64>,
-    /// Per-tick race order (1-based rank; 0 when untracked).
-    pub order: Vec<i64>,
     /// Self-cast skill-effect activation logs, keyed by skill id.
     pub skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
     /// Externally-targeted skill-effect activation logs, keyed by skill id.
@@ -1789,6 +1835,9 @@ pub struct WasmCompareRoundData {
     pub start_delay: f64,
     /// Closed rushed regions as `[start, end]` pairs.
     pub rushed: Vec<[f64; 2]>,
+    /// Position-keep regions, in activation order. Empty on engine builds that
+    /// predate this channel, which reads as "not recorded", not as "none".
+    pub position_keep_regions: Vec<WasmPositionKeepRegion>,
     /// Dueling region, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dueling_region: Option<[f64; 2]>,
@@ -1828,21 +1877,23 @@ pub struct WasmCompareRoundData {
     pub finish_position: f64,
 }
 
-impl From<&CompareRoundData> for WasmCompareRoundData {
+impl From<&CompareRoundData> for CompareRunnerMeta {
     fn from(d: &CompareRoundData) -> Self {
-        WasmCompareRoundData {
+        CompareRunnerMeta {
             runner_id: d.runner_id,
-            time: d.time.clone(),
-            position: d.position.clone(),
-            velocity: d.velocity.clone(),
-            hp: d.hp.clone(),
-            current_lane: d.current_lane.clone(),
-            pacer_gap: d.pacer_gap.clone(),
-            order: d.order.clone(),
             skill_activations: skill_activation_map_to_wasm(&d.skill_activations),
             targeted_skill_activations: skill_activation_map_to_wasm(&d.targeted_skill_activations),
             start_delay: d.start_delay,
             rushed: d.rushed.iter().map(|&(s, e)| [s, e]).collect(),
+            position_keep_regions: d
+                .position_keep_regions
+                .iter()
+                .map(|&(start, end, state)| WasmPositionKeepRegion {
+                    start,
+                    end,
+                    state: state as i32,
+                })
+                .collect(),
             dueling_region: d.dueling_region.map(|(s, e)| [s, e]),
             spot_struggle_region: d.spot_struggle_region.map(|(s, e)| [s, e]),
             fully_charged_region: d.fully_charged_region.map(|(s, e)| [s, e]),
@@ -1861,45 +1912,727 @@ impl From<&CompareRoundData> for WasmCompareRoundData {
     }
 }
 
-/// One round's compare data crossing back to JS.
+/// The metadata half of one round's compare payload.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmCompareRound {
+struct CompareRoundMeta {
     /// Master seed.
-    pub seed: u64,
+    seed: u64,
     /// The primary (first-added) runner's id, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub primary_runner_id: Option<u32>,
-    /// Per-runner round data.
-    pub runners: Vec<WasmCompareRoundData>,
+    primary_runner_id: Option<u32>,
 }
 
-/// The serialized compare result (per-round, per-runner telemetry).
+/// Set `key` on `object` to a `Float32Array` copy of `values`.
+///
+/// The engine computes in `f64`; this read model is the one place that narrows
+/// to `f32`. Measured over 100 compare rounds the largest quantisation error is
+/// 6.1e-5 m on position, 9.5e-7 m/s on velocity, and 1.8e-6 s on time — orders of
+/// magnitude below what a bashin delta resolves — and it halves the bytes the
+/// worker holds while moving them off the JS heap.
+fn set_f32_series(object: &JsValue, key: &str, values: &[f64]) -> Result<(), JsError> {
+    let narrow: Vec<f32> = values.iter().map(|&value| value as f32).collect();
+    let array = js_sys::Float32Array::from(narrow.as_slice());
+    js_sys::Reflect::set(object, &JsValue::from_str(key), &array)
+        .map(|_| ())
+        .map_err(|err| JsError::new(&format!("failed to set compare series {key}: {err:?}")))
+}
+
+/// Set `key` on `object` to an `Int32Array` copy of `values`.
+fn set_i32_series(object: &JsValue, key: &str, values: &[i64]) -> Result<(), JsError> {
+    let narrow: Vec<i32> = values.iter().map(|&value| value as i32).collect();
+    let array = js_sys::Int32Array::from(narrow.as_slice());
+    js_sys::Reflect::set(object, &JsValue::from_str(key), &array)
+        .map(|_| ())
+        .map_err(|err| JsError::new(&format!("failed to set compare series {key}: {err:?}")))
+}
+
+/// One `{ seed, primaryRunnerId?, runners }` round object.
+fn compare_round_object(
+    seed: u64,
+    primary_runner_id: Option<u32>,
+    runners: &js_sys::Array,
+) -> Result<JsValue, JsError> {
+    let round_object = to_js(&CompareRoundMeta {
+        seed,
+        primary_runner_id,
+    })?;
+    js_sys::Reflect::set(
+        &round_object,
+        &JsValue::from_str("runners"),
+        runners.as_ref(),
+    )
+    .map_err(|err| JsError::new(&format!("failed to set compare runners: {err:?}")))?;
+    Ok(round_object)
+}
+
+/// The `{ rounds }` result object every compare endpoint returns.
+fn rounds_to_js(rounds: &js_sys::Array) -> Result<JsValue, JsError> {
+    let result = js_sys::Object::new();
+    js_sys::Reflect::set(&result, &JsValue::from_str("rounds"), rounds.as_ref())
+        .map_err(|err| JsError::new(&format!("failed to set compare rounds: {err:?}")))?;
+    Ok(result.into())
+}
+
+/// Attach the per-tick series to a runner's metadata object.
+fn attach_compare_series(object: &JsValue, runner: &CompareRoundData) -> Result<(), JsError> {
+    set_f32_series(object, "time", &runner.time)?;
+    set_f32_series(object, "position", &runner.position)?;
+    set_f32_series(object, "velocity", &runner.velocity)?;
+    set_f32_series(object, "hp", &runner.hp)?;
+    set_f32_series(object, "currentLane", &runner.current_lane)?;
+    set_f32_series(object, "pacerGap", &runner.pacer_gap)?;
+    set_i32_series(object, "order", &runner.order)
+}
+
+/// Build the JS value for a rich compare result: serde for the metadata, typed
+/// arrays for the per-tick series.
+///
+/// Replaces the `Serialize` derive on the result: `serde_wasm_bindgen` can only
+/// build plain JS arrays, which is the payload shape this exists to avoid.
+pub fn compare_data_to_js(data: &CompareData) -> Result<JsValue, JsError> {
+    let rounds = js_sys::Array::new();
+    for round in &data.rounds {
+        let runners = js_sys::Array::new();
+        for runner in &round.runners {
+            let object = to_js(&CompareRunnerMeta::from(runner))?;
+            attach_compare_series(&object, runner)?;
+            runners.push(&object);
+        }
+
+        rounds.push(&compare_round_object(
+            round.seed,
+            round.primary_runner_id,
+            &runners,
+        )?);
+    }
+    rounds_to_js(&rounds)
+}
+
+/// The metadata half of a position-only per-runner round payload.
+///
+/// The skill planner's bashin delta reads only positions, so this lean read
+/// model omits the velocity/HP/lane/order/effect channels the rich compare
+/// payload carries. Frames match `CompareRoundData.position` exactly.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WasmCompareData {
-    /// One entry per simulated round.
-    pub rounds: Vec<WasmCompareRound>,
+struct PositionRunnerMeta {
+    /// Runner id.
+    runner_id: u32,
 }
 
-impl WasmCompareData {
-    /// Build the output DTO from a domain [`CompareData`].
-    pub fn from_domain(data: &CompareData) -> Self {
-        WasmCompareData {
-            rounds: data
-                .rounds
+/// Build the JS value for a position-only compare result.
+pub fn position_data_to_js(data: &PositionData) -> Result<JsValue, JsError> {
+    let rounds = js_sys::Array::new();
+    for round in &data.rounds {
+        let runners = js_sys::Array::new();
+        for runner in &round.runners {
+            let object = to_js(&PositionRunnerMeta {
+                runner_id: runner.runner_id,
+            })?;
+            set_f32_series(&object, "position", &runner.position)?;
+            runners.push(&object);
+        }
+        rounds.push(&compare_round_object(
+            round.seed,
+            round.primary_runner_id,
+            &runners,
+        )?);
+    }
+    rounds_to_js(&rounds)
+}
+
+/// The metadata half of a lean per-runner, per-round basin payload.
+///
+/// The basin reduction reads the time/position/velocity series, the tracked
+/// skill's self-cast activation logs, whether each skill was used, and the
+/// finish position. The HP/lane/pacer/order channels, targeted activations, and
+/// mechanic regions the full compare read-model carries are left out.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BasinRunnerMeta {
+    /// Runner id.
+    runner_id: u32,
+    /// Self-cast skill-effect activation logs, keyed by skill id.
+    skill_activations: HashMap<String, Vec<WasmSkillEffectLog>>,
+    /// Ids of skills used this round (in activation order).
+    used_skills: Vec<String>,
+    /// Final position.
+    finish_position: f64,
+}
+
+/// Build the JS value for a basin compare result.
+pub fn basin_data_to_js(data: &BasinData) -> Result<JsValue, JsError> {
+    let rounds = js_sys::Array::new();
+    for round in &data.rounds {
+        let runners = js_sys::Array::new();
+        for runner in &round.runners {
+            let object = to_js(&BasinRunnerMeta {
+                runner_id: runner.runner_id,
+                skill_activations: skill_activation_map_to_wasm(&runner.skill_activations),
+                used_skills: runner.used_skills.clone(),
+                finish_position: runner.finish_position,
+            })?;
+            set_f32_series(&object, "time", &runner.time)?;
+            set_f32_series(&object, "position", &runner.position)?;
+            set_f32_series(&object, "velocity", &runner.velocity)?;
+            runners.push(&object);
+        }
+        rounds.push(&compare_round_object(
+            round.seed,
+            round.primary_runner_id,
+            &runners,
+        )?);
+    }
+    rounds_to_js(&rounds)
+}
+
+/// One candidate in a dedicated ranking run.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmRankCandidate {
+    /// The skill appended to the baseline for this candidate's race.
+    pub skill: WasmSkillInput,
+    /// Baseline skill ids the candidate replaces (its family's lower tiers).
+    #[serde(default)]
+    pub supersedes: Vec<String>,
+}
+
+/// Inputs to a dedicated skill-ranking run.
+///
+/// Unlike [`WasmCompareParams`], the baseline runner and the candidate skills
+/// are passed separately: the engine appends each candidate to the baseline and
+/// computes the bashin delta internally, so no per-sample telemetry crosses back.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmSkillRankParams {
+    /// The course.
+    pub course: WasmCourseData,
+    /// Race parameters.
+    pub parameters: WasmRaceParameters,
+    /// Optional settings (compare mode toggles).
+    #[serde(default)]
+    pub settings: WasmSettings,
+    /// Optional dueling rates (default: 10 per strategy).
+    #[serde(default)]
+    pub dueling_rates: Option<WasmDuelingRates>,
+    /// The baseline runner (its own skills included).
+    pub runner: WasmCreateRunner,
+    /// Skills to append to the baseline, one candidate per entry.
+    pub candidates: Vec<WasmRankCandidate>,
+    /// Number of rounds per runner.
+    pub nsamples: usize,
+    /// Master seed.
+    pub master_seed: u64,
+    /// Start of the measured stretch, in metres.
+    pub window_start: f64,
+    /// End of the measured stretch, in metres.
+    pub window_end: f64,
+}
+
+impl WasmSkillRankParams {
+    /// Convert to the domain [`SkillRankParams`].
+    pub fn into_domain(self) -> Result<SkillRankParams, DtoError> {
+        let settings = self.settings.into_vacuum_settings();
+        let parameters = self.parameters.to_domain()?;
+        let ground = to_ground(self.parameters.ground)?;
+        let course = self.course.into_domain()?;
+        let runner = self.runner.into_domain()?;
+        let candidates = self
+            .candidates
+            .into_iter()
+            .map(|candidate| {
+                Ok(RankCandidate {
+                    skill: candidate.skill.into_domain()?,
+                    supersedes: candidate.supersedes,
+                })
+            })
+            .collect::<Result<Vec<_>, DtoError>>()?;
+        let dueling_rates = match self.dueling_rates {
+            Some(rates) => rates.into(),
+            None => DuelingRates {
+                runaway: 10.0,
+                front_runner: 10.0,
+                pace_chaser: 10.0,
+                late_surger: 10.0,
+                end_closer: 10.0,
+            },
+        };
+        Ok(SkillRankParams {
+            course,
+            ground,
+            parameters,
+            settings,
+            dueling_rates,
+            runner,
+            candidates,
+            nsamples: self.nsamples,
+            master_seed: self.master_seed,
+            window_start: self.window_start,
+            window_end: self.window_end,
+        })
+    }
+}
+
+/// One candidate's measured marginal, crossing back to JS.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmSkillRankEntry {
+    /// The candidate skill id.
+    pub skill_id: String,
+    /// Mean bashin gained over the baseline.
+    pub mean: f64,
+    /// Minimum per-sample bashin.
+    pub min: f64,
+    /// Maximum per-sample bashin.
+    pub max: f64,
+    /// Median per-sample bashin.
+    pub median: f64,
+    /// Per-sample bashin deltas, ascending.
+    pub results: Vec<f64>,
+}
+
+/// The serialized ranking result (one entry per candidate).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmSkillRankData {
+    /// Per-candidate results.
+    pub entries: Vec<WasmSkillRankEntry>,
+}
+
+impl WasmSkillRankData {
+    /// Build the output DTO from a domain [`SkillRankData`].
+    pub fn from_domain(data: &SkillRankData) -> Self {
+        WasmSkillRankData {
+            entries: data
+                .entries
                 .iter()
-                .map(|round| WasmCompareRound {
-                    seed: round.seed,
-                    primary_runner_id: round.primary_runner_id,
-                    runners: round
-                        .runners
-                        .iter()
-                        .map(WasmCompareRoundData::from)
-                        .collect(),
+                .map(|entry| WasmSkillRankEntry {
+                    skill_id: entry.skill_id.clone(),
+                    mean: entry.mean,
+                    min: entry.min,
+                    max: entry.max,
+                    median: entry.median,
+                    results: entry.results.clone(),
                 })
                 .collect(),
         }
+    }
+}
+
+// --------- pre-race stamina budget ---------
+
+impl WasmStatLine {
+    /// Reject a stat the engine cannot price.
+    ///
+    /// The floor is 1, not 0: guts divides into the late-race burn multiplier,
+    /// so zero guts makes the spurt bill infinite and the whole budget
+    /// non-numeric. Validating here keeps `inf` off the JS boundary.
+    fn validate(&self) -> Result<(), DtoError> {
+        for (name, value) in [
+            ("speed", self.speed),
+            ("stamina", self.stamina),
+            ("power", self.power),
+            ("guts", self.guts),
+            ("wit", self.wit),
+        ] {
+            if value < 1 {
+                return Err(DtoError(format!("{name} must be at least 1, got {value}")));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Input for the pre-race stamina budget readout.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmStaminaBudgetParams {
+    /// Course distance in meters.
+    pub distance: f64,
+    /// Track surface (1 turf, 2 dirt).
+    pub surface: i32,
+    /// Ground condition (1 firm, 2 good, 3 soft, 4 heavy).
+    pub ground: i32,
+    /// Running style (1..5).
+    pub strategy: i32,
+    /// Motivation (-2 awful .. 2 great).
+    pub mood: i32,
+    /// Raw input stats, before overcap and mood adjustment.
+    pub stats: WasmStatLine,
+    /// Distance aptitude (0 S .. 7 G).
+    pub distance_aptitude: i32,
+    /// Strategy aptitude (0 S .. 7 G).
+    pub strategy_aptitude: i32,
+    /// The course's threshold stats (1..5), as `courseSetStatus`. Omitted or
+    /// empty means no adjusted-speed bonus.
+    ///
+    /// `Option` because a present-but-`undefined` key is a unit value to serde,
+    /// not an absent one; a bare `Vec` rejects it.
+    #[serde(default)]
+    pub course_set_status: Option<Vec<i32>>,
+    /// Recovery the build brings, in raw (×10000) units of max HP — the value a
+    /// Recovery skill effect carries, summed across the skills. Omitted means
+    /// none.
+    #[serde(default)]
+    pub heal_basis_points: Option<f64>,
+    /// HP-consumption multiplier for the conditions being assumed: omit for a
+    /// clean run. The engine derives the real one per tick from rushed, spot
+    /// struggle, downhill, and pace-down state.
+    #[serde(default)]
+    pub status_modifier: Option<f64>,
+}
+
+impl WasmStaminaBudgetParams {
+    pub fn into_domain(self) -> Result<StaminaBudgetInput, DtoError> {
+        if !self.distance.is_finite() || self.distance <= 0.0 {
+            return Err(DtoError(format!(
+                "distance must be a positive number, got {}",
+                self.distance
+            )));
+        }
+
+        // Absent and present-but-`undefined` both land here as `None`: none is
+        // recovery, and none is a clean run. A multiplier the caller did send
+        // still has to be a real one.
+        let heal_basis_points = self.heal_basis_points.unwrap_or(0.0);
+        if !heal_basis_points.is_finite() {
+            return Err(DtoError(
+                "healBasisPoints must be a finite number".to_string(),
+            ));
+        }
+
+        let status_modifier = self.status_modifier.unwrap_or(1.0);
+        if !status_modifier.is_finite() || status_modifier < 0.0 {
+            return Err(DtoError(format!(
+                "statusModifier must be a non-negative number, got {status_modifier}"
+            )));
+        }
+
+        self.stats.validate()?;
+
+        Ok(StaminaBudgetInput {
+            distance: self.distance,
+            surface: to_surface(self.surface)?,
+            ground: to_ground(self.ground)?,
+            strategy: to_strategy(self.strategy)?,
+            mood: to_mood(self.mood)?,
+            stats: self.stats.into(),
+            distance_aptitude: to_aptitude(self.distance_aptitude)?,
+            strategy_aptitude: to_aptitude(self.strategy_aptitude)?,
+            course_set_status: self
+                .course_set_status
+                .unwrap_or_default()
+                .into_iter()
+                .map(to_threshold_stat)
+                .collect::<Result<Vec<_>, _>>()?,
+            heal_basis_points,
+            status_modifier,
+        })
+    }
+}
+
+/// What a build's HP covers on one course, before a race runs.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmStaminaBudget {
+    /// HP the runner starts with.
+    pub max_hp: f64,
+    /// Stamina's conversion coefficient for the strategy.
+    pub strategy_coefficient: f64,
+    /// Late-race HP burn multiplier from guts.
+    pub guts_hp_burn_multiplier: f64,
+    /// Course base speed.
+    pub base_speed: f64,
+    /// Surface × ground-condition HP consumption coefficient.
+    pub ground_consumption_coefficient: f64,
+    /// Last-spurt target speed.
+    pub spurt_speed: f64,
+    /// Ground the spurt window covers, in meters.
+    pub spurt_distance: f64,
+    /// HP burned per second at spurt speed.
+    pub spurt_hp_per_second: f64,
+    /// HP the last third costs at spurt speed.
+    pub spurt_hp_required: f64,
+    /// HP the entered recoveries restore, capped at one bar.
+    pub heal_hp: f64,
+    /// Estimated HP the race costs before the late-race line.
+    pub early_mid_hp: f64,
+    /// Estimated HP left when the spurt decision is made.
+    pub hp_at_late_race: f64,
+    /// `hpAtLateRace + healHp - spurtHpRequired`; negative means short.
+    pub hp_margin: f64,
+    /// What the recoveries are worth in stamina points at the current bar.
+    pub stamina_equivalent_healed: f64,
+    /// Adjusted stamina the budget was priced with.
+    pub adjusted_stamina: f64,
+    /// Adjusted guts the budget was priced with.
+    pub adjusted_guts: f64,
+    /// Adjusted speed the budget was priced with.
+    pub adjusted_speed: f64,
+    /// Lowest adjusted stamina that clears the spurt window, recoveries
+    /// included.
+    pub stamina_requirement: f64,
+    /// Whether the budget covers a full spurt.
+    pub reaches_full_spurt: bool,
+}
+
+impl From<StaminaBudget> for WasmStaminaBudget {
+    fn from(b: StaminaBudget) -> Self {
+        WasmStaminaBudget {
+            max_hp: b.max_hp,
+            strategy_coefficient: b.strategy_coefficient,
+            guts_hp_burn_multiplier: b.guts_hp_burn_multiplier,
+            base_speed: b.base_speed,
+            ground_consumption_coefficient: b.ground_consumption_coefficient,
+            spurt_speed: b.spurt_speed,
+            spurt_distance: b.spurt_distance,
+            spurt_hp_per_second: b.spurt_hp_per_second,
+            spurt_hp_required: b.spurt_hp_required,
+            heal_hp: b.heal_hp,
+            early_mid_hp: b.early_mid_hp,
+            hp_at_late_race: b.hp_at_late_race,
+            hp_margin: b.hp_margin,
+            stamina_equivalent_healed: b.stamina_equivalent_healed,
+            adjusted_stamina: b.adjusted_stamina,
+            adjusted_guts: b.adjusted_guts,
+            adjusted_speed: b.adjusted_speed,
+            stamina_requirement: b.stamina_requirement,
+            reaches_full_spurt: b.reaches_full_spurt,
+        }
+    }
+}
+
+/// A tracked-skill comparison's inputs, as the skill/unique basin posts them.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmSkillCompareParams {
+    /// The tracked runner's field (baseline runner plus the tracked skill).
+    pub params: WasmCompareParams,
+    /// The skill the comparison is about.
+    pub tracked_skill_id: String,
+    /// Effect type the synthetic activation log carries when the round recorded
+    /// none. Omit for 0, which draws as an unknown effect rather than failing.
+    #[serde(default)]
+    pub fallback_effect_type: i32,
+    /// Effect target for the same fallback log.
+    #[serde(default)]
+    pub fallback_effect_target: i32,
+    /// The stretch of the race to score.
+    pub window: WasmEvaluationWindow,
+    /// Materialise only these round indices instead of the whole batch.
+    ///
+    /// `summarize` ignores it; `payloads` uses it to rebuild the representative
+    /// races a summary named, seeded `masterSeed + i` and pinned to their own
+    /// round counter.
+    #[serde(default)]
+    pub round_indices: Vec<usize>,
+}
+
+impl WasmSkillCompareParams {
+    /// The fallback effect a synthetic log carries.
+    pub fn fallback(&self) -> FallbackEffect {
+        FallbackEffect {
+            effect_type: self.fallback_effect_type,
+            effect_target: self.fallback_effect_target,
+        }
+    }
+
+    /// The stretch of the race to score, in the domain's terms.
+    pub fn window(&self) -> EvaluationWindow {
+        EvaluationWindow {
+            start_distance: self.window.start_distance,
+            end_distance: self.window.end_distance,
+        }
+    }
+}
+
+/// The stretch of the race a skill comparison scores, in metres.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmEvaluationWindow {
+    /// Start of the measured stretch.
+    pub start_distance: f64,
+    /// End of the measured stretch.
+    pub end_distance: f64,
+}
+
+/// The named rounds a summary's representative races live in.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmRoundIndices {
+    /// Absolute round indices to run, in the order the caller wants them back.
+    #[serde(default)]
+    pub round_indices: Vec<usize>,
+}
+
+/// One runner's per-tick series, as the lean read models carry it.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmBasinRunnerSeries {
+    /// Runner id (unused by the reduction, kept so the shape matches the read model).
+    #[serde(default)]
+    pub runner_id: u32,
+    /// Per-tick elapsed time.
+    #[serde(default)]
+    pub time: Vec<f64>,
+    /// Per-tick position.
+    #[serde(default)]
+    pub position: Vec<f64>,
+    /// Per-tick true velocity.
+    #[serde(default)]
+    pub velocity: Vec<f64>,
+}
+
+/// One round of the basin read model, restricted to the baseline's channels.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmBasinRoundDto {
+    /// Master seed.
+    #[serde(default)]
+    pub seed: u64,
+    /// The primary (first-seen) runner's id, if any.
+    #[serde(default)]
+    pub primary_runner_id: Option<u32>,
+    /// Per-runner series.
+    #[serde(default)]
+    pub runners: Vec<WasmBasinRunnerSeries>,
+}
+
+/// The basin read model a skill comparison reuses as its baseline.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmBasinBaseline {
+    /// Per-round series.
+    #[serde(default)]
+    pub rounds: Vec<WasmBasinRoundDto>,
+}
+
+impl WasmBasinBaseline {
+    /// Convert to the domain rounds the reduction reads.
+    ///
+    /// Only the primary runner of each round survives: the reduction pairs one
+    /// runner per side, and the rest of the field is not the comparison.
+    pub fn into_domain(self) -> Vec<BasinRound> {
+        self.rounds
+            .into_iter()
+            .map(|round| {
+                let primary = primary_index(round.primary_runner_id, &round.runners);
+                let taken: Vec<BasinRoundData> = primary
+                    .and_then(|index| round.runners.into_iter().nth(index))
+                    .map(|runner| {
+                        vec![BasinRoundData {
+                            runner_id: runner.runner_id,
+                            time: runner.time,
+                            position: runner.position,
+                            velocity: runner.velocity,
+                            ..BasinRoundData::default()
+                        }]
+                    })
+                    .unwrap_or_default();
+                BasinRound {
+                    seed: round.seed,
+                    primary_runner_id: primary.map(|_| 0),
+                    runners: taken,
+                }
+            })
+            .collect()
+    }
+}
+
+/// One round of the position-only read model.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmPositionRoundDto {
+    /// Master seed.
+    #[serde(default)]
+    pub seed: u64,
+    /// The primary (first-seen) runner's id, if any.
+    #[serde(default)]
+    pub primary_runner_id: Option<u32>,
+    /// Per-runner positions.
+    #[serde(default)]
+    pub runners: Vec<WasmPositionRunnerDto>,
+}
+
+/// One runner's position series.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmPositionRunnerDto {
+    /// Runner id.
+    #[serde(default)]
+    pub runner_id: u32,
+    /// Per-tick position.
+    #[serde(default)]
+    pub position: Vec<f64>,
+}
+
+/// The position-only read model the planner reuses as its baseline.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WasmPositionBaseline {
+    /// Per-round positions.
+    #[serde(default)]
+    pub rounds: Vec<WasmPositionRoundDto>,
+}
+
+impl WasmPositionBaseline {
+    /// Convert to the domain rounds the reduction reads.
+    pub fn into_domain(self) -> Vec<PositionRound> {
+        self.rounds
+            .into_iter()
+            .map(|round| {
+                let primary = primary_index(round.primary_runner_id, &round.runners);
+                let taken: Vec<PositionRoundData> = primary
+                    .and_then(|index| round.runners.into_iter().nth(index))
+                    .map(|runner| {
+                        vec![PositionRoundData {
+                            runner_id: runner.runner_id,
+                            position: runner.position,
+                        }]
+                    })
+                    .unwrap_or_default();
+                PositionRound {
+                    seed: round.seed,
+                    primary_runner_id: primary.map(|_| 0),
+                    runners: taken,
+                }
+            })
+            .collect()
+    }
+}
+
+/// The index of the round's primary runner, falling back to the first one.
+fn primary_index<T: HasRunnerId>(primary_runner_id: Option<u32>, runners: &[T]) -> Option<usize> {
+    if runners.is_empty() {
+        return None;
+    }
+
+    match primary_runner_id {
+        Some(id) => Some(
+            runners
+                .iter()
+                .position(|runner| runner.runner_id() == id)
+                .unwrap_or(0),
+        ),
+        None => Some(0),
+    }
+}
+
+/// The id a runner DTO carries, resolved by the generic primary lookup.
+trait HasRunnerId {
+    fn runner_id(&self) -> u32;
+}
+
+impl HasRunnerId for WasmBasinRunnerSeries {
+    fn runner_id(&self) -> u32 {
+        self.runner_id
+    }
+}
+
+impl HasRunnerId for WasmPositionRunnerDto {
+    fn runner_id(&self) -> u32 {
+        self.runner_id
     }
 }
 
@@ -1979,6 +2712,44 @@ mod tests {
     }
 
     #[test]
+    fn wasm_skill_input_carries_activate_lot() {
+        let lot_gated: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "200491",
+                "rarity": 2,
+                "activateLot": 1,
+                "alternatives": []
+            }"#,
+        )
+        .expect("activate-lot skill input deserializes");
+        assert_eq!(
+            lot_gated
+                .into_domain()
+                .expect("activate-lot skill input converts")
+                .activate_lot,
+            Some(1)
+        );
+
+        // Absent key is the "master data does not describe this skill" case, so
+        // the engine falls back to its effect-type heuristic rather than guessing.
+        let unknown: WasmSkillInput = serde_json::from_str(
+            r#"{
+                "skillId": "200491",
+                "rarity": 2,
+                "alternatives": []
+            }"#,
+        )
+        .expect("activate-lot-less skill input deserializes");
+        assert_eq!(
+            unknown
+                .into_domain()
+                .expect("activate-lot-less skill input converts")
+                .activate_lot,
+            None
+        );
+    }
+
+    #[test]
     fn skill_input_accepts_direct_unmodeled_effect_and_preserves_modeled_effects() {
         // Pace Chaser Savvy ○ (201532) bundles its modeled Wisdom Up effect
         // (type 5) with a Direct vision effect (type 8) that the engine does
@@ -2001,7 +2772,7 @@ mod tests {
         .expect("skill input deserializes");
 
         let skill = dto.into_domain().expect("201532-shaped skill converts");
-        let effects = build_skill_effects(&skill.alternatives[0]);
+        let effects = build_skill_effects(&skill.alternatives[0], 1);
         assert_eq!(effects.len(), 1, "the unmodeled vision effect is skipped");
         assert_eq!(
             effects[0].effect_type,
@@ -2038,7 +2809,7 @@ mod tests {
         assert!(report.is_empty(), "210061 is fully modeled: {report:?}");
 
         let skill = dto.into_domain().expect("210061 converts");
-        let effects = build_skill_effects(&skill.alternatives[0]);
+        let effects = build_skill_effects(&skill.alternatives[0], 1);
         assert_eq!(effects.len(), 3, "no climax effect is dropped");
         for effect in &effects {
             assert_eq!(effect.value_scaling, ValueScalingPolicy::PreAppliedTier);
@@ -2074,7 +2845,7 @@ mod tests {
         .expect("skill input deserializes");
 
         let skill = dto.into_domain().expect("210081 converts despite usage 19");
-        let effects = build_skill_effects(&skill.alternatives[0]);
+        let effects = build_skill_effects(&skill.alternatives[0], 1);
         assert_eq!(effects.len(), 1, "only the usage-19 effect is dropped");
         // The kept effect is the base 0.25, never the unmodeled component folded
         // in: coercing an unmapped usage to Direct would invent a tier we cannot
@@ -2106,8 +2877,11 @@ mod tests {
         .expect("skill input deserializes");
 
         assert!(
-            build_skill_effects(&raw.clone().into_domain().expect("converts").alternatives[0])
-                .is_empty(),
+            build_skill_effects(
+                &raw.clone().into_domain().expect("converts").alternatives[0],
+                1
+            )
+            .is_empty(),
             "an unannotated tiered effect is dropped, never assumed"
         );
         let report = build_skill_support_report(std::slice::from_ref(&raw)).expect("report builds");
@@ -2136,8 +2910,10 @@ mod tests {
         )
         .expect("skill input deserializes");
 
-        let effects =
-            build_skill_effects(&annotated.into_domain().expect("converts").alternatives[0]);
+        let effects = build_skill_effects(
+            &annotated.into_domain().expect("converts").alternatives[0],
+            1,
+        );
         assert_eq!(effects.len(), 1);
         assert_eq!(effects[0].value_scaling, ValueScalingPolicy::PreAppliedTier);
         // Passes through: the 1.2x is already in the stored 600.
@@ -2168,9 +2944,58 @@ mod tests {
         let skill = dto
             .into_domain()
             .expect("target 24 no longer fails the skill");
-        let effects = build_skill_effects(&skill.alternatives[0]);
+        let effects = build_skill_effects(&skill.alternatives[0], 1);
         assert_eq!(effects.len(), 1, "only the target-24 effect is dropped");
         assert_eq!(effects[0].modifier, 0.25);
+    }
+
+    fn leveled_target_speed_input(level_json: &str) -> WasmSkillInput {
+        // Shooting Star-shaped: one level-scaled Target Speed effect.
+        serde_json::from_str(&format!(
+            r#"{{
+                "skillId": "100011",
+                "rarity": 5,
+                {level_json}
+                "alternatives": [{{
+                    "baseDuration": 50000,
+                    "condition": "phase>=2",
+                    "effects": [
+                        {{ "modifier": 3500, "target": 1, "type": 27, "valueUsage": 1, "valueLevelUsage": 1 }}
+                    ]
+                }}]
+            }}"#
+        ))
+        .expect("skill input deserializes")
+    }
+
+    #[test]
+    fn skill_input_level_scales_flagged_effects() {
+        let skill = leveled_target_speed_input(r#""level": 6,"#)
+            .into_domain()
+            .expect("converts");
+        assert_eq!(skill.level, 6);
+        let effects = build_skill_effects(&skill.alternatives[0], skill.level);
+        assert!((effects[0].modifier - 0.35 * 1.13).abs() < 1e-12);
+    }
+
+    #[test]
+    fn skill_input_without_level_is_level_one() {
+        let skill = leveled_target_speed_input("")
+            .into_domain()
+            .expect("converts");
+        assert_eq!(skill.level, 1);
+        let effects = build_skill_effects(&skill.alternatives[0], skill.level);
+        assert_eq!(effects[0].modifier, 0.35);
+    }
+
+    #[test]
+    fn skill_input_rejects_out_of_range_level() {
+        for level_json in [r#""level": 0,"#, r#""level": 11,"#] {
+            let err = leveled_target_speed_input(level_json)
+                .into_domain()
+                .expect_err("out-of-range level is rejected");
+            assert!(err.0.contains("skill level"), "{}", err.0);
+        }
     }
 
     #[test]
@@ -2491,6 +3316,7 @@ mod tests {
                     "downhillRunners": [false, true],
                     "conservePowerRunners": [true, false],
                     "dueling": false,
+                    "duelingRunners": [false, true],
                     "positionKeepMode": 2
                 },
                 "runners": [
@@ -2535,7 +3361,24 @@ mod tests {
         assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
         assert_eq!(domain.settings.downhill_runners, vec![false, true]);
         assert_eq!(domain.settings.conserve_power_runners, vec![true, false]);
+        assert_eq!(domain.settings.dueling_runners, vec![false, true]);
         assert!(!domain.settings.dueling);
+    }
+
+    #[test]
+    fn dueling_runners_reach_both_engines() {
+        // One list, two settings structs: the per-runner flag has to survive both
+        // conversions, or a mode silently falls back to the race default.
+        let json = r#"{ "dueling": true, "duelingRunners": [false, true] }"#;
+        let settings: WasmSettings = serde_json::from_str(json).expect("settings deserialize");
+
+        let race = settings.clone().into_race_settings();
+        assert_eq!(race.dueling_runners, vec![false, true]);
+        assert!(race.dueling);
+
+        let vacuum = settings.into_vacuum_settings();
+        assert_eq!(vacuum.dueling_runners, vec![false, true]);
+        assert!(vacuum.dueling);
     }
 
     fn minimal_contested_json(fill_fields: &str) -> String {
@@ -2590,7 +3433,7 @@ mod tests {
     #[test]
     fn compare_settings_carry_per_runner_lists() {
         let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(
-            r#" "settings": { "rushed": true, "rushedRunners": [true, false], "witChecksRunners": [false, true], "downhillRunners": [false, true], "conservePowerRunners": [true, false] },"#,
+            r#" "settings": { "rushed": true, "rushedRunners": [true, false], "witChecksRunners": [false, true], "downhillRunners": [false, true], "conservePowerRunners": [true, false], "syncRngRunners": [true, true] },"#,
         ))
         .expect("compare params deserialize with per-runner settings");
         let domain = dto.into_domain().expect("params convert to domain");
@@ -2598,6 +3441,16 @@ mod tests {
         assert_eq!(domain.settings.wit_checks_runners, vec![false, true]);
         assert_eq!(domain.settings.downhill_runners, vec![false, true]);
         assert_eq!(domain.settings.conserve_power_runners, vec![true, false]);
+        assert_eq!(domain.settings.sync_rng_runners, vec![true, true]);
+    }
+
+    #[test]
+    fn sync_rng_runners_default_to_none() {
+        let dto: WasmCompareParams = serde_json::from_str(&minimal_contested_json(""))
+            .expect("compare params deserialize without settings");
+        let domain = dto.into_domain().expect("params convert to domain");
+        // Runners share a stream only when the settings name them.
+        assert!(domain.settings.sync_rng_runners.is_empty());
     }
 
     #[test]
@@ -2740,5 +3593,93 @@ mod tests {
         assert_eq!(dto.fill_to, None);
         let domain = dto.into_domain().expect("params convert to domain");
         assert_eq!(domain.fill_to, None);
+    }
+
+    /// A valid stamina-budget payload, with `extra` spliced in before the close.
+    fn stamina_budget_json(extra: &str) -> String {
+        format!(
+            r#"{{
+                "distance": 2400,
+                "surface": 1,
+                "ground": 1,
+                "strategy": 3,
+                "mood": 0,
+                "stats": {{ "speed": 1200, "stamina": 1200, "power": 1000, "guts": 600, "wit": 1000 }},
+                "distanceAptitude": 1,
+                "strategyAptitude": 1{extra}
+            }}"#
+        )
+    }
+
+    fn budget_params(extra: &str) -> WasmStaminaBudgetParams {
+        serde_json::from_str(&stamina_budget_json(extra)).expect("params deserialize")
+    }
+
+    #[test]
+    fn stamina_budget_params_default_the_omitted_keys() {
+        let domain = budget_params("").into_domain().expect("params convert");
+
+        assert_eq!(domain.distance, 2400.0);
+        assert_eq!(domain.surface, Surface::Turf);
+        assert_eq!(domain.ground, GroundCondition::Firm);
+        assert_eq!(domain.strategy, Strategy::LateSurger);
+        assert_eq!(domain.mood, Mood::Normal);
+        assert_eq!(domain.stats.stamina, 1200);
+        // Absent recovery is none, and an absent status modifier is a clean run
+        // — not a multiplier of zero, which would zero the whole bill.
+        assert_eq!(domain.heal_basis_points, 0.0);
+        assert_eq!(domain.status_modifier, 1.0);
+        assert!(domain.course_set_status.is_empty());
+    }
+
+    #[test]
+    fn stamina_budget_params_carry_recovery_and_course_stats() {
+        let domain = budget_params(r#", "courseSetStatus": [1, 4], "healBasisPoints": 1500"#)
+            .into_domain()
+            .expect("params convert");
+
+        assert_eq!(
+            domain.course_set_status,
+            vec![ThresholdStat::Speed, ThresholdStat::Guts]
+        );
+        assert_eq!(domain.heal_basis_points, 1500.0);
+    }
+
+    #[test]
+    fn stamina_budget_rejects_zero_guts() {
+        let json = stamina_budget_json("").replace(r#""guts": 600"#, r#""guts": 0"#);
+        let dto: WasmStaminaBudgetParams = serde_json::from_str(&json).expect("deserialize");
+
+        let error = dto.into_domain().expect_err("zero guts cannot be priced");
+        assert!(error.to_string().contains("guts"), "{error}");
+    }
+
+    #[test]
+    fn stamina_budget_rejects_a_non_positive_distance() {
+        let json = stamina_budget_json("").replace(r#""distance": 2400"#, r#""distance": 0"#);
+        let dto: WasmStaminaBudgetParams = serde_json::from_str(&json).expect("deserialize");
+
+        let error = dto
+            .into_domain()
+            .expect_err("a zero-length course is not a course");
+        assert!(error.to_string().contains("distance"), "{error}");
+    }
+
+    #[test]
+    fn stamina_budget_rejects_a_negative_status_modifier() {
+        let dto = budget_params(r#", "statusModifier": -1"#);
+
+        let error = dto
+            .into_domain()
+            .expect_err("a negative multiplier is not a state");
+        assert!(error.to_string().contains("statusModifier"), "{error}");
+    }
+
+    #[test]
+    fn stamina_budget_rejects_an_unknown_course_stat() {
+        let dto = budget_params(r#", "courseSetStatus": [9]"#);
+
+        let error = dto.into_domain().expect_err("9 is not a stat");
+        assert!(error.to_string().contains("courseSetStatus"), "{error}");
     }
 }

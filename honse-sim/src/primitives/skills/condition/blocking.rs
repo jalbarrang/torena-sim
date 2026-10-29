@@ -152,9 +152,8 @@ pub fn register_blocking_conditions() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared_kernel::language::Strategy;
     use crate::skills::condition::dynamic::{
-        get_dynamic_condition, register_all_dynamic_conditions, ActiveRunner, RunnerSnapshot,
+        get_dynamic_condition, register_all_dynamic_conditions, RunnerSnapshot,
     };
     use crate::skills::condition::operator::CmpKind;
 
@@ -187,19 +186,8 @@ mod tests {
         fn accumulate_time(&self) -> f64 {
             self.accumulate_time
         }
-        fn other_snapshots(&self) -> Vec<RunnerSnapshot> {
-            self.snapshots.clone()
-        }
-        fn active_runners(&self) -> Vec<ActiveRunner> {
-            vec![ActiveRunner {
-                is_self: true,
-                position: self.position,
-                strategy: Strategy::FrontRunner,
-                gate: 0,
-                is_rushed: false,
-                is_dueling: false,
-                activated_advantage_effect_types: 0,
-            }]
+        fn other_snapshots(&self) -> &[RunnerSnapshot] {
+            &self.snapshots
         }
     }
 

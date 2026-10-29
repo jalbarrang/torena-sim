@@ -14,6 +14,7 @@ pub use replay::{
     RaceReplay, RaceReplayCollector, ReplayEvent, ReplayFrame, ReplayHorseFrame, ReplayHorseResult,
 };
 pub use simulation::{
-    run_contested_compare, run_race_sim, ContestedCompareParams, FinishEntry, RaceSimParams,
-    RaceSimResult, SimError, DEFAULT_FIELD_SIZE, MAX_FIELD_SIZE, MIN_FIELD_SIZE,
+    run_contested_compare, run_contested_compare_rounds, run_contested_compare_summarized,
+    run_race_replay, run_race_sim, ContestedCompareParams, FinishEntry, RaceReplayParams,
+    RaceSimParams, RaceSimResult, SimError, DEFAULT_FIELD_SIZE, MAX_FIELD_SIZE, MIN_FIELD_SIZE,
 };

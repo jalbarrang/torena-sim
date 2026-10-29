@@ -1,8 +1,11 @@
-//! [`StaminaLedger`] — the per-runner record of where HP went over a race.
+//! [`StaminaLedger`] — the per-runner record of where HP went over a race, plus
+//! the run-level HP facts a reader needs to interpret it (max HP, the spurt
+//! decision's margin).
 //!
-//! The policy owns the ledger and updates it at the two points that move HP:
-//! `tick` (the only drain) and `recover` (the only restore). Attribution is
-//! therefore complete by construction — no caller can move HP behind its back.
+//! The policy owns the ledger and updates it at the points that move HP:
+//! `tick` (the only drain), `recover` (the only restore), and the last-spurt
+//! decision that reads the bar. Attribution is therefore complete by
+//! construction — no caller can move HP behind its back.
 //!
 //! Causes are priced **counterfactually**: a cause's amount is the drain that
 //! actually happened minus the drain the same tick would have cost with that
@@ -113,6 +116,20 @@ pub struct StaminaLedger {
     pub recovery_procs: u32,
     /// Max HP for this run, so a consumer can express the rest as a fraction.
     pub max_hp: f64,
+    /// HP left over when the last-spurt decision was made, after reserving the
+    /// spurt's own cost — `current_health - spurt_hp_requirement`. Positive is
+    /// the margin the bar covered a full spurt by; negative is how short it
+    /// fell, which is the figure a "force full spurt" reading reports. `None`
+    /// when the policy never reached the decision, or does not model HP at all.
+    pub spurt_margin: Option<f64>,
+    /// The bill that decision compared the bar against: the remainder of the
+    /// race priced at the spurt speed and at the status the runner was in when
+    /// it crossed the line. [`spurt_margin`](Self::spurt_margin) is exactly
+    /// `current_health - spurt_hp_required`, so this is what recovers the
+    /// spend the race had already cost, and dividing it by the same build's
+    /// clean bill gives the multiplier that run was charged. `None` when the
+    /// policy never reached the decision.
+    pub spurt_hp_required: Option<f64>,
 }
 
 impl StaminaLedger {

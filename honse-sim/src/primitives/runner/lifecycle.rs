@@ -160,6 +160,12 @@ fn sort_skills_by_id(mut skills: Vec<Skill>) -> Vec<Skill> {
 }
 
 impl Runner {
+    /// Whether the skill activated at least once this round. Duplicate-safe:
+    /// a cooldown skill's second proc appends a second entry to the log.
+    pub fn has_used_skill(&self, skill_id: &str) -> bool {
+        self.used_skills.iter().any(|s| s == skill_id)
+    }
+
     /// Build a runner from its input DTO, deriving base + adjusted stats for the
     /// given course/ground. Runtime state is placeholder until
     /// [`on_prepare`](Runner::on_prepare) resets it for a round.
@@ -194,6 +200,7 @@ impl Runner {
             adjusted_stats,
             pristine_base_stats: base_stats,
             pristine_adjusted_stats: adjusted_stats,
+            power_skill_modifier: 0.0,
             skills: sort_skills_by_id(props.skills),
             forced_positions: props.forced_positions,
             injected_debuffs: props.injected_debuffs,
@@ -207,6 +214,8 @@ impl Runner {
             forced_start_delay: props.forced_start_delay,
             forced_last_spurt_distance: props.forced_last_spurt_distance,
             health_policy,
+            runner_seed: 0,
+            isolate_skill_rng: false,
             rng,
             rushed_rng: placeholder_rng(),
             wit_rng: placeholder_rng(),
@@ -228,7 +237,7 @@ impl Runner {
             base_target_speed_per_phase: [0.0; 3],
             modifiers: SpeedModifiers::zeroed(),
             section_modifiers: Vec::new(),
-            accumulate_time: Timer::new(-1.0),
+            accumulate_time: Timer::new(0.0),
             condition_timer: Timer::new(-1.0),
             phase: Phase::EarlyRace,
             next_phase_transition: 0.0,
@@ -248,6 +257,8 @@ impl Runner {
             front_blocker: None,
             is_overtaking: false,
             first_position_in_late_race: false,
+            order_min_since_grace: None,
+            order_max_since_grace: None,
             hills: Vec::new(),
             current_hill_index: -1,
             next_hill_to_check: 0,
@@ -273,7 +284,9 @@ impl Runner {
             conserve_power_enabled: true,
             conserve_power_stat: f64::from(props.stats.power),
             conserved_power: 0.0,
-            last_conserve_power_check_frame: 0,
+            conserve_power_restart_left: 0.0,
+            conserve_power_was_rushed: false,
+            conserve_power_was_spot_struggling: false,
             conserve_power_saw_rushed: false,
             conserve_power_saw_spot_struggle: false,
             fully_charged_timer: Timer::new(0.0),
@@ -286,7 +299,8 @@ impl Runner {
             rushed_enter_position: -1.0,
             rushed_end_position: -1.0,
             rushed_timer: Timer::new(0.0),
-            rushed_max_duration: 12.0,
+            rushed_max_duration: super::mechanics::RUSHED_MAX_DURATION,
+            rushed_timer_locked: false,
             rushed_activations: Vec::new(),
             pre_rushed_pos_keep_strategy: props.strategy,
             forced_rushed_index: 0,
@@ -323,12 +337,15 @@ impl Runner {
             skills_activated_phase_map: [0; 4],
             skills_activated_half_race_map: [0; 2],
             heals_activated_count: 0,
-            used_skills: std::collections::HashSet::new(),
+            used_skills: Vec::new(),
+            skill_cooldown_until: HashMap::new(),
+            skill_wit_passes: HashMap::new(),
             activated_ledger: crate::skills::activated_ledger::ActivatedSkillLedger::new(),
             activated_advantage_effect_types: 0,
             used_targeted_skills: Vec::new(),
             emitted_debuffs: Vec::new(),
             pending_skills: Vec::new(),
+            compiled_skill_triggers: None,
             pending_targeted_skills: Vec::new(),
             pending_skill_removal: std::collections::HashSet::new(),
             course_distance: course.distance,
@@ -363,9 +380,16 @@ impl Runner {
         // `baseStats`/`adjustedStats` from `_baseStats`/`_adjustedStats`).
         self.base_stats = self.pristine_base_stats;
         self.adjusted_stats = self.pristine_adjusted_stats;
+        // Reset with the stats it accumulates alongside: gate PowerUp skills fire
+        // after this point in the init chain, so their bonus survives the round.
+        self.power_skill_modifier = 0.0;
         self.first_position_in_late_race = false;
+        // The `*_continue` order bands are held across the whole race, so their
+        // history must not survive into the next round.
+        self.order_min_since_grace = None;
+        self.order_max_since_grace = None;
         self.finish_time = 0.0;
-        self.accumulate_time = Timer::new(-1.0);
+        self.accumulate_time = Timer::new(0.0);
         self.condition_timer = Timer::new(-1.0);
         self.conditions.clear();
         self.condition_values.clear();

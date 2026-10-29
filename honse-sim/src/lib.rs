@@ -13,12 +13,18 @@ pub mod primitives;
 
 // Preserve the primitives crate's public module surface at the facade root.
 pub use primitives::{
-    compare, course, events, mob, pacing, position_keep, projection, race_support, readouts,
-    runner, shared_kernel, skills, stamina,
+    compare, compare_summary, course, events, mob, pacing, position_keep, projection, race_support,
+    readouts, runner, shared_kernel, skill_bashin, skills, spot_struggle, stamina,
 };
 
 pub mod contested;
 pub mod vacuum;
 
-pub use contested::{run_contested_compare, run_race_sim};
-pub use vacuum::run_compare;
+pub use contested::{
+    run_contested_compare, run_contested_compare_rounds, run_contested_compare_summarized,
+    run_race_sim,
+};
+pub use vacuum::{
+    run_compare, run_compare_rounds, run_compare_summarized, run_paired_compare_rounds,
+    run_paired_compare_summarized,
+};

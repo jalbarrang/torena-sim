@@ -4,8 +4,15 @@
 //! (typically one runner) over `nsamples` rounds, attaching the
 //! [`CompareDataCollector`], and returns the accumulated paired-delta read-model.
 
-use crate::vacuum::collectors::{CompareData, CompareDataCollector};
+use crate::vacuum::collectors::{
+    BasinData, BasinDataCollector, CompareData, CompareDataCollector, PositionData,
+    PositionDataCollector,
+};
 use crate::vacuum::race::{Race, SimulationSettings};
+use uma_sim_primitives::compare::PairedCompareData;
+use uma_sim_primitives::compare_summary::{
+    summarize_compare, CompareSummary, CompareSummaryData, SummaryError,
+};
 use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
 use uma_sim_primitives::runner::mechanics::DuelingRates;
@@ -27,6 +34,17 @@ pub enum SimError {
         /// The number of runners in the field.
         runners: usize,
     },
+    /// A collected round was missing its focused runner.
+    MissingCollectedRunner,
+    /// The two sides of a paired compare were asked for different sample counts.
+    UnpairedSamples {
+        /// The first side's `nsamples`.
+        first: usize,
+        /// The second side's `nsamples`.
+        second: usize,
+    },
+    /// A round could not be folded into the summary.
+    Summary(SummaryError),
 }
 
 impl std::fmt::Display for SimError {
@@ -43,6 +61,12 @@ impl std::fmt::Display for SimError {
                 f,
                 "focus_count must be within 1..={runners} (the field size), got {focus_count}"
             ),
+            SimError::MissingCollectedRunner => write!(f, "missing collected runner data"),
+            SimError::UnpairedSamples { first, second } => write!(
+                f,
+                "a paired compare needs one sample count, got {first} and {second}"
+            ),
+            SimError::Summary(error) => write!(f, "{error}"),
         }
     }
 }
@@ -91,6 +115,164 @@ pub struct CompareSimParams {
 /// [`CompareData`] projection (per-round focus telemetry); the bashin-delta +
 /// summary statistics are computed by the caller (TS side).
 pub fn run_compare(params: CompareSimParams) -> Result<CompareData, SimError> {
+    run_compare_indices(params, None)
+}
+
+/// Run a compare simulation for a named list of round indices.
+///
+/// Round `i` uses seed `master_seed + i` and pins its own round counter, so the
+/// result is the same race the full batch ran at that index. This is how a
+/// consumer re-runs the handful of rounds a summary named without replaying the
+/// ones before them.
+pub fn run_compare_rounds(
+    params: CompareSimParams,
+    indices: &[usize],
+) -> Result<CompareData, SimError> {
+    run_compare_indices(params, Some(indices))
+}
+
+/// Race each contestant in its own field and pair the rounds by index.
+///
+/// The classic vacuum compare diffs two separate races rather than one field,
+/// so a paired-delta reader needs both sides' rounds. Both sides share one seed
+/// schedule, and a caller that named indices gets those same indices on both.
+pub fn run_paired_compare_rounds(
+    first: CompareSimParams,
+    second: CompareSimParams,
+    indices: Option<&[usize]>,
+) -> Result<PairedCompareData, SimError> {
+    if first.nsamples != second.nsamples {
+        return Err(SimError::UnpairedSamples {
+            first: first.nsamples,
+            second: second.nsamples,
+        });
+    }
+
+    Ok(PairedCompareData {
+        first: run_compare_indices(first, indices)?,
+        second: run_compare_indices(second, indices)?,
+    })
+}
+
+/// Fold a compare batch into the finished summary read-model.
+///
+/// The reduction lives in the engine rather than in a caller, so every consumer
+/// of a comparison — the site, a CLI, a benchmark — reads the same bashin
+/// deltas, stamina spreads, and activation profiles.
+pub fn run_compare_summarized(params: CompareSimParams) -> Result<CompareSummaryData, SimError> {
+    let data = run_compare(params)?;
+    summarize_compare(&data).map_err(SimError::Summary)
+}
+
+/// Race each contestant in its own field, then reduce the paired rounds.
+pub fn run_paired_compare_summarized(
+    first: CompareSimParams,
+    second: CompareSimParams,
+) -> Result<CompareSummaryData, SimError> {
+    let paired = run_paired_compare_rounds(first, second, None)?;
+    let mut summary = CompareSummary::new();
+
+    for (round_a, round_b) in paired.first.rounds.iter().zip(paired.second.rounds.iter()) {
+        let runner_a = round_a
+            .runners
+            .first()
+            .ok_or(SimError::MissingCollectedRunner)?;
+        let runner_b = round_b
+            .runners
+            .first()
+            .ok_or(SimError::MissingCollectedRunner)?;
+        summary
+            .observe(runner_a, runner_b)
+            .map_err(SimError::Summary)?;
+    }
+
+    Ok(summary.finish())
+}
+
+/// Run the compare batch, or only `indices` when the caller named them.
+fn run_compare_indices(
+    params: CompareSimParams,
+    indices: Option<&[usize]>,
+) -> Result<CompareData, SimError> {
+    validate_compare(&params)?;
+    let (mut race, runner_ids, nsamples, master_seed) = prepare_race(params);
+
+    let collector = CompareDataCollector::for_runner_ids(runner_ids);
+    race.subscribe(collector.handle());
+
+    for index in round_indices(nsamples, indices) {
+        race.prepare_round_at(master_seed + index as u64, index);
+        race.run();
+    }
+
+    Ok(collector.result())
+}
+
+/// The round indices to run: the named list, or `0..nsamples`.
+fn round_indices(nsamples: usize, indices: Option<&[usize]>) -> Vec<usize> {
+    match indices {
+        Some(list) => list.to_vec(),
+        None => (0..nsamples).collect(),
+    }
+}
+
+/// Run a position-only compare simulation over `nsamples` rounds.
+///
+/// Same race setup and round seeds as [`run_compare`], but the attached
+/// [`PositionDataCollector`] records only each focus runner's per-tick
+/// position. The skill planner's bashin delta reads nothing else, so this keeps
+/// the per-tick work and the serialized payload to the minimum it needs.
+pub fn run_position_compare(params: CompareSimParams) -> Result<PositionData, SimError> {
+    validate_compare(&params)?;
+    let (mut race, runner_ids, nsamples, master_seed) = prepare_race(params);
+
+    let collector = PositionDataCollector::for_runner_ids(runner_ids);
+    race.subscribe(collector.handle());
+
+    for i in 0..nsamples {
+        race.prepare_round(master_seed + i as u64);
+        race.run();
+    }
+
+    Ok(collector.result())
+}
+
+/// Run a basin compare simulation over `nsamples` rounds.
+///
+/// Same race setup and round seeds as [`run_compare`], but the attached
+/// [`BasinDataCollector`] records only the channels the skill/unique basin
+/// reduction reads (time, position, velocity, self-cast activation logs, used
+/// skills, finish position). The mechanic regions and HP/lane/pacer/order
+/// channels the full compare read-model carries are left out.
+pub fn run_basin_compare(params: CompareSimParams) -> Result<BasinData, SimError> {
+    run_basin_compare_indices(params, None)
+}
+
+/// Run a basin compare for a named list of round indices.
+///
+/// Round `i` uses seed `master_seed + i` and pins its own round counter, so the
+/// result is the same race the batch ran at that index — which is how a skill
+/// comparison materialises the handful of races its summary names.
+pub fn run_basin_compare_indices(
+    params: CompareSimParams,
+    indices: Option<&[usize]>,
+) -> Result<BasinData, SimError> {
+    validate_compare(&params)?;
+    let (mut race, runner_ids, nsamples, master_seed) = prepare_race(params);
+
+    let collector = BasinDataCollector::for_runner_ids(runner_ids);
+    race.subscribe(collector.handle());
+
+    for index in round_indices(nsamples, indices) {
+        race.prepare_round_at(master_seed + index as u64, index);
+        race.run();
+    }
+
+    Ok(collector.result())
+}
+
+/// Reject params that cannot produce a compare run.
+fn validate_compare(params: &CompareSimParams) -> Result<(), SimError> {
     if params.nsamples == 0 {
         return Err(SimError::InvalidSamples);
     }
@@ -103,6 +285,14 @@ pub fn run_compare(params: CompareSimParams) -> Result<CompareData, SimError> {
             runners: params.runners.len(),
         });
     }
+    Ok(())
+}
+
+/// Build the race, add every contestant, and truncate to the focus runners.
+fn prepare_race(params: CompareSimParams) -> (Race, Vec<RunnerId>, usize, u64) {
+    let nsamples = params.nsamples;
+    let master_seed = params.master_seed;
+    let focus_count = params.focus_count;
 
     let mut race = Race::new(
         params.course,
@@ -119,23 +309,20 @@ pub fn run_compare(params: CompareSimParams) -> Result<CompareData, SimError> {
     // Collect only the compared runners: context runners (e.g. a dedicated
     // pacer) shape the race but their per-frame telemetry is never read on the
     // TS side, so collecting it would only multiply the WASM payload.
-    runner_ids.truncate(params.focus_count);
-    let collector = CompareDataCollector::for_runner_ids(runner_ids);
-    race.subscribe(collector.handle());
+    runner_ids.truncate(focus_count);
 
-    for i in 0..params.nsamples {
-        race.prepare_round(params.master_seed + i as u64);
-        race.run();
-    }
-
-    Ok(collector.result())
+    (race, runner_ids, nsamples, master_seed)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use uma_sim_primitives::course::model::Straight;
     use uma_sim_primitives::mob::generate_mob_field;
+    use uma_sim_primitives::projection::SkillEffectLog;
     use uma_sim_primitives::runner::test_support::{test_course, test_race_params};
+    use uma_sim_primitives::shared_kernel::language::Strategy;
 
     fn compare_params(nsamples: usize, runners: usize) -> CompareSimParams {
         CompareSimParams {
@@ -180,6 +367,68 @@ mod tests {
             assert_eq!(ids, vec![0, 1]);
             assert!(round.runners.iter().all(|r| r.finished));
         }
+    }
+
+    #[test]
+    fn vacuum_compare_can_surface_natural_spot_struggle() {
+        // Classic's shape: the compared pair plus a third runner of the same style
+        // in one synthetic race. The shared rule needs only a bunched pair, so the
+        // mechanic is reachable without the contested engine's live field — which
+        // is the whole point of routing both engines through one domain service.
+        let mut params = compare_params(1, 3);
+        params.focus_count = 2;
+        // Narrow test course keeps same-style runners inside the lateral entry
+        // gap (the same arrangement the contested equivalent uses).
+        params.course.horse_lane = 0.01;
+        for runner in &mut params.runners {
+            runner.strategy = Strategy::FrontRunner;
+        }
+
+        let data = run_compare(params).expect("compare runs");
+
+        assert!(
+            data.rounds[0]
+                .runners
+                .iter()
+                .any(|runner| runner.spot_struggle_region.is_some()),
+            "expected a natural spot struggle in a three front-runner vacuum race"
+        );
+    }
+
+    /// Focus runners with a dueling region, summed over a whole compare run.
+    ///
+    /// `test_course` ships no straights, and the artificial roll only happens on
+    /// the final straight, so the course needs one before this can observe
+    /// anything.
+    fn dueling_count(with_dueling: bool) -> usize {
+        let mut params = compare_params(500, 3);
+        params.course.straights = vec![Straight {
+            start: 2000.0,
+            end: 2400.0,
+            front_type: 0,
+        }];
+        params.settings.dueling = with_dueling;
+        params.focus_count = 2;
+
+        let data = run_compare(params).expect("compare runs");
+        data.rounds
+            .iter()
+            .flat_map(|round| &round.runners)
+            .filter(|runner| runner.dueling_region.is_some())
+            .count()
+    }
+
+    #[test]
+    fn artificial_dueling_needs_the_setting_as_well_as_the_rates() {
+        // The vacuum dueling model is a per-runner artificial roll, so the rates
+        // passed alongside it are inert while `dueling` is off: the step returns
+        // at the `dueling_enabled` guard before it ever rolls, and a compare run
+        // reports no duels at all without saying so.
+        assert!(
+            dueling_count(true) > 0,
+            "expected artificial dueling to fire with the setting on"
+        );
+        assert_eq!(dueling_count(false), 0);
     }
 
     #[test]
@@ -228,6 +477,116 @@ mod tests {
         let a = run_compare(compare_params(2, 1)).expect("a");
         let b = run_compare(compare_params(2, 1)).expect("b");
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn position_compare_matches_full_compare_positions() {
+        // The planner's lean read model must record the exact same position
+        // frames as the full compare collector; only the other channels differ.
+        let full = run_compare(compare_params(3, 1)).expect("full");
+        let lean = run_position_compare(compare_params(3, 1)).expect("lean");
+
+        assert_eq!(lean.rounds.len(), full.rounds.len());
+        for (lean_round, full_round) in lean.rounds.iter().zip(&full.rounds) {
+            assert_eq!(lean_round.seed, full_round.seed);
+            assert_eq!(lean_round.primary_runner_id, full_round.primary_runner_id);
+            let lean_positions: Vec<&Vec<f64>> =
+                lean_round.runners.iter().map(|r| &r.position).collect();
+            let full_positions: Vec<&Vec<f64>> =
+                full_round.runners.iter().map(|r| &r.position).collect();
+            assert_eq!(lean_positions, full_positions);
+        }
+    }
+
+    /// Drop `execution_id` so the basin and full collectors compare on semantics:
+    /// the basin skips the targeted reconcile, so its sequence counter (and thus
+    /// the ids) can advance differently without changing any log's meaning.
+    fn without_execution_ids(
+        map: &HashMap<String, Vec<SkillEffectLog>>,
+    ) -> HashMap<String, Vec<SkillEffectLog>> {
+        map.iter()
+            .map(|(skill_id, logs)| {
+                let stripped = logs
+                    .iter()
+                    .map(|log| {
+                        let mut clone = log.clone();
+                        clone.execution_id = String::new();
+                        clone
+                    })
+                    .collect();
+                (skill_id.clone(), stripped)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn basin_compare_matches_full_compare_channels() {
+        // The basin keeps time/position/velocity, self-cast logs, used skills,
+        // and finish position — and nothing else. Every kept channel must match
+        // the full collector exactly.
+        let full = run_compare(compare_params(3, 1)).expect("full");
+        let basin = run_basin_compare(compare_params(3, 1)).expect("basin");
+
+        assert_eq!(basin.rounds.len(), full.rounds.len());
+        for (basin_round, full_round) in basin.rounds.iter().zip(&full.rounds) {
+            assert_eq!(basin_round.seed, full_round.seed);
+            assert_eq!(basin_round.primary_runner_id, full_round.primary_runner_id);
+
+            for (basin_runner, full_runner) in basin_round.runners.iter().zip(&full_round.runners) {
+                assert_eq!(basin_runner.runner_id, full_runner.runner_id);
+                assert_eq!(basin_runner.time, full_runner.time);
+                assert_eq!(basin_runner.position, full_runner.position);
+                assert_eq!(basin_runner.velocity, full_runner.velocity);
+                assert_eq!(basin_runner.used_skills, full_runner.used_skills);
+                assert_eq!(basin_runner.finish_position, full_runner.finish_position);
+                assert_eq!(
+                    without_execution_ids(&basin_runner.skill_activations),
+                    without_execution_ids(&full_runner.skill_activations)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn named_rounds_reproduce_the_batch_rounds() {
+        // A summary names the sample each statistic came from, and the caller
+        // re-runs exactly those. Round `i` is seeded `master_seed + i`, so the
+        // named run must be the batch's own round, not merely a race of that
+        // seed.
+        let batch = run_compare(compare_params(5, 1)).expect("batch");
+        let picked = run_compare_rounds(compare_params(5, 1), &[1, 3]).expect("named rounds");
+
+        assert_eq!(picked.rounds.len(), 2);
+        assert_eq!(picked.rounds[0], batch.rounds[1]);
+        assert_eq!(picked.rounds[1], batch.rounds[3]);
+    }
+
+    #[test]
+    fn merged_chunk_summaries_equal_one_batch_summary() {
+        // The compare worker splits a batch into progressive chunks. Reducing
+        // each chunk and merging must land on the same read-model as reducing
+        // the whole batch once, or a chunked run and a single run disagree.
+        let mut full_params = compare_params(6, 2);
+        full_params.focus_count = 2;
+        let full = run_compare_summarized(full_params).expect("full summary");
+
+        let mut first_params = compare_params(3, 2);
+        first_params.focus_count = 2;
+        let mut accumulated = CompareSummary::new();
+        accumulated
+            .observe_batch(&run_compare(first_params).expect("first chunk"), 0, 1)
+            .expect("observe first chunk");
+
+        let mut second_params = compare_params(3, 2);
+        second_params.focus_count = 2;
+        second_params.master_seed += 3;
+        let mut second = CompareSummary::new();
+        second
+            .observe_batch(&run_compare(second_params).expect("second chunk"), 0, 1)
+            .expect("observe second chunk");
+
+        accumulated.merge(second);
+        assert_eq!(accumulated.finish(), full);
     }
 
     #[test]

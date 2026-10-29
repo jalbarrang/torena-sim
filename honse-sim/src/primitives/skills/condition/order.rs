@@ -10,8 +10,20 @@ use crate::skills::condition::dynamic::{
 
 use crate::skills::condition::operator::CmpKind;
 
-const CONTINUE_GRACE_PERIOD_SECONDS: f64 = 5.0;
+/// The `*_continue` order conditions ignore the opening seconds of the race, so
+/// the field has time to spread out before a position band starts counting.
+///
+/// Shared with the runners, which start folding their order into the band
+/// history once this much race time has elapsed.
+pub const CONTINUE_GRACE_PERIOD_SECONDS: f64 = 5.0;
 
+/// `order_rate_inXX_continue` / `order_rate_outXX_continue`: the band must have
+/// held since the grace period, not merely at the activating tick.
+///
+/// The runner folds its per-tick order into min/max history
+/// ([`Runner::observe_order_history`](crate::runner::Runner::observe_order_history)),
+/// so `in` asks whether the *worst* order recorded still sat inside the band and
+/// `out` whether the *best* one still sat outside it.
 fn order_rate_continue(
     runner: &dyn RunnerView,
     rate: f64,
@@ -19,16 +31,17 @@ fn order_rate_continue(
     arg: i64,
     cmp: CmpKind,
 ) -> bool {
-    let Some(order) = runner.current_order() else {
-        return false;
-    };
     let threshold = (runner.num_umas() as f64 * rate).round() as i64;
-    let within_rate = if is_in_rate {
-        order <= threshold
+    let held = if is_in_rate {
+        runner
+            .order_max_since_grace()
+            .is_some_and(|worst| worst <= threshold)
     } else {
-        order > threshold
+        runner
+            .order_min_since_grace()
+            .is_some_and(|best| best > threshold)
     };
-    let active = runner.accumulate_time() > CONTINUE_GRACE_PERIOD_SECONDS && within_rate;
+    let active = runner.accumulate_time() > CONTINUE_GRACE_PERIOD_SECONDS && held;
     compare(bool_num(active), arg as f64, cmp)
 }
 
@@ -130,11 +143,21 @@ pub fn register_order_conditions() {
             let Some(leader) = r.leader_position() else {
                 return false;
             };
-            let distance = r.course_distance();
-            if distance == 0.0 {
+            // Rate is the runner's place *inside the field's spread*: 0 at the
+            // leader, 100 at the last runner. Normalising against the course
+            // length instead would trap every value near zero — the whole field
+            // spans tens of meters — which left the `<=` conditions always true
+            // and the `>=` ones unreachable (e.g. Defeatist, Sleeping Lion).
+            let Some(last) = r.last_position() else {
+                return false;
+            };
+            let spread = leader - last;
+            if spread <= 0.0 {
+                // Field level with the leader (gate, or a single active runner):
+                // there is no band to express a position in.
                 return false;
             }
-            let rate = ((leader - r.position()) / distance) * 100.0;
+            let rate = ((leader - r.position()) / spread) * 100.0;
             compare(rate, arg as f64, cmp)
         })
     });
@@ -160,7 +183,10 @@ mod tests {
         num_umas: i64,
         current_order: Option<i64>,
         previous_order: Option<i64>,
+        order_min_since_grace: Option<i64>,
+        order_max_since_grace: Option<i64>,
         leader_position: Option<f64>,
+        last_position: Option<f64>,
     }
 
     impl RunnerView for TestRunner {
@@ -182,8 +208,17 @@ mod tests {
         fn previous_order(&self) -> Option<i64> {
             self.previous_order
         }
+        fn order_min_since_grace(&self) -> Option<i64> {
+            self.order_min_since_grace
+        }
+        fn order_max_since_grace(&self) -> Option<i64> {
+            self.order_max_since_grace
+        }
         fn leader_position(&self) -> Option<f64> {
             self.leader_position
+        }
+        fn last_position(&self) -> Option<f64> {
+            self.last_position
         }
     }
 
@@ -215,23 +250,93 @@ mod tests {
         let factory = get_dynamic_condition("order_rate_in50_continue").expect("registered");
         let cond = factory(1, CmpKind::Eq);
 
-        // 12 runners, threshold = round(12*0.5)=6; order 3 <= 6 and time > 5s -> active.
+        // 12 runners, threshold = round(12*0.5)=6; worst held order 3 <= 6 and
+        // time > 5s -> active.
         let active = TestRunner {
             num_umas: 12,
-            current_order: Some(3),
+            order_min_since_grace: Some(3),
+            order_max_since_grace: Some(3),
             accumulate_time: 6.0,
             ..Default::default()
         };
         assert!(cond.eval(&active));
 
-        // Same position but before the grace period -> inactive.
+        // Same history but before the grace period -> inactive.
         let too_early = TestRunner {
             num_umas: 12,
-            current_order: Some(3),
+            order_min_since_grace: Some(3),
+            order_max_since_grace: Some(3),
             accumulate_time: 4.0,
             ..Default::default()
         };
         assert!(!cond.eval(&too_early));
+    }
+
+    #[test]
+    fn order_rate_in_continue_rejects_a_band_that_was_broken() {
+        register_order_conditions();
+        let factory = get_dynamic_condition("order_rate_in50_continue").expect("registered");
+        let cond = factory(1, CmpKind::Eq);
+
+        // Currently 3rd, but the runner already fell to 9th earlier: the band
+        // did not hold, so the condition must not fire (the old current-order
+        // check passed here).
+        let broken = TestRunner {
+            num_umas: 12,
+            current_order: Some(3),
+            order_min_since_grace: Some(3),
+            order_max_since_grace: Some(9),
+            accumulate_time: 40.0,
+            ..Default::default()
+        };
+        assert!(!cond.eval(&broken));
+    }
+
+    #[test]
+    fn order_rate_out_continue_rejects_a_band_that_was_broken() {
+        register_order_conditions();
+        let factory = get_dynamic_condition("order_rate_out50_continue").expect("registered");
+        let cond = factory(1, CmpKind::Eq);
+
+        // 12 runners, threshold = 6 -> outside means order > 6. Currently 9th,
+        // but the runner was 2nd earlier, so it did enter the band.
+        let broken = TestRunner {
+            num_umas: 12,
+            current_order: Some(9),
+            order_min_since_grace: Some(2),
+            order_max_since_grace: Some(9),
+            accumulate_time: 40.0,
+            ..Default::default()
+        };
+        assert!(!cond.eval(&broken));
+
+        // Never left the back half -> active.
+        let held = TestRunner {
+            num_umas: 12,
+            current_order: Some(9),
+            order_min_since_grace: Some(7),
+            order_max_since_grace: Some(9),
+            accumulate_time: 40.0,
+            ..Default::default()
+        };
+        assert!(cond.eval(&held));
+    }
+
+    #[test]
+    fn order_rate_continue_needs_history_to_activate() {
+        register_order_conditions();
+        let factory = get_dynamic_condition("order_rate_out50_continue").expect("registered");
+        let cond = factory(1, CmpKind::Eq);
+
+        // Past the grace period but no history recorded (e.g. a view that only
+        // reports the current order): nothing has been proven to hold yet.
+        let no_history = TestRunner {
+            num_umas: 12,
+            current_order: Some(9),
+            accumulate_time: 40.0,
+            ..Default::default()
+        };
+        assert!(!cond.eval(&no_history));
     }
 
     #[test]
@@ -274,5 +379,79 @@ mod tests {
             ..Default::default()
         };
         assert!(!cond.eval(&close)); // floor(3) = 3 < 5
+    }
+
+    /// `distance_diff_rate` is a position *inside the field spread*: 0 at the
+    /// leader, 100 at the last runner. Every case below uses a 40 m spread, so
+    /// the thresholds line up with the game's own skill text ("toward the
+    /// front" = low, "very back" = high).
+    fn diff_rate_runner(position: f64) -> TestRunner {
+        TestRunner {
+            position,
+            leader_position: Some(1000.0),
+            last_position: Some(960.0),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn distance_diff_rate_measures_position_inside_the_field_spread() {
+        register_order_conditions();
+
+        // 4 m behind the leader out of a 40 m spread = 10%.
+        let near_lead = diff_rate_runner(996.0);
+        let le10 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(10, CmpKind::Lte);
+        assert!(le10.eval(&near_lead));
+
+        // 10 m behind = 25%.
+        let mid_front = diff_rate_runner(990.0);
+        let le10 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(10, CmpKind::Lte);
+        assert!(!le10.eval(&mid_front));
+        let le30 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(30, CmpKind::Lte);
+        assert!(le30.eval(&mid_front));
+
+        // 30 m behind out of 40 = 75% — the "very back" band Defeatist and
+        // Sleeping Lion ask for, which the old course-length formula could never
+        // reach.
+        let very_back = diff_rate_runner(970.0);
+        let ge75 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(75, CmpKind::Gte);
+        assert!(ge75.eval(&very_back));
+        assert!(!le30.eval(&very_back));
+
+        // The last runner is exactly 100%.
+        let last = diff_rate_runner(960.0);
+        let ge75 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(75, CmpKind::Gte);
+        assert!(ge75.eval(&last));
+        let le10 =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(10, CmpKind::Lte);
+        assert!(!le10.eval(&last));
+    }
+
+    #[test]
+    fn distance_diff_rate_needs_a_spread() {
+        register_order_conditions();
+        let cond =
+            get_dynamic_condition("distance_diff_rate").expect("registered")(10, CmpKind::Lte);
+
+        // Field level with the leader: no band exists, so nothing is satisfied.
+        let level = TestRunner {
+            position: 1000.0,
+            leader_position: Some(1000.0),
+            last_position: Some(1000.0),
+            ..Default::default()
+        };
+        assert!(!cond.eval(&level));
+
+        // No field at all (gate view).
+        let gate = TestRunner {
+            position: 0.0,
+            ..Default::default()
+        };
+        assert!(!cond.eval(&gate));
     }
 }

@@ -265,8 +265,8 @@ mod tests {
         fn strategy(&self) -> Option<Strategy> {
             self.strategy
         }
-        fn active_runners(&self) -> Vec<ActiveRunner> {
-            self.runners.clone()
+        fn active_runners(&self) -> &[ActiveRunner] {
+            &self.runners
         }
     }
 

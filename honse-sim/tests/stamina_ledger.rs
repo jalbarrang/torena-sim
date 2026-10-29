@@ -423,13 +423,20 @@ fn recovery_books_the_clamped_delta_and_a_drain_is_not_negative_recovery() {
     );
 }
 
-/// Captured from the engine **before** the ledger existed, by running this same
-/// race on a tree with `honse-sim/src` stashed. Bit-exact: if attribution ever
-/// perturbs the simulation, these move and this test fails.
+/// Bit-exact snapshot of a seeded 3-runner race: finish time and final HP per
+/// runner. Its job is to fail loudly when the simulation drifts, so an intended
+/// mechanics change must re-capture it and say why.
+///
+/// Originally captured **before** the stamina ledger existed, by running this
+/// same race on a tree with `honse-sim/src` stashed, to prove attribution did not
+/// perturb the simulation. Re-captured for sub-frame finish-time interpolation
+/// (mechanics § Finish Time): all three finish times moved by less than one
+/// `1/15s` tick and every final HP is bit-identical, which is exactly that change
+/// and nothing else.
 const GOLDEN: [(&str, f64, f64); 3] = [
-    ("Front", 9.673_333_333_333_296e1, 1.186_382_288_763_916_3e1),
-    ("Late", 9.713_333_333_333_294e1, -7.239_326_872_221_477e1),
-    ("Pace", 9.699_999_999_999_962e1, -5.677_333_779_574_945_5e1),
+    ("Front", 9.668_966_257_197_485e1, 1.186_382_288_763_916_3e1),
+    ("Late", 9.712_786_454_121_289e1, -7.239_326_872_221_477e1),
+    ("Pace", 9.695_205_870_880_912e1, -5.677_333_779_574_945_5e1),
 ];
 const GOLDEN_ORDER: [&str; 3] = ["Front", "Pace", "Late"];
 

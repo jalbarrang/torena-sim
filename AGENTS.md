@@ -37,7 +37,7 @@ This repository is a Rust workspace for deterministic Uma Musume race simulation
 - **Crate publication:** Publish only `honse-sim` to crates.io. Keep `honse-sim-wasm` configured with `publish = false`.
 - **Contribution licensing:** Do not accept external code contributions until the project has an approved contributor agreement with relicensing permission.
 - **Shared version:** Use `workspace.package.version` for the Rust crate, WASM adapter, npm package, Git tag, and GitHub Release.
-- **Mechanics source:** Treat `docs/mechanics/README.md` and `docs/mechanics/quick-reference.md` as the mechanics source of truth. Update them with cited evidence when behavior changes. `docs/mechanics/capture-findings.md` records what the captured races measured, with the fixtures and commands behind each number; add to it when the harness settles or opens a question.
+- **Mechanics source:** Treat `docs/race-mechanics/` as the mechanics reference: `README.md` indexes the chapters and `GLOBAL.md` distils what is live on the Global release. Update them with cited evidence when behavior changes. `honse-sim-wasm/tests/capture_accuracy.rs` and its baseline record what the captured races measured, with the fixtures and the command behind each number.
 - **Shared kernel:** Keep `honse-sim/src/primitives/` independent of field ownership and engine orchestration. Engines resolve `FieldInputs` before they call the runner step kernel.
 - **Tick consistency:** Build contested inputs from one field snapshot per tick so all runners observe the same pre-update state.
 - **Round determinism:** Reset reusable state in `prepare_round`. A round must depend only on its inputs and seed.
@@ -55,7 +55,7 @@ honse-sim/src/primitives/  shared domain, formulas, runner kernel, skills, stami
 honse-sim/src/contested/   contested field aggregate and use cases
 honse-sim/src/vacuum/      synthetic comparison aggregate and use cases
 honse-sim-wasm/            external DTO and WebAssembly adapter
-docs/mechanics/            mechanics evidence, formulas, and limitations
+docs/race-mechanics/       mechanics reference: chapters, Global distillation, archive
 docs/simulation/           engine design patterns
 scripts/                   local quality, package, release, and hook scripts
 honse-sim-wasm/tests/fixtures/captures/  real game races (engine input + decoded replay) and the accuracy baseline

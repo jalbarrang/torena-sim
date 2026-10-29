@@ -4,6 +4,8 @@
 //! keeps the vacuum API focused while the implementation remains shared.
 
 pub use uma_sim_primitives::compare::{
-    CompareData, CompareDataCollector, CompareRound, CompareRoundData,
+    BasinData, BasinDataCollector, BasinRound, BasinRoundData, CompareData, CompareDataCollector,
+    CompareRound, CompareRoundData, PositionData, PositionDataCollector, PositionRound,
+    PositionRoundData,
 };
 pub use uma_sim_primitives::projection::{EffectPerspective, SkillEffectLog};

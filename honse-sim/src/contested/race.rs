@@ -16,8 +16,8 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    assign_gates, build_field_snapshot, build_field_view, front_blocking_runner,
-    has_side_blocking_runner, is_overtaking_runner, proximity_snapshots, resolve_debuff_targets,
+    assign_gates, build_field_snapshot, front_blocking_runner, has_side_blocking_runner,
+    is_overtaking_runner, proximity_snapshots, refill_field_view, resolve_debuff_targets,
     FieldOrderTracker, FieldSnapshot,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
@@ -36,6 +36,9 @@ use uma_sim_primitives::skills::condition::catalog::build_catalog;
 use uma_sim_primitives::skills::condition::dynamic::register_all_dynamic_conditions;
 use uma_sim_primitives::skills::condition::language::ConditionParser;
 use uma_sim_primitives::skills::condition::{ConditionCatalog, ConditionResolution};
+use uma_sim_primitives::spot_struggle::{
+    run_spot_struggle_exits, run_spot_struggle_groups, SpotStruggleState,
+};
 use uma_sim_primitives::stamina::game_policy::GameStaminaPolicy;
 use uma_sim_primitives::stamina::policy::{NoopStaminaPolicy, StaminaPolicy};
 
@@ -68,6 +71,9 @@ pub struct SimulationSettings {
     pub spot_struggle: bool,
     /// Whether dueling is enabled.
     pub dueling: bool,
+    /// Per-runner dueling settings, by runner insertion index. Entries override
+    /// the default; unlisted runners (such as generated mobs) use `dueling`.
+    pub dueling_runners: Vec<bool>,
     /// Whether wit checks gate skill activation by default.
     pub wit_checks: bool,
     /// Per-runner wit-check settings, by runner insertion index. Entries
@@ -78,6 +84,10 @@ pub struct SimulationSettings {
     pub position_keep_mode: i32,
     /// Number of activation samples drawn per skill trigger.
     pub skill_samples: usize,
+    /// Sample each skill's pre-race placement from its own seed instead of the
+    /// shared skill stream. Compare paths only; live races keep the game's
+    /// id-ordered draw (`docs/simulation/patterns.md`).
+    pub isolate_skill_rng: bool,
     /// Per-base-skill recovery (stamina-drain) override modifiers.
     pub stamina_drain_overrides: HashMap<String, f64>,
 }
@@ -95,10 +105,12 @@ impl Default for SimulationSettings {
             conserve_power_runners: Vec::new(),
             spot_struggle: true,
             dueling: true,
+            dueling_runners: Vec::new(),
             wit_checks: true,
             wit_checks_runners: Vec::new(),
             position_keep_mode: 2,
             skill_samples: 1,
+            isolate_skill_rng: false,
             stamina_drain_overrides: HashMap::new(),
         }
     }
@@ -120,6 +132,13 @@ pub struct Race {
     /// Ids of finished runners, in finish order (append-only).
     finished_runners: Vec<RunnerId>,
 
+    /// Reusable per-runner skill-condition views, indexed by `RunnerId`.
+    ///
+    /// Refilled in place each tick. A view holds two series projected from the
+    /// frozen snapshot, so rebuilding them per runner per tick allocated
+    /// O(n^2) vectors per tick.
+    field_views: Vec<FieldView>,
+
     /// The static condition catalog (owns the parser's backing data).
     catalog: ConditionCatalog,
     /// The whole course as a region list.
@@ -139,13 +158,8 @@ pub struct Race {
     strategy_counts: HashMap<Strategy, u32>,
     /// Common (shared) skills across the field.
     common_skills: HashMap<String, u32>,
-    /// Field-global spot-struggle unlock: set once ANY runner passes 150m this
-    /// round (hakuraku.moe/notes/spot-struggle: one uma passing 150m unlocks
-    /// the mechanic for the whole field).
-    spot_struggle_unlocked: bool,
-    /// Styles that already triggered spot struggle this round (each style
-    /// triggers at most once per race).
-    spot_struggle_triggered: Vec<Strategy>,
+    /// Race-level spot-struggle state, threaded across rounds.
+    spot_struggle: SpotStruggleState,
 
     /// Lifecycle observers.
     observers: RaceObservers,
@@ -159,7 +173,7 @@ impl RaceObservation for Race {
         self.order_tracker.pacer_position
     }
     fn runner_order(&self, id: RunnerId) -> Option<i64> {
-        self.order_tracker.runner_order.get(&id).copied()
+        self.order_tracker.runner_order.get(id)
     }
     fn seed(&self) -> u64 {
         self.seed
@@ -195,6 +209,7 @@ impl Race {
             race_params,
             runners: Vec::new(),
             finished_runners: Vec::new(),
+            field_views: Vec::new(),
             catalog: build_catalog(),
             whole_course,
             round_iteration: 0,
@@ -204,8 +219,7 @@ impl Race {
             order_tracker: FieldOrderTracker::new(),
             strategy_counts: HashMap::new(),
             common_skills: HashMap::new(),
-            spot_struggle_unlocked: false,
-            spot_struggle_triggered: Vec::new(),
+            spot_struggle: SpotStruggleState::default(),
             observers: RaceObservers::new(),
             course,
         }
@@ -248,17 +262,40 @@ impl Race {
             Box::new(Xoshiro256StarStar::from_u32_seed(id.0)),
         );
         self.runners.push(runner);
+        // Keep the view pool aligned with the field; a runner's id is its slot.
+        self.field_views.push(FieldView::default());
+        debug_assert_eq!(self.runners.len(), self.field_views.len());
+        // The finished-runner bitmask indexes by id, so the field must stay
+        // inside `u64`; the public API caps a field at 12.
+        debug_assert!(self.runners.len() < u64::BITS as usize);
         id
+    }
+
+    /// Prepare a round by its absolute index (`master_seed + round_index`).
+    ///
+    /// [`prepare_round`](Self::prepare_round) advances a per-race counter that
+    /// selects which sampled skill-trigger window the round uses
+    /// (`realizations[round_iteration % len]`), so a round's outcome depends on
+    /// how many rounds ran before it in the same aggregate. This entry point
+    /// pins that index instead of inheriting it, so round `i` reproduces the
+    /// batch run's round `i` on its own. That is what lets one round be re-run
+    /// for an on-demand projection without replaying the rounds before it.
+    pub fn prepare_round_at(&mut self, master_seed: u64, round_index: usize) {
+        self.round_iteration = round_index;
+        self.prepare_round(master_seed);
     }
 
     /// Prepare the field for a round: count field composition, assign gates,
     /// spawn per-runner RNGs + stamina policies, and reset every runner.
+    ///
+    /// Uses the aggregate's own round counter; prefer
+    /// [`prepare_round_at`](Self::prepare_round_at) when the round index is
+    /// already known.
     pub fn prepare_round(&mut self, master_seed: u64) {
         self.accumulated_time = 0.0;
         self.finished_runners.clear();
         self.order_tracker.reset();
-        self.spot_struggle_unlocked = false;
-        self.spot_struggle_triggered.clear();
+        self.spot_struggle.reset();
 
         self.prepare_race();
 
@@ -274,8 +311,11 @@ impl Race {
         let mut runners = std::mem::take(&mut self.runners);
         for (idx, runner) in runners.iter_mut().enumerate() {
             runner.gate = gates[idx];
+            let runner_seed = self.rng.int32();
+            runner.runner_seed = runner_seed;
+            runner.isolate_skill_rng = self.settings.isolate_skill_rng;
             let runner_rng: Box<dyn Prng> =
-                Box::new(Xoshiro256StarStar::from_u32_seed(self.rng.int32()));
+                Box::new(Xoshiro256StarStar::from_u32_seed(runner_seed));
             let policy: Box<dyn StaminaPolicy> = if self.settings.health_system {
                 let hp_rng: Box<dyn Prng> =
                     Box::new(Xoshiro256StarStar::from_u32_seed(self.rng.int32()));
@@ -296,7 +336,12 @@ impl Race {
                 .get(idx)
                 .copied()
                 .unwrap_or(self.settings.rushed);
-            runner.dueling_enabled = self.settings.dueling;
+            runner.dueling_enabled = self
+                .settings
+                .dueling_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.dueling);
             runner.spot_struggle_enabled = self.settings.spot_struggle;
             runner.downhill_enabled = self
                 .settings
@@ -378,23 +423,36 @@ impl Race {
         let proximity = proximity_snapshots(&snapshot);
 
         let base_speed = self.base_speed();
+
+        // Finished membership as a dense bitmask: the per-runner test used to be
+        // a linear scan of `finished_runners`, making the tick loop O(n^2).
+        let finished_mask = self.finished_mask();
+
+        // A field-wide property, so it is resolved once per tick rather than
+        // recomputed identically for every runner.
+        let only_front_runner = snapshot
+            .entries
+            .iter()
+            .filter(|entry| strategy_matches(entry.strategy, Strategy::FrontRunner))
+            .count()
+            == 1;
+
+        // Per-runner condition views are refilled in place rather than rebuilt:
+        // each holds two series projected from the snapshot, so rebuilding them
+        // allocated O(n^2) vectors per tick.
+        let mut field_views = std::mem::take(&mut self.field_views);
         let mut runners = std::mem::take(&mut self.runners);
-        for runner in &mut runners {
-            if self.finished_runners.contains(&runner.id) {
+        for (slot, runner) in runners.iter_mut().enumerate() {
+            if finished_mask & (1_u64 << runner.id.0) != 0 {
                 continue;
             }
             update_position_keep_coefficient(runner);
-            let field = build_field_view(runner.id, &snapshot);
+            refill_field_view(&mut field_views[slot], runner.id, &snapshot);
+            let field = &field_views[slot];
             let backward_strategy_runner_ahead = snapshot.entries.iter().any(|entry| {
                 entry.position > runner.position
                     && entry.strategy.order_rank() > runner.position_keep_strategy.order_rank()
             });
-            let only_front_runner = snapshot
-                .entries
-                .iter()
-                .filter(|entry| strategy_matches(entry.strategy, Strategy::FrontRunner))
-                .count()
-                == 1;
             let position_keep = PositionKeepContext {
                 position_keep_mode: self.settings.position_keep_mode,
                 num_runners: snapshot.num_active as usize,
@@ -413,7 +471,7 @@ impl Race {
             let field_inputs = resolve_field_inputs(
                 runner,
                 &proximity,
-                &field,
+                field,
                 position_keep,
                 self.course.horse_lane,
             );
@@ -425,6 +483,7 @@ impl Race {
             runner.on_update(dt, &field_inputs, &ctx);
         }
         self.runners = runners;
+        self.field_views = field_views;
 
         // Route opponent-facing debuffs that runners emitted this frame onto the
         // runners they target (Hesitant family, Wild Wind / Speed Eater, ...).
@@ -445,7 +504,7 @@ impl Race {
 
         update_first_position_in_late_race(&mut self.runners, self.course.distance);
 
-        self.emit_runner_ticks_and_finishes(dt);
+        self.emit_runner_ticks_and_finishes(dt, finished_mask);
     }
 
     /// **External-debuff routing** coordinator. Drains every runner's per-frame
@@ -496,10 +555,12 @@ impl Race {
         // Phase 2: apply onto each target via the targeted-effect path.
         // Teammates stay valid *targets* (they count toward a skill's maximum
         // target in-game) but are excluded from the debuff *effect*
-        // (docs/mechanics/README.md § Skill Target), so the exclusion happens
+        // (docs/race-mechanics/ § Skill Target), so the exclusion happens
         // here at application, after target resolution.
         for route in routes {
-            let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) else {
+            // Direct index: ids are dense, so the target's id is its field slot.
+            // `get_mut` keeps the old `find` semantics for an absent runner.
+            let Some(target) = self.runners.get_mut(route.target.0 as usize) else {
                 continue;
             };
             if route.source_team.is_some() && route.source_team == target.team {
@@ -529,7 +590,9 @@ impl Race {
         /// direction) from every current-or-former duel participant.
         const EXIT_DISTANCE_GAP: f64 = 5.0;
 
-        let order = self.order_tracker.runner_order.clone();
+        // Borrowed, not cloned: `rows` and the order map are both reads of
+        // `self`, so the per-tick `HashMap` clone was pure waste.
+        let order = &self.order_tracker.runner_order;
         let num = order.len();
         if num == 0 {
             return;
@@ -558,7 +621,7 @@ impl Race {
             .filter(|r| !r.finished)
             .map(|r| {
                 let on_final = r.is_on_final_straight(&self.course);
-                // No strategy exclusion (canon: docs/mechanics/README.md
+                // No strategy exclusion (canon: docs/race-mechanics/
                 // "Dueling"; hakuraku.moe/notes/dueling). Former duel
                 // participants never re-enter a duel. The initiator does NOT
                 // need to be on the final straight during the window - only
@@ -570,7 +633,7 @@ impl Race {
                     r.dueling_enabled && !r.is_dueling && !r.is_in_forced_dueling && !r.has_dueled;
                 Row {
                     id: r.id,
-                    order: order.get(&r.id).copied(),
+                    order: order.get(r.id),
                     position: r.position,
                     lane: r.current_lane,
                     speed: r.current_speed,
@@ -603,22 +666,21 @@ impl Race {
                 continue;
             }
             // Proximity partners sustain the window. Former duelers cannot be
-            // targets; ACTIVE duelers can (joining an ongoing duel).
-            let partners: Vec<&Row> = rows
-                .iter()
-                .filter(|other| {
-                    other.id != row.id
-                        && !other.has_dueled
-                        && other.on_final_straight
-                        && (other.position - row.position).abs() <= MAX_DISTANCE_GAP
-                        && (other.lane - row.lane).abs() <= max_lane_gap
-                })
-                .collect();
-            if partners.is_empty() {
+            // targets; ACTIVE duelers can (joining an ongoing duel). Scanned
+            // inline rather than collected into a `Vec`, which allocated once
+            // per eligible runner per tick.
+            let is_partner = |other: &Row| {
+                other.id != row.id
+                    && !other.has_dueled
+                    && other.on_final_straight
+                    && (other.position - row.position).abs() <= MAX_DISTANCE_GAP
+                    && (other.lane - row.lane).abs() <= max_lane_gap
+            };
+            if !rows.iter().any(is_partner) {
                 decisions.push((row.id, DuelDecision::ClearCanDuel));
                 continue;
             }
-            let Some(runner) = self.runners.iter().find(|r| r.id == row.id) else {
+            let Some(runner) = self.runners.get(row.id.0 as usize) else {
                 continue;
             };
             if runner.can_duel != Some(true) {
@@ -636,11 +698,11 @@ impl Race {
             let row_top_half = matches!(row.order, Some(o) if o <= top_half_cutoff);
             let triggered = row.on_final_straight
                 && row.hp_ratio >= 0.15
-                && partners.iter().any(|p| {
-                    let p_top_half = matches!(p.order, Some(o) if o <= top_half_cutoff);
-                    p.hp_ratio >= 0.15
+                && rows.iter().any(|p| {
+                    is_partner(p)
+                        && p.hp_ratio >= 0.15
                         && (p.speed - row.speed).abs() < MAX_SPEED_GAP
-                        && (row_top_half || p_top_half)
+                        && (row_top_half || matches!(p.order, Some(o) if o <= top_half_cutoff))
                 });
             decisions.push((
                 row.id,
@@ -660,22 +722,30 @@ impl Race {
         // alive (hakuraku.moe/notes/dueling, "Exit conditions").
         let mut exits: Vec<RunnerId> = Vec::new();
         for row in rows.iter().filter(|r| r.is_dueling && !r.forced_dueling) {
-            let participants: Vec<&Row> = rows
-                .iter()
-                .filter(|o| o.id != row.id && (o.is_dueling || o.has_dueled))
-                .collect();
-            if !participants.is_empty()
-                && participants
-                    .iter()
-                    .all(|o| (o.position - row.position).abs() >= EXIT_DISTANCE_GAP)
-            {
+            // Inline scan rather than a per-row `Vec`: a participant is any other
+            // current-or-former dueler, and the exit needs one to exist and every
+            // one of them to be at least 5m away.
+            let mut has_participant = false;
+            let mut all_far = true;
+            for other in &rows {
+                if other.id == row.id || !(other.is_dueling || other.has_dueled) {
+                    continue;
+                }
+                has_participant = true;
+                if (other.position - row.position).abs() < EXIT_DISTANCE_GAP {
+                    all_far = false;
+                    break;
+                }
+            }
+            if has_participant && all_far {
                 exits.push(row.id);
             }
         }
 
         // Phase 3: apply.
         for (id, decision) in decisions {
-            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
+            // Direct index: ids are dense, so the target's id is its field slot.
+            if let Some(runner) = self.runners.get_mut(id.0 as usize) {
                 match decision {
                     DuelDecision::ClearCanDuel => runner.can_duel = None,
                     DuelDecision::ArmCanDuel => {
@@ -691,7 +761,8 @@ impl Race {
             }
         }
         for id in exits {
-            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
+            // Direct index: ids are dense, so the target's id is its field slot.
+            if let Some(runner) = self.runners.get_mut(id.0 as usize) {
                 runner.is_dueling = false;
                 runner.has_dueled = true;
                 runner.dueling_end_position = runner.position;
@@ -699,190 +770,54 @@ impl Race {
         }
     }
 
-    /// **Spot-struggle group activation** coordinator (port of the group-trigger
-    /// branch of `updateSpotStruggle`). A bunched cluster of same-strategy
-    /// front-runners near the front all enter spot-struggle together.
+    /// The rule lives in `primitives::spot_struggle`; this applies it.
     fn coordinate_spot_struggle_groups(&mut self) {
-        // Field-global unlock: ANY uma passing 150m unlocks spot struggle for
-        // the whole field, so trailing front runners can trigger before their
-        // own 150m mark (hakuraku.moe/notes/spot-struggle, "Entry conditions").
-        if !self.spot_struggle_unlocked {
-            self.spot_struggle_unlocked = self
-                .runners
-                .iter()
-                .any(|r| r.finished || r.position >= 150.0);
-        }
-        if !self.spot_struggle_unlocked {
-            return;
-        }
-
-        // Entry thresholds are identical for both styles: real data shows
-        // Oonige does NOT get a wider entry range; the 5.0 / 0.416 constants
-        // (`DistanceGap2`/`LaneGap2`) are EXIT thresholds instead.
-        const ENTRY_DISTANCE_GAP: f64 = 3.75;
-        let entry_lane_gap = 0.165 * self.course.course_width;
-
-        // Phase 1: read-only snapshot.
-        struct Row {
-            id: RunnerId,
-            strategy: Strategy,
-            position: f64,
-            lane: f64,
-            section_length: f64,
-        }
-        let rows: Vec<Row> = self
-            .runners
-            .iter()
-            .filter(|r| !r.finished && r.spot_struggle_start_position.is_none())
-            .map(|r| Row {
-                id: r.id,
-                strategy: r.strategy,
-                position: r.position,
-                lane: r.current_lane,
-                section_length: r.section_length,
-            })
-            .collect();
-
-        // Phase 2: per style, gather the group bunched behind the FRONTMOST
-        // uma of that style (the frontmost is the reference for the distance
-        // check). Each style triggers at most once per race.
-        let mut activations: Vec<(RunnerId, f64)> = Vec::new();
-        for style in [Strategy::FrontRunner, Strategy::Runaway] {
-            if self.spot_struggle_triggered.contains(&style) {
-                continue;
-            }
-            let members: Vec<&Row> = rows.iter().filter(|u| u.strategy == style).collect();
-            if members.len() < 2 {
-                continue;
-            }
-            let Some(frontmost) = members
-                .iter()
-                .max_by(|a, b| a.position.total_cmp(&b.position))
-            else {
-                continue;
-            };
-            let group: Vec<&&Row> = members
-                .iter()
-                .filter(|u| {
-                    let behind = frontmost.position - u.position;
-                    (0.0..ENTRY_DISTANCE_GAP).contains(&behind)
-                        && (u.lane - frontmost.lane).abs() < entry_lane_gap
-                })
-                .collect();
-            if group.len() < 2 {
-                continue;
-            }
-            // Window: at least one grouped uma must still be within section 6
-            // (the 150m lower bound is the field-global unlock above).
-            let window_end = (frontmost.section_length * 6.0).floor();
-            if !group.iter().any(|u| u.position <= window_end) {
-                continue;
-            }
-            self.spot_struggle_triggered.push(style);
-            // Spot struggle always ends once section 9 is reached (absolute
-            // position), regardless of remaining duration.
-            let section9 = (frontmost.section_length * 8.0).floor();
-            for uma in group {
-                activations.push((uma.id, section9));
-            }
-        }
-
-        // Phase 3: apply.
-        for (id, end) in activations {
-            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
-                runner.spot_struggle_timer.t = 0.0;
-                runner.in_spot_struggle = true;
-                runner.spot_struggle_start_position = Some(runner.position);
-                runner.spot_struggle_end_position = end;
-            }
-        }
+        run_spot_struggle_groups(
+            &mut self.runners,
+            self.course.course_width,
+            &mut self.spot_struggle,
+        );
     }
 
-    /// **Spot-struggle distance/lateral exit** coordinator
-    /// (hakuraku.moe/notes/spot-struggle, "Exit conditions"). An active
-    /// struggler exits early when she is >=5m behind ALL other strugglers of
-    /// her style, or >=0.416*CourseWidth laterally from all of them. When every
-    /// other participant has left via the distance exit, the final struggler
-    /// exits too (natural duration expiry does NOT cascade).
+    /// The rule lives in `primitives::spot_struggle`; this applies it.
     fn coordinate_spot_struggle_exits(&mut self) {
-        const EXIT_DISTANCE_GAP: f64 = 5.0;
-        let exit_lane_gap = 0.416 * self.course.course_width;
-
-        struct Row {
-            id: RunnerId,
-            strategy: Strategy,
-            position: f64,
-            lane: f64,
-            active: bool,
-            distance_exited: bool,
-        }
-        let rows: Vec<Row> = self
-            .runners
-            .iter()
-            .filter(|r| r.spot_struggle_start_position.is_some() && !r.is_in_forced_spot_struggle)
-            .map(|r| Row {
-                id: r.id,
-                strategy: r.strategy,
-                position: r.position,
-                lane: r.current_lane,
-                active: r.in_spot_struggle,
-                distance_exited: r.spot_struggle_distance_exited,
-            })
-            .collect();
-
-        let mut exits: Vec<RunnerId> = Vec::new();
-        for row in rows.iter().filter(|r| r.active) {
-            let others: Vec<&Row> = rows
-                .iter()
-                .filter(|o| o.id != row.id && o.strategy == row.strategy)
-                .collect();
-            if others.is_empty() {
-                continue;
-            }
-            let actives: Vec<&&Row> = others.iter().filter(|o| o.active).collect();
-            if actives.is_empty() {
-                // Cascade: the last active struggler exits only when every
-                // other participant left via the distance exit.
-                if others.iter().all(|o| o.distance_exited) {
-                    exits.push(row.id);
-                }
-                continue;
-            }
-            let behind_all = actives
-                .iter()
-                .all(|o| o.position - row.position >= EXIT_DISTANCE_GAP);
-            let lateral_all = actives
-                .iter()
-                .all(|o| (o.lane - row.lane).abs() >= exit_lane_gap);
-            if behind_all || lateral_all {
-                exits.push(row.id);
-            }
-        }
-
-        for id in exits {
-            if let Some(runner) = self.runners.iter_mut().find(|r| r.id == id) {
-                runner.in_spot_struggle = false;
-                runner.spot_struggle_distance_exited = true;
-                runner.spot_struggle_end_position = runner.position;
-            }
-        }
+        run_spot_struggle_exits(&mut self.runners, self.course.course_width);
     }
 
-    fn emit_runner_ticks_and_finishes(&mut self, dt: f64) {
+    /// Finished membership as a dense bitmask over runner ids.
+    ///
+    /// Ids are assigned densely from zero (`add_runner`) and runners are never
+    /// removed, so a bit per id answers "has this runner finished?" in O(1)
+    /// where a scan of `finished_runners` was O(n) per runner.
+    fn finished_mask(&self) -> u64 {
+        let mut mask: u64 = 0;
+        for id in &self.finished_runners {
+            mask |= 1_u64 << id.0;
+        }
+        mask
+    }
+
+    fn emit_runner_ticks_and_finishes(&mut self, dt: f64, finished_mask: u64) {
         let mut observers = std::mem::take(&mut self.observers);
-        let mut newly_finished: Vec<RunnerId> = Vec::new();
+        let mut newly_finished: Vec<(RunnerId, f64)> = Vec::new();
         for runner in &self.runners {
-            if self.finished_runners.contains(&runner.id) {
+            if finished_mask & (1_u64 << runner.id.0) != 0 {
                 continue;
             }
             observers.emit_after_runner_tick(self, runner, dt);
             if runner.finished {
-                newly_finished.push(runner.id);
+                newly_finished.push((runner.id, runner.finish_time));
             }
         }
-        for id in newly_finished {
+        // Order by interpolated finish time, never by field insertion order:
+        // insertion order is focus runners then generated mobs, which has no
+        // relationship to who crossed the line first, so an unsorted push would
+        // hand same-tick finishers an arbitrary place.
+        newly_finished.sort_by(|a, b| a.1.total_cmp(&b.1));
+        for (id, _) in newly_finished {
             self.finished_runners.push(id);
-            if let Some(runner) = self.runners.iter().find(|r| r.id == id) {
+            // Direct index: ids are dense, so `id.0` is the field slot.
+            if let Some(runner) = self.runners.get(id.0 as usize) {
                 observers.emit_runner_finished(self, runner);
             }
         }
@@ -1210,6 +1145,8 @@ mod tests {
             skill_id: SkillId::new("200851"),
             rarity: SkillRarity::White,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -1403,7 +1340,7 @@ mod tests {
     }
 
     #[test]
-    fn frenzied_extends_only_rushed_matching_strategy_opponents() {
+    fn frenzied_overwrites_only_rushed_matching_strategy_opponents() {
         use uma_sim_primitives::race_support::build_field_snapshot;
         use uma_sim_primitives::shared_kernel::ids::SkillId;
         use uma_sim_primitives::skills::effect::{SkillTarget, SkillType};
@@ -1423,10 +1360,12 @@ mod tests {
         race.add_runner(props("rushed-pace", Strategy::PaceChaser));
         race.prepare_round(11);
 
-        // Put two runners into the rushed state with the default 12s cap.
+        // Put two runners into the rushed state. R1 carries a longer window than
+        // the debuff's, which the overwrite must *shorten*.
         for idx in [1usize, 3] {
             race.runners[idx].is_rushed = true;
-            race.runners[idx].rushed_max_duration = 12.0;
+            race.runners[idx].rushed_timer.t = 7.0;
+            race.runners[idx].rushed_max_duration = 20.0;
         }
         race.runners[2].is_rushed = false;
         race.runners[2].rushed_max_duration = 12.0;
@@ -1437,8 +1376,8 @@ mod tests {
             &mut race.order_tracker,
         );
 
-        // Frenzied Front Runners (200791): +5.0s to the rushed timer of the
-        // Front Runner enemy strategy.
+        // Frenzied Front Runners (200791): a 5.0s window onto the rushed timer of
+        // the Front Runner enemy strategy.
         race.runners[0].emitted_debuffs.push(EmittedDebuff {
             skill_id: SkillId::new("200791"),
             effect: ResolvedSkillEffect {
@@ -1453,12 +1392,17 @@ mod tests {
 
         race.coordinate_external_debuffs(&snapshot);
 
-        // Rushed Front Runner: timer extended by 5s (12 -> 17).
-        assert!((race.runners[1].rushed_max_duration - 17.0).abs() < 1e-9);
-        // Non-rushed Front Runner: routed to, but the receiver no-ops.
+        // Rushed Front Runner: window overwritten to 5s, timer restarted, and
+        // the snap-out roll suppressed for it.
+        assert!((race.runners[1].rushed_max_duration - 5.0).abs() < 1e-9);
+        assert!((race.runners[1].rushed_timer.t).abs() < 1e-9);
+        assert!(race.runners[1].rushed_timer_locked);
+        // Non-rushed Front Runner: routed to, but there is no timer to overwrite.
         assert!((race.runners[2].rushed_max_duration - 12.0).abs() < 1e-9);
+        assert!(!race.runners[2].rushed_timer_locked);
         // Rushed Pace Chaser: wrong style, not a target.
-        assert!((race.runners[3].rushed_max_duration - 12.0).abs() < 1e-9);
+        assert!((race.runners[3].rushed_max_duration - 20.0).abs() < 1e-9);
+        assert!(!race.runners[3].rushed_timer_locked);
         // Caster is never self-targeted.
         assert!((race.runners[0].rushed_max_duration - 12.0).abs() < 1e-9);
         // Emitter outbox drained.
@@ -1488,9 +1432,9 @@ mod tests {
 
         // Finished runners hold places 1 and 2 (in finish order); the lone active
         // runner is ranked last, not promoted to "order 1".
-        assert_eq!(snapshot.order.get(&RunnerId(2)).copied(), Some(1));
-        assert_eq!(snapshot.order.get(&RunnerId(1)).copied(), Some(2));
-        assert_eq!(snapshot.order.get(&RunnerId(0)).copied(), Some(3));
+        assert_eq!(snapshot.order.get(RunnerId(2)), Some(1));
+        assert_eq!(snapshot.order.get(RunnerId(1)), Some(2));
+        assert_eq!(snapshot.order.get(RunnerId(0)), Some(3));
         assert_eq!(snapshot.num_active, 1);
         assert_eq!(snapshot.num_total, 3);
 
@@ -1498,6 +1442,58 @@ mod tests {
         let view = build_field_view(RunnerId(0), &snapshot);
         assert_eq!(view.self_order, Some(3));
         assert_eq!(view.num_umas, 3);
+    }
+
+    #[test]
+    fn continue_order_bands_record_extremes_from_the_grace_period() {
+        let mut race = pace_chaser_race(3);
+        race.prepare_round(99);
+        assert!(race
+            .runners
+            .iter()
+            .all(|r| r.order_min_since_grace.is_none()));
+
+        // Half a second in: inside the grace period, so nothing is recorded even
+        // though the field already has an order.
+        while race.accumulated_time < 0.5 {
+            race.on_update(FRAME_DT);
+        }
+        assert!(race
+            .runners
+            .iter()
+            .all(|r| r.order_min_since_grace.is_none()));
+
+        // Past the 5 s grace period every runner tracks the band it has held.
+        while race.accumulated_time < 6.0 {
+            race.on_update(FRAME_DT);
+        }
+        for runner in &race.runners {
+            let (min, max) = (
+                runner.order_min_since_grace.expect("min recorded"),
+                runner.order_max_since_grace.expect("max recorded"),
+            );
+            assert!(min <= max, "min {min} > max {max} for {}", runner.name);
+            assert!((1..=3).contains(&min) && (1..=3).contains(&max));
+        }
+    }
+
+    #[test]
+    fn continue_order_bands_record_while_a_runner_is_still_at_the_gate() {
+        let mut race = pace_chaser_race(3);
+        race.prepare_round(99);
+        // Hold R0 at the gate: its step returns at the start-delay gate, long
+        // before any skill work runs. The band must still be sampled.
+        race.runners[0].start_delay_accumulator = f64::MAX;
+
+        while race.accumulated_time < 6.5 {
+            race.on_update(FRAME_DT);
+        }
+
+        assert_eq!(race.runners[0].position, 0.0, "runner never left the gate");
+        let min = race.runners[0]
+            .order_min_since_grace
+            .expect("band recorded despite the delayed start");
+        assert_eq!(Some(min), race.runners[0].order_max_since_grace);
     }
 
     #[test]

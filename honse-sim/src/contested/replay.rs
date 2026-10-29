@@ -21,7 +21,7 @@
 //! downstream owns the bytes. This projection owns the values.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RunnerObservation};
@@ -30,7 +30,7 @@ use uma_sim_primitives::shared_kernel::language::Strategy;
 
 /// Ticks per simulated second; matches the aggregate frame rate.
 const TICKS_PER_SECOND: f64 = 15.0;
-/// Displayed race time is the raw time scaled (`docs/mechanics/README.md`,
+/// Displayed race time is the raw time scaled (`docs/race-mechanics/`,
 /// "DisplayedTime = ActualTime * 1.18").
 const DISPLAY_TIME_SCALE: f64 = 1.18;
 /// `lane_position` units per course width. The game places gate k at
@@ -139,7 +139,9 @@ struct GateState {
     running_style: i64,
     start_delay: f64,
     last_spurt_start: Option<f64>,
-    seen_skills: HashSet<String>,
+    /// Per-id activation occurrence counts already written to the replay
+    /// (a cooldown skill's second proc gets its own event, as in the game).
+    seen_skills: HashMap<String, usize>,
     finish_order: Option<i32>,
     finish_time_raw: f64,
 }
@@ -308,21 +310,36 @@ impl RaceObserver for ReplayObserver {
         inner.record(race, runner);
         let gate = runner.id().0 as usize;
         let time = race.accumulated_time();
-        let newly_used: Vec<String> = {
+        // `used_skills` lists every activation in order; diff per-id occurrence
+        // counts against the gate's ledger to find each new activation.
+        let mut occurrences: HashMap<&str, usize> = HashMap::new();
+        let mut newly_used: Vec<String> = Vec::new();
+        {
             let state = inner.gate_mut(gate);
-            runner
-                .used_skills()
-                .into_iter()
-                .filter(|id| state.seen_skills.insert((*id).to_owned()))
-                .map(str::to_owned)
-                .collect()
-        };
+            for skill_id in runner.used_skills() {
+                let occurrence = {
+                    let count = occurrences.entry(skill_id).or_insert(0);
+                    *count += 1;
+                    *count
+                };
+                let seen = state.seen_skills.get(skill_id).copied().unwrap_or(0);
+                state.seen_skills.insert(skill_id.to_owned(), occurrence);
+                if occurrence > seen {
+                    newly_used.push(skill_id.to_owned());
+                }
+            }
+        }
 
+        // A repeated skill in one tick shares the target mask collected for
+        // that skill, while different skills keep their source-list order.
+        let mut target_masks: HashMap<String, i32> = HashMap::new();
         for skill_id in newly_used {
-            let target_mask = inner
-                .target_masks
-                .remove(&(runner.id(), skill_id.clone()))
-                .unwrap_or(0);
+            let target_mask = *target_masks.entry(skill_id.clone()).or_insert_with(|| {
+                inner
+                    .target_masks
+                    .remove(&(runner.id(), skill_id.clone()))
+                    .unwrap_or(0)
+            });
             // A skill the engine names outside the game's numeric space has no
             // id a replay viewer could resolve; it is left out of the replay.
             let Ok(numeric) = skill_id.parse::<i32>() else {
@@ -735,6 +752,26 @@ mod tests {
         assert_eq!(events[0].kind, EVENT_SKILL);
         assert_eq!(events[0].params, vec![2, 200_331, -1, 0, 0b1_0001, 0]);
         assert!((events[0].frame_time - 1.0 / 15.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn replay_keeps_repeated_skill_activation_order() {
+        let collector = RaceReplayCollector::new();
+        let mut obs = collector.handle();
+        obs.on_round_start(&TestRace { time: 0.0 }, 1);
+
+        let mut r = runner(2, 10.0);
+        r.used = vec![
+            "201662".to_owned(),
+            "200331".to_owned(),
+            "201662".to_owned(),
+        ];
+        tick(&mut obs, 1.0 / 15.0, &[r]);
+        obs.on_round_end(&TestRace { time: 1.0 / 15.0 });
+
+        let events = &collector.result()[0].events;
+        let ids: Vec<_> = events.iter().map(|event| event.params[1]).collect();
+        assert_eq!(ids, vec![201662, 200331, 201662]);
     }
 
     #[test]

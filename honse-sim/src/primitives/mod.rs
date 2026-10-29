@@ -13,6 +13,12 @@ pub mod skills;
 /// Shared compare-grade telemetry collector used by both race engines.
 pub mod compare;
 
+/// Batch reduction over paired compare telemetry, shared by both engines.
+pub mod compare_summary;
+
+/// Reductions over the lean compare read models (skill basin, planner).
+pub mod skill_bashin;
+
 pub mod stamina;
 
 /// Closed-form pre-race readouts shared by the engines and external planners.
@@ -25,5 +31,6 @@ pub mod events;
 pub mod mob;
 pub mod pacing;
 pub mod race_support;
+pub mod spot_struggle;
 
 pub mod projection;

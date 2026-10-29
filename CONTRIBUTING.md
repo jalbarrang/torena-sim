@@ -18,7 +18,7 @@ External code contributions require a project-approved contributor agreement tha
 | `honse-sim/src/contested/` | Live-field orchestration and race telemetry. |
 | `honse-sim/src/vacuum/` | Synthetic comparison orchestration. |
 | `honse-sim-wasm/` | Serde and `wasm-bindgen` boundary. |
-| `docs/mechanics/` | Mechanics sources, formulas, assumptions, and limitations. |
+| `docs/race-mechanics/` | Mechanics reference: chapters, Global distillation, archive. |
 | `scripts/` | Quality, package, release-validation, and Git hook scripts. |
 
 The `honse-sim` package is the only crates.io package. Keep its shared kernel independent of engine orchestration. Keep `honse-sim-wasm` configured with `publish = false`.
@@ -48,7 +48,7 @@ Run the full local gate before you push.
 
 ## Mechanics changes
 
-Read [`docs/mechanics/README.md`](docs/mechanics/README.md) and [`docs/mechanics/quick-reference.md`](docs/mechanics/quick-reference.md) before you change race behavior.
+Read [`docs/race-mechanics/`](docs/race-mechanics/) and [`docs/race-mechanics/GLOBAL.md`](docs/race-mechanics/GLOBAL.md) before you change race behavior.
 
 Add or update tests for each mechanics change. Use deterministic seeds and assert the domain result, not incidental log text.
 

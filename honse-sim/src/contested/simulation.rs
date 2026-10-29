@@ -10,6 +10,7 @@ use crate::contested::collectors::{
 use crate::contested::race::{Race, SimulationSettings};
 use crate::contested::replay::{RaceReplay, RaceReplayCollector};
 use uma_sim_primitives::compare::{CompareData, CompareDataCollector};
+use uma_sim_primitives::compare_summary::{summarize_compare, CompareSummaryData, SummaryError};
 use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::mob::{generate_mob_runners, CONTESTED_FILL_MOB_STATS};
 use uma_sim_primitives::runner::lifecycle::CreateRunner;
@@ -44,6 +45,35 @@ pub struct RaceSimParams {
     pub master_seed: u64,
     /// Runner ids whose per-tick telemetry is captured.
     pub focus_runner_ids: Vec<RunnerId>,
+    /// Whether each round also produces its replay projection.
+    ///
+    /// The replay is the heaviest projection (every gate, every tick), so a
+    /// consumer that only wants finish orders or telemetry leaves this `false`
+    /// and asks for a single round's replay through [`run_race_replay`]
+    /// instead. When `false`, [`RaceSimResult::replays`] is empty.
+    pub include_replays: bool,
+}
+
+/// Inputs to [`run_race_replay`].
+///
+/// The same field as [`RaceSimParams`] without the batch sampling: one round,
+/// named by index, projected as the game's own result record.
+pub struct RaceReplayParams {
+    /// The course to race.
+    pub course: CourseData,
+    /// Ground condition.
+    pub ground: GroundCondition,
+    /// Race-wide parameters.
+    pub parameters: RaceParameters,
+    /// Simulation settings (mode, toggles).
+    pub settings: SimulationSettings,
+    /// The field to race, [`MIN_FIELD_SIZE`]..=[`MAX_FIELD_SIZE`] runners.
+    pub runners: Vec<CreateRunner>,
+    /// Master seed of the round (the batch run's round `i` uses
+    /// `master_seed + i`).
+    pub master_seed: u64,
+    /// Absolute index of the round to reproduce.
+    pub round_index: usize,
 }
 
 /// Inputs to [`run_contested_compare`].
@@ -115,6 +145,8 @@ pub enum SimError {
         /// The compared runner count.
         runners: usize,
     },
+    /// A round could not be folded into the summary.
+    Summary(SummaryError),
 }
 
 impl std::fmt::Display for SimError {
@@ -135,6 +167,7 @@ impl std::fmt::Display for SimError {
                 f,
                 "fill_to must be within {runners}..={MAX_FIELD_SIZE} (compared runners..=max field), got {fill_to}"
             ),
+            SimError::Summary(error) => write!(f, "{error}"),
         }
     }
 }
@@ -168,8 +201,13 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
     race.subscribe(collector.handle());
     let event_log = RaceEventLogCollector::new();
     race.subscribe(event_log.handle());
-    let replay = RaceReplayCollector::new();
-    race.subscribe(replay.handle());
+    let replay = if params.include_replays {
+        let replay = RaceReplayCollector::new();
+        race.subscribe(replay.handle());
+        Some(replay)
+    } else {
+        None
+    };
 
     let mut finish_orders: Vec<Vec<FinishEntry>> = Vec::with_capacity(params.nsamples);
     for i in 0..params.nsamples {
@@ -182,8 +220,40 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
         finish_orders,
         collected: collector.result(),
         event_logs: event_log.result(),
-        replays: replay.result(),
+        replays: replay.map(|replay| replay.result()).unwrap_or_default(),
     })
+}
+
+/// Run one round and return its replay projection.
+///
+/// Reproduces the batch run's round `round_index` without running the rounds
+/// before it, so a consumer can project a single round on demand. Only the
+/// replay is collected; no telemetry or event log is built.
+pub fn run_race_replay(params: RaceReplayParams) -> Result<RaceReplay, SimError> {
+    if !(MIN_FIELD_SIZE..=MAX_FIELD_SIZE).contains(&params.runners.len()) {
+        return Err(SimError::WrongRunnerCount(params.runners.len()));
+    }
+
+    let mut race = Race::new(
+        params.course,
+        params.ground,
+        params.settings,
+        params.parameters,
+    );
+    for runner in params.runners {
+        race.add_runner(runner);
+    }
+
+    let replay = RaceReplayCollector::new();
+    race.subscribe(replay.handle());
+
+    race.prepare_round_at(
+        params.master_seed + params.round_index as u64,
+        params.round_index,
+    );
+    race.run();
+
+    Ok(replay.result().into_iter().next().unwrap_or_default())
 }
 
 /// Run a same-race compare over `nsamples` contested rounds.
@@ -193,6 +263,33 @@ pub fn run_race_sim(params: RaceSimParams) -> Result<RaceSimResult, SimError> {
 /// the field to exactly `n` so field-dependent mechanics can emerge around the
 /// compared runners without increasing compare payload size.
 pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareData, SimError> {
+    run_contested_compare_indices(params, None)
+}
+
+/// Run a same-race compare for a named list of round indices.
+///
+/// Round `i` uses seed `master_seed + i` and pins its own round counter, so the
+/// result is the same race the batch ran at that index.
+pub fn run_contested_compare_rounds(
+    params: ContestedCompareParams,
+    indices: &[usize],
+) -> Result<CompareData, SimError> {
+    run_contested_compare_indices(params, Some(indices))
+}
+
+/// Fold a same-race compare into the finished summary read-model.
+pub fn run_contested_compare_summarized(
+    params: ContestedCompareParams,
+) -> Result<CompareSummaryData, SimError> {
+    let data = run_contested_compare(params)?;
+    summarize_compare(&data).map_err(SimError::Summary)
+}
+
+/// Run the contested compare batch, or only `indices` when the caller named them.
+fn run_contested_compare_indices(
+    params: ContestedCompareParams,
+    indices: Option<&[usize]>,
+) -> Result<CompareData, SimError> {
     if params.nsamples == 0 {
         return Err(SimError::InvalidSamples);
     }
@@ -203,8 +300,12 @@ pub fn run_contested_compare(params: ContestedCompareParams) -> Result<CompareDa
     let collector = CompareDataCollector::for_runner_ids(focus_runner_ids);
     race.subscribe(collector.handle());
 
-    for i in 0..nsamples {
-        race.prepare_round(master_seed + i as u64);
+    let round_indices: Vec<usize> = match indices {
+        Some(list) => list.to_vec(),
+        None => (0..nsamples).collect(),
+    };
+    for index in round_indices {
+        race.prepare_round_at(master_seed + index as u64, index);
         race.run();
     }
 
@@ -274,8 +375,11 @@ mod tests {
     use uma_sim_primitives::mob::generate_mob_field;
     use uma_sim_primitives::runner::lifecycle::RunnerAptitudes;
     use uma_sim_primitives::runner::test_support::{test_course, test_race_params};
+    use uma_sim_primitives::shared_kernel::ids::SkillId;
     use uma_sim_primitives::shared_kernel::language::{Aptitude, Mood};
     use uma_sim_primitives::shared_kernel::params::StatLine;
+    use uma_sim_primitives::skills::effect::{SkillRarity, SkillTarget};
+    use uma_sim_primitives::skills::model::{RawSkillEffect, Skill, SkillAlternative};
 
     fn params(nsamples: usize) -> RaceSimParams {
         RaceSimParams {
@@ -287,6 +391,7 @@ mod tests {
             nsamples,
             master_seed: 9001,
             focus_runner_ids: vec![RunnerId(0)],
+            include_replays: true,
         }
     }
 
@@ -428,6 +533,112 @@ mod tests {
         let order_a: Vec<RunnerId> = a.finish_orders[0].iter().map(|e| e.runner_id).collect();
         let order_b: Vec<RunnerId> = b.finish_orders[0].iter().map(|e| e.runner_id).collect();
         assert_eq!(order_a, order_b);
+    }
+
+    #[test]
+    fn replay_projection_is_opt_in() {
+        let mut lean = params(2);
+        lean.include_replays = false;
+        let result = run_race_sim(lean).expect("sim runs");
+        assert!(result.replays.is_empty());
+        // The other projections are unaffected by the missing replay.
+        assert_eq!(result.finish_orders.len(), 2);
+        assert_eq!(result.collected.rounds.len(), 2);
+        assert_eq!(result.event_logs.len(), 2);
+    }
+
+    /// An on-demand single-round replay must be the batch run's own round, not
+    /// merely a race of the same seed: the round counter selects the sampled
+    /// skill-trigger window, so a run that skipped earlier rounds would pick a
+    /// different realization.
+    #[test]
+    fn single_round_replay_reproduces_the_batch_round() {
+        let settings = SimulationSettings {
+            // Four realizations per skill, so the round counter actually selects
+            // a different trigger window instead of always taking index zero.
+            skill_samples: 4,
+            ..SimulationSettings::default()
+        };
+
+        let mut runners = generate_mob_field();
+        runners[0].skills = vec![sampled_window_skill()];
+
+        let batch = run_race_sim(RaceSimParams {
+            course: test_course(),
+            ground: GroundCondition::Firm,
+            parameters: test_race_params(),
+            settings: settings.clone(),
+            runners: runners.clone(),
+            nsamples: 4,
+            master_seed: 9001,
+            focus_runner_ids: vec![],
+            include_replays: true,
+        })
+        .expect("sim runs");
+
+        // Guard the guard: if every round armed the same window this test would
+        // pass even without the round index being pinned.
+        assert_ne!(batch.replays[0], batch.replays[1]);
+
+        for round_index in 0..4 {
+            let single = run_race_replay(RaceReplayParams {
+                course: test_course(),
+                ground: GroundCondition::Firm,
+                parameters: test_race_params(),
+                settings: settings.clone(),
+                runners: runners.clone(),
+                master_seed: 9001,
+                round_index,
+            })
+            .expect("replay runs");
+            assert_eq!(single, batch.replays[round_index]);
+        }
+    }
+
+    /// A skill that activates in one of four sampled windows in the second half
+    /// of the course (`distance_rate_after_random` samples a random point per
+    /// realization). `activate_lot: Some(0)` keeps the Wit roll out of it so the
+    /// window alone decides the outcome.
+    fn sampled_window_skill() -> Skill {
+        Skill {
+            skill_id: SkillId::new("999901"),
+            rarity: SkillRarity::White,
+            tags: vec![],
+            activate_lot: Some(0),
+            level: 1,
+            alternatives: vec![SkillAlternative {
+                base_duration: 30000.0,
+                cooldown_time: None,
+                condition: "distance_rate_after_random==50".to_owned(),
+                precondition: None,
+                effects: vec![RawSkillEffect {
+                    modifier: 4500.0,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 27, // TargetSpeed
+                    value_usage: None,
+                    value_level_usage: None,
+                    pre_applied_multiplier: None,
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn single_round_replay_rejects_field_sizes_outside_the_supported_range() {
+        let mut runners = generate_mob_field();
+        runners.truncate(MIN_FIELD_SIZE - 1);
+        assert!(matches!(
+            run_race_replay(RaceReplayParams {
+                course: test_course(),
+                ground: GroundCondition::Firm,
+                parameters: test_race_params(),
+                settings: SimulationSettings::default(),
+                runners,
+                master_seed: 9001,
+                round_index: 0,
+            }),
+            Err(SimError::WrongRunnerCount(1))
+        ));
     }
 
     #[test]
