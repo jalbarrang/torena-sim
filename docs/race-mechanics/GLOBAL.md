@@ -901,7 +901,7 @@ JP-sourced material and don't plan around them.
 
 **Also not applicable:** the **Slope (Outdated)** course section — it was superseded by the 1st
 anniversary track rewrite and is kept in the guide only for historical reference. Use
-**Course Events** (§19) instead.
+**Course Events** (§18) instead.
 
 ---
 
@@ -988,8 +988,8 @@ Useful one-liners for reasoning about a build or a track. All derived from the s
 - **Wit drives:** skill activation chance (base Wiz, `max(100 − 9000/Wiz, 20)%`), per-section
   target-speed randomness (`Wiz/5500 × log10(Wiz × 0.1)%`), Rushed chance, and the last-spurt
   candidate acceptance rate (`15 + 0.05 × Wiz`%).
-- **Stamina → HP** at `0.8 × styleCoefficient × Stamina + distance`; the Pace Chaser coefficient
-  is the lowest at 0.89, End Closer the highest at 0.995.
+- **Stamina → HP** at `0.8 × styleCoefficient × Stamina + distance`; the coefficients run from
+  0.86 (Oonige) to 1.0 (Late Surger), with Pace Chaser at 0.89.
 - **A uma out of HP is capped at minimum speed** — that is the failure mode a stamina check
   prevents, not a gradual slowdown.
 - **Outside lanes and diagonal running cost distance** (§18) — relevant on corner-heavy tracks.

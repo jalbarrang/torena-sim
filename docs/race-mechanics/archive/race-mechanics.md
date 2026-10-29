@@ -586,7 +586,7 @@ See [https\://gametora.com/umamusume/skills](https://gametora.com/umamusume/skil
 
 ## Skill Activation Chance {#skill-activation-chance}
 
-Many skills need to pass a wisdom check BEFORE the race.
+Many skills need to pass a wisdom check BEFORE the race. Only skills whose `skill_data.activate_lot` is `1` roll this check; `activate_lot == 0` means the skill is guaranteed eligible and never rolls (its own activation condition still applies).
 $ActivationChance=max(100-9000/BaseWiz,20)%$
 Examples:
 
@@ -1423,7 +1423,7 @@ When a uma has more than 1200 Wiz stat, skills that increase either target speed
 $SkillValueIncrease=BaseSkillValue*PhaseStrategyCoefficient*WizMultiplier$
 
 The Wiz multiplier checks the user’s Wiz stat minus 1200 against the following table. The Wiz stat used here is subject to motivation and skill modifiers, but not strategy proficiency.
-Example: 1325 Wiz is 125 over. It corresponds to the 141 threshold and has a multiplier of 0.14.
+Example: 1325 Wiz is 125 over. It corresponds to the 121 threshold and has a multiplier of 0.12.
 
 | Wiz Threshold | Multiplier | Note |
 | ----- | ----- | ----- |
