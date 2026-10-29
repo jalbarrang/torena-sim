@@ -18,6 +18,7 @@ use crate::course::coefficients::{
 use crate::course::model::CourseData;
 use crate::course::phase::phase_start;
 use crate::position_keep::{apply_virtual_position_keep, PositionKeepContext};
+use crate::readouts;
 use crate::runner::mechanics::DuelingRates;
 use crate::runner::skills::FieldView;
 use crate::runner::Runner;
@@ -197,6 +198,12 @@ impl Runner {
 
         self.update_timers(dt);
 
+        // Order-band history (`order_rate_*_continue`) is race-clock state, not
+        // skill work: it advances on every tick, including the ones a late start
+        // skips, so the band starts recording at the documented 5-second mark
+        // rather than 5 seconds after the gate opens for this runner.
+        self.observe_order_history(field_inputs.skill_triggers.field.self_order);
+
         if self.condition_timer.t >= 0.0 {
             self.tick_conditions(ctx.course.horse_lane);
             self.condition_timer.t = -1.0;
@@ -219,7 +226,7 @@ impl Runner {
         apply_virtual_position_keep(self, &field_inputs.position_keep);
         self.update_dueling(field_inputs, ctx); // t-016
         self.update_spot_struggle(ctx); // t-016
-        self.update_power_conservation();
+        self.update_power_conservation(dt);
         self.update_last_spurt_state(); // t-016
         self.update_target_speed(field_inputs.side_blocked, ctx.course.course_width);
         self.apply_forces();
@@ -280,7 +287,22 @@ impl Runner {
         // ---- finish ----
         if !self.finished && self.position >= ctx.course.distance {
             self.finished = true;
-            self.finish_time = ctx.accumulated_time;
+            // Sub-frame interpolation. `accumulated_time` is the *end* of this
+            // tick, so the runner crossed somewhere inside the tick's own travel.
+            // Interpolating against the same `displacement` the integrator used
+            // keeps the crossing consistent with the trajectory actually
+            // simulated, rather than modelling a second, more precise path.
+            //
+            // Without it every finish time carries a fixed `+dt/2` offset and
+            // runners that cross on the same tick tie exactly, so their places
+            // fall back to field insertion order.
+            let travelled = displacement * dt_after_delay;
+            let time_into_tick = if travelled > 0.0 {
+                ((self.position - ctx.course.distance) / travelled).clamp(0.0, 1.0) * dt_after_delay
+            } else {
+                0.0
+            };
+            self.finish_time = ctx.accumulated_time - time_into_tick;
         }
     }
 
@@ -740,12 +762,16 @@ impl Runner {
     }
 
     fn calculate_last_spurt_speed(&self, base_speed: f64) -> f64 {
-        let late_race_target_speed = self.base_target_speed_per_phase[2];
-        let proficiency = speed::distance_proficiency(self.aptitudes.distance);
-        let mut result = (late_race_target_speed + 0.01 * base_speed) * 1.05
-            + (500.0 * self.adjusted_stats.speed).sqrt() * proficiency * 0.002;
-        result += (450.0 * self.adjusted_stats.guts).powf(0.597) * 0.0001;
-        result
+        // The readout owns the formula; this runner just supplies its own
+        // stats, so a planner quoting a spurt speed and a race reaching one
+        // cannot drift apart.
+        readouts::last_spurt_speed(
+            self.strategy,
+            base_speed,
+            self.adjusted_stats.speed,
+            self.aptitudes.distance,
+            self.adjusted_stats.guts,
+        )
     }
 
     fn calculate_phase_base_accel(&self, accel_modifier: f64, phase: usize) -> f64 {
@@ -1076,6 +1102,31 @@ mod tests {
         };
         assert_eq!(condition_value("blocked_side"), 1);
         assert_eq!(condition_value("overtake"), 0);
+    }
+
+    #[test]
+    fn runner_accumulate_time_is_the_race_clock() {
+        // The runner's clock is the replay's frame axis: it starts at 0 at the
+        // gate frame and advances one tick per step, so a time-gated skill and a
+        // timer-driven mechanic land on the times the captures record. A
+        // pre-gate offset here shifts every `accumulatetime` gate by a second
+        // and puts position keep's 2 s roll grid off the axis the UI shows.
+        let (mut r, course) = prepared(Strategy::PaceChaser);
+        assert_eq!(r.accumulate_time.t, 0.0);
+        let field = FieldView::at_gate();
+        let fi = test_field_inputs(&field);
+        let dt = 1.0 / 15.0;
+        for tick in 1..=45 {
+            let mut ctx = update_ctx(&course);
+            ctx.accumulated_time = dt * f64::from(tick);
+            r.on_update(dt, &fi, &ctx);
+            assert!(
+                (r.accumulate_time.t - ctx.accumulated_time).abs() < 1e-12,
+                "tick {tick}: runner clock {} should match the race clock {}",
+                r.accumulate_time.t,
+                ctx.accumulated_time
+            );
+        }
     }
 
     #[test]

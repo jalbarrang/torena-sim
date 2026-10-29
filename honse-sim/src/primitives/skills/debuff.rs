@@ -184,6 +184,8 @@ mod tests {
             skill_id: SkillId::new("x"),
             rarity: SkillRarity::Gold,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 0.0,
                 cooldown_time: None,

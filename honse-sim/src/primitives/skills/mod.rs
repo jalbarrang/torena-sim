@@ -13,6 +13,7 @@ pub mod activation;
 pub mod condition;
 pub mod debuff;
 pub mod effect;
+pub mod level_scaling;
 pub mod model;
 pub mod recovery;
 pub mod value_scaling;

@@ -79,16 +79,28 @@ the contention coordinator) differs.
   orchestration (`run_race_sim`) plus the streaming `WasmRaceSimulator`.
   Read-models: `RaceSimDataCollector`, `RaceEventLogCollector`.
 - **`uma-sim-vacuum`** — the solo engine. Single-/small-field loop with **no
-  contention coordinator and no field-composition folding**, synthetic dueling
-  from `DuelingRates`, approximate conditions
-  (`ConditionResolution::Static`, ×10 position-keep window), **produces
-  `FieldInputs` from approximate condition values + synthetic rates**, calls the
-  same shared step, and drives the paired-delta orchestration (`run_compare`).
+  field-composition folding**, synthetic dueling from `DuelingRates`, and the
+  shared spot-struggle coordinator over its own (smaller) field; approximate
+  conditions (`ConditionResolution::Static`, ×10 position-keep window),
+  **produces `FieldInputs` from approximate condition values + synthetic
+  rates**, calls the same shared step, and drives the paired-delta orchestration
+  (`run_compare`).
   Read-model: `CompareDataCollector`.
 
 > **Amendment (pacing fidelity):** Contested originally shipped with a ×3
 > position-keep window inherited from the retired TS reference. Both engines now
 > use ×10 so the contested bench matches canon sections 1–10.
+
+> **Amendment (spot struggle is shared, not contested-only):** The vacuum engine
+> originally shipped with no spot-struggle coordinator, so the mechanic could not
+> occur in a compare run at all. The rule is now a domain service over plain rows
+> (`honse-sim/src/primitives/spot_struggle.rs`) that both engines call; only the
+> field it sees differs. Dueling is deliberately *not* shared this way: the
+> synthetic engine's artificial rolls are a different model of the mechanic, not
+> the same rule over a smaller field.
+>
+> This keeps the original decision's spirit — the seam is data, the rule lives
+> once — while removing the last per-mechanic asymmetry between the engines.
 
 ### The seam is **data, not a switch**: `FieldInputs`
 
@@ -128,13 +140,15 @@ impossible.
   branch is gone — condition-resolution strategy (`ConditionResolution`) and the
   position-keep window multiplier are explicit engine inputs at the boundary,
   not runtime flags inside the catalog/step.
-- Illegal states unrepresentable: no vacuum run with live contention; no
-  contested run carrying stray dueling rates (rates live only in
+- Illegal states unrepresentable: no vacuum run with live blocking or proximity
+  dueling (spot struggle is the one contention rule both engines share — see the
+  amendment); no contested run carrying stray dueling rates (rates live only in
   `uma-sim-vacuum`).
 - **Realized cost:** the per-engine loop *skeleton* (the ~60-line `on_update`
   orchestration + `prepare_round`) is written twice, but the heavy field-agnostic
-  mechanics it calls are shared via `race_support`, so duplication is small and
-  the contention coordinator exists only where it is meaningful (race).
+  mechanics it calls are shared via `race_support`, so duplication is small. The
+  proximity dueling coordinator exists only where it is meaningful (race), while
+  spot struggle is shared as a row-level domain service.
 - **WASM:** `uma-sim-wasm` depends on both engines. `runRaceSim` /
   `WasmRaceSimulator` drive `uma-sim-race`; `runCompare` drives `uma-sim-vacuum`.
   The DTO layer builds each engine's own `SimulationSettings` (no `mode` field) —
@@ -214,6 +228,21 @@ all pass.
 - **Reduction (axis B).** Distribution vs paired-delta stays in each engine's
   orchestration + the TS side; not materialized as a shared type (no
   cross-engine consumer).
+
+> **Amendment (the reduction is a shared type now).** The premise above — "no
+> cross-engine consumer" — was true only because no summary API existed to
+> consume: every caller got raw rounds and had to reduce them itself, which left
+> two implementations of the same bashin math (this crate's `vacuum/ranking.rs`
+> and the site's TS reducer). Reduction is now
+> `primitives/compare_summary.rs::CompareSummary`, a mergeable accumulator over
+> [`CompareRoundData`] shared by both engines, and the engines expose
+> `run_compare_summarized`, `run_paired_compare_summarized`, and
+> `run_contested_compare_summarized`. It is field-agnostic (it reads the
+> read-model rows, never the field), so it lives in primitives rather than in
+> either engine, and the two engines still do not share orchestration.
+> `run_*_rounds(params, indices)` re-runs a named round from its seed and pinned
+> round counter, which is how a summary's representative races are materialised
+> without a whole batch crossing the boundary.
 
 ## Discarded options
 

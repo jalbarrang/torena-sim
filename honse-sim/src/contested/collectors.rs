@@ -80,12 +80,21 @@ pub struct CollectedData {
 struct FocusEffectState {
     open_effects: HashMap<String, Vec<OpenLogRef>>,
     effect_sequence: u64,
-    seen_used_skills: HashSet<String>,
+    /// Per-id activation occurrence counts already recorded (a cooldown skill's
+    /// second proc appears again in `used_skills`).
+    seen_used_skills: HashMap<String, usize>,
+    /// How many activations this runner had when the instant-effect log was
+    /// last reconciled. The counter only grows, so an unchanged value means no
+    /// skill fired and the per-activation work can be skipped entirely.
+    seen_activations: usize,
 }
 
 #[derive(Default)]
 struct CollectorInner {
     focus_ids: Vec<RunnerId>,
+    /// Runner id -> index into `round.focus`, so a focused runner is found by
+    /// array index instead of a linear scan per runner per tick.
+    focus_slot: Vec<Option<usize>>,
     data: CollectedData,
     /// Open effect-log state for the current round, keyed by runner id.
     effect_state: HashMap<u32, FocusEffectState>,
@@ -102,9 +111,29 @@ pub struct RaceSimDataCollector {
 impl RaceSimDataCollector {
     /// A collector tracing the given focus runners (empty = trace none).
     pub fn new(focus_ids: Vec<RunnerId>) -> Self {
+        // Dense runner id -> trace slot. Built once: `focus_ids` is fixed for the
+        // collector's lifetime. First occurrence wins, matching the linear
+        // `find` this replaced.
+        let mut focus_slot: Vec<Option<usize>> = Vec::new();
+        for (slot, runner_id) in focus_ids.iter().enumerate() {
+            let idx = runner_id.0 as usize;
+            // A focus id outside the legal contested field cannot match a
+            // runner; skipping it also keeps a hostile id from forcing a huge
+            // allocation here.
+            if idx >= super::MAX_FIELD_SIZE {
+                continue;
+            }
+            if focus_slot.len() <= idx {
+                focus_slot.resize(idx + 1, None);
+            }
+            if focus_slot[idx].is_none() {
+                focus_slot[idx] = Some(slot);
+            }
+        }
         RaceSimDataCollector {
             inner: Rc::new(RefCell::new(CollectorInner {
                 focus_ids,
+                focus_slot,
                 data: CollectedData::default(),
                 effect_state: HashMap::new(),
             })),
@@ -153,10 +182,10 @@ impl RaceObserver for CollectorObserver {
         _dt: f64,
     ) {
         let mut inner = self.inner.borrow_mut();
-        if !inner.focus_ids.contains(&runner.id()) {
-            return;
-        }
         let id = runner.id().0;
+        let Some(Some(slot)) = inner.focus_slot.get(id as usize).copied() else {
+            return;
+        };
         let distance = race.course_distance();
         let position = runner.position().min(distance);
         let seed = inner.data.rounds.last().map_or(0, |r| r.seed);
@@ -169,8 +198,10 @@ impl RaceObserver for CollectorObserver {
         };
 
         let active = runner.active_effects();
-        let used = runner.used_skills();
-        let static_effects = runner.skill_static_effects();
+        // Read the activation counter before borrowing the collector's own
+        // state. It only ever grows, so an unchanged value means no skill fired
+        // this tick and the per-activation work below cannot find anything new.
+        let activations = runner.skills_activated_count().max(0) as usize;
 
         let CollectorInner {
             data, effect_state, ..
@@ -178,7 +209,7 @@ impl RaceObserver for CollectorObserver {
         let Some(round) = data.rounds.last_mut() else {
             return;
         };
-        let Some(trace) = round.focus.iter_mut().find(|t| t.runner_id.0 == id) else {
+        let Some(trace) = round.focus.get_mut(slot) else {
             return;
         };
         trace.samples.push(sample);
@@ -199,11 +230,38 @@ impl RaceObserver for CollectorObserver {
         );
 
         // --- newly used skills: log their instant (static) effects as points ---
+        // `skill_static_effects` materialises every effect of every carried skill
+        // (with a `String` clone each), and it used to run on every tick for
+        // every focused runner. Only a tick that actually activated something can
+        // consume it, so the walk is gated on the activation counter.
+        if activations == state.seen_activations {
+            return;
+        }
+        state.seen_activations = activations;
+
+        let used = runner.used_skills();
+        let static_effects = runner.skill_static_effects();
+
+        // Walk the append-only activation list directly so repeated skills keep
+        // their source order while occurrence counts detect new procs.
+        let mut occurrences: HashMap<&str, usize> = HashMap::new();
         for used_skill_id in &used {
-            if state.seen_used_skills.contains(*used_skill_id) {
+            let occurrence = {
+                let count = occurrences.entry(*used_skill_id).or_insert(0);
+                *count += 1;
+                *count
+            };
+            let seen = state
+                .seen_used_skills
+                .get(*used_skill_id)
+                .copied()
+                .unwrap_or(0);
+            if occurrence <= seen {
                 continue;
             }
-            state.seen_used_skills.insert((*used_skill_id).to_owned());
+            state
+                .seen_used_skills
+                .insert((*used_skill_id).to_owned(), occurrence);
             let mut new_logs: Vec<SkillEffectLog> = Vec::new();
             for effect in &static_effects {
                 if effect.skill_id != *used_skill_id
@@ -237,9 +295,9 @@ impl RaceObserver for CollectorObserver {
         let position = runner.position().min(distance);
         let id = runner.id().0;
         let mut inner = self.inner.borrow_mut();
-        if !inner.focus_ids.contains(&runner.id()) {
+        let Some(Some(slot)) = inner.focus_slot.get(id as usize).copied() else {
             return;
-        }
+        };
         let CollectorInner {
             data, effect_state, ..
         } = &mut *inner;
@@ -247,7 +305,7 @@ impl RaceObserver for CollectorObserver {
             return;
         };
         if let Some(round) = data.rounds.last_mut() {
-            if let Some(trace) = round.focus.iter_mut().find(|t| t.runner_id.0 == id) {
+            if let Some(trace) = round.focus.get_mut(slot) {
                 close_all(
                     &mut state.open_effects,
                     &mut trace.skill_activations,
@@ -376,7 +434,8 @@ struct RunnerPrevState {
     is_last_spurt: bool,
     out_of_hp: bool,
     skills_activated_count: i64,
-    seen_used_skills: HashSet<String>,
+    /// Per-id activation occurrence counts already turned into events.
+    seen_used_skills: HashMap<String, usize>,
     /// Number of received-targeted-skill log entries already turned into
     /// `Debuffed` events (the log is append-only, so this is a high-water mark).
     seen_targeted_count: usize,
@@ -603,31 +662,38 @@ impl RaceObserver for EventLogObserver {
 
         let mut seen = prev.seen_used_skills.clone();
         if count > prev.skills_activated_count {
+            // `used` lists every activation in order; a cooldown skill's second
+            // proc emits its own named event instead of an anonymous one.
             let used = runner.used_skills();
-            let new_ids: Vec<String> = used
-                .iter()
-                .filter(|s| !seen.contains(**s))
-                .map(|s| (*s).to_owned())
-                .collect();
-            for skill_id in &new_ids {
+            let mut occurrences: HashMap<&str, usize> = HashMap::new();
+            let mut named = 0usize;
+            for skill_id in &used {
+                let occurrence = {
+                    let count = occurrences.entry(*skill_id).or_insert(0);
+                    *count += 1;
+                    *count
+                };
+                let seen_n = seen.get(*skill_id).copied().unwrap_or(0);
+                if occurrence <= seen_n {
+                    continue;
+                }
                 inner.push(
                     RaceLogEventKind::SkillActivated,
                     id,
                     position,
                     tick,
                     Some(RaceLogEventDetail {
-                        skill_id: Some(skill_id.clone()),
+                        skill_id: Some((*skill_id).to_owned()),
                         ..Default::default()
                     }),
                 );
+                named += 1;
+                seen.insert((*skill_id).to_owned(), occurrence);
             }
             let delta = count - prev.skills_activated_count;
-            let remaining = (delta - new_ids.len() as i64).max(0);
+            let remaining = (delta - named as i64).max(0);
             for _ in 0..remaining {
                 inner.push(RaceLogEventKind::SkillActivated, id, position, tick, None);
-            }
-            for s in used {
-                seen.insert(s.to_owned());
             }
         }
 
@@ -924,5 +990,66 @@ mod tests {
             .expect("runner 0 dueling-start");
         let partners = &start.detail.as_ref().expect("detail").other_runner_ids;
         assert_eq!(partners, &vec![RunnerId(1)]);
+    }
+
+    #[test]
+    fn event_log_names_every_activation_of_a_cooldown_skill() {
+        let collector = RaceEventLogCollector::new();
+        let mut obs = collector.handle();
+        obs.on_round_start(&LogRace { time: 0.0 }, 1);
+
+        // Tick 1: two skills proc in source-list order.
+        obs.on_after_runner_tick(
+            &LogRace { time: 10.0 },
+            &LogRunner {
+                id: 0,
+                pos: 300.0,
+                count: 2,
+                used: vec!["201662".to_owned(), "200331".to_owned()],
+                ..Default::default()
+            },
+            0.066,
+        );
+        // Tick 2: the first skill procs again after the cooldown.
+        obs.on_after_runner_tick(
+            &LogRace { time: 60.0 },
+            &LogRunner {
+                id: 0,
+                pos: 900.0,
+                count: 3,
+                used: vec![
+                    "201662".to_owned(),
+                    "200331".to_owned(),
+                    "201662".to_owned(),
+                ],
+                ..Default::default()
+            },
+            0.066,
+        );
+        obs.on_round_end(&LogRace { time: 61.0 });
+
+        let rounds = collector.result();
+        let skill_events: Vec<_> = rounds[0]
+            .iter()
+            .filter(|e| e.kind == RaceLogEventKind::SkillActivated)
+            .collect();
+        assert_eq!(skill_events.len(), 3, "each proc gets its own event");
+        let ids: Vec<_> = skill_events
+            .iter()
+            .map(|event| {
+                event
+                    .detail
+                    .as_ref()
+                    .and_then(|detail| detail.skill_id.clone())
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            vec![
+                Some("201662".to_owned()),
+                Some("200331".to_owned()),
+                Some("201662".to_owned()),
+            ]
+        );
     }
 }

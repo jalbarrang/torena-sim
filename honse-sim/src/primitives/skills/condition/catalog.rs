@@ -48,6 +48,10 @@ const FUDGE_PHASE_SKILL_IDS: [&str; 9] = [
 
 const DIRT_GRADE_TRACK_IDS: [u32; 4] = [10101, 10103, 10104, 10105];
 
+/// Start delay (seconds) above which the game reports a late start.
+/// `is_badstart` and `is_goodstart` are the two sides of this threshold.
+const LATE_START_DELAY_SECONDS: f64 = 0.08;
+
 // ============================================================
 // Small math helpers (ported from spurt-calculator / utils)
 // ============================================================
@@ -311,7 +315,7 @@ enum OrderScan {
     /// Each phase is judged on its own band.
     PerPhase,
     /// `*_continue` conditions also require every earlier phase to hold
-    /// (docs/mechanics/README.md:678).
+    /// (docs/race-mechanics/:678).
     Cumulative,
 }
 
@@ -485,6 +489,27 @@ fn noop_section_random(start: f64, end: f64) -> Arc<dyn Condition> {
         .lte(section)
         .gt(section)
         .gte(section)
+        .build()
+}
+
+/// The chance lottery behind `random_lot` and its JP-data spelling
+/// `random_lot_shared`.
+///
+/// The comparison argument is a **percentage threshold, not an equality value**:
+/// `random_lot==60` passes while the runner's pre-race lot is below 60, i.e. 60%
+/// of the time. The lot is rolled once per runner per race
+/// ([`Runner::random_lot`](crate::runner::Runner::random_lot)), so every
+/// alternative of the skill and every other lottery skill on that runner reads
+/// the same draw.
+fn random_lot_condition() -> Arc<dyn Condition> {
+    immediate()
+        .eq(|p| {
+            let lot = p.arg;
+            Ok((
+                p.regions.clone(),
+                Some(DynamicCondition::new(move |r| r.random_lot() < lot)),
+            ))
+        })
         .build()
 }
 
@@ -1041,9 +1066,34 @@ pub fn build_catalog() -> ConditionCatalog {
                     p.regions.clone(),
                     Some(DynamicCondition::new(move |r| {
                         if want_bad {
-                            r.start_delay() > 0.08
+                            r.start_delay() > LATE_START_DELAY_SECONDS
                         } else {
-                            r.start_delay() <= 0.08
+                            r.start_delay() <= LATE_START_DELAY_SECONDS
+                        }
+                    })),
+                ))
+            })
+            .build(),
+    );
+    // A good start is the absence of a late start. The game data pairs
+    // `is_goodstart==1` with an `is_badstart==1` alternative on the same skill
+    // (Unmatched Tactics), and the mechanics reference defines only the late
+    // start threshold, so the two tokens are complements of each other.
+    add(
+        "is_goodstart",
+        immediate()
+            .eq(|p| {
+                if p.arg != 0 && p.arg != 1 {
+                    return Err(ConditionError::Invalid("must be is_goodstart==0 or ==1"));
+                }
+                let want_good = p.arg == 1;
+                Ok((
+                    p.regions.clone(),
+                    Some(DynamicCondition::new(move |r| {
+                        if want_good {
+                            r.start_delay() <= LATE_START_DELAY_SECONDS
+                        } else {
+                            r.start_delay() > LATE_START_DELAY_SECONDS
                         }
                     })),
                 ))
@@ -1272,7 +1322,34 @@ pub fn build_catalog() -> ConditionCatalog {
             })
             .build(),
     );
-    add("lane_type", noop_immediate());
+    // Lanes are measured in metres from the inner fence (mechanics § Lane), so a
+    // runner is on the inner rail side while it sits in the inner half of the
+    // course width. The game reads 内ラチ側 for this: every skill carrying the
+    // token pairs `lane_type==0` with "near the inner rail" text (Innate
+    // Experience, Inside Scoop, trigger:BEAT).
+    //
+    // ASSUMPTION: the reference defines no band boundary, and the data only ever
+    // compares against 0, so 0 means inner and 1 means not. A capture that pins
+    // the real boundary (a lane-type skill firing or not firing at a known lane)
+    // should replace the half-width split.
+    add(
+        "lane_type",
+        immediate()
+            .eq(|p| {
+                if p.arg != 0 && p.arg != 1 {
+                    return Err(ConditionError::Invalid("must be lane_type==0 or ==1"));
+                }
+                let wants_inner = p.arg == 0;
+                let inner_limit = p.course.course_width / 2.0;
+                Ok((
+                    p.regions.clone(),
+                    Some(DynamicCondition::new(move |r| {
+                        (r.current_lane() <= inner_limit) == wants_inner
+                    })),
+                ))
+            })
+            .build(),
+    );
     add(
         "lastspurt",
         immediate()
@@ -1438,8 +1515,13 @@ pub fn build_catalog() -> ConditionCatalog {
     add(
         "popularity",
         value_filter_or_noop(|p| {
-            // Popularity is static for the race. `0` means unknown (e.g. mob
-            // runners) and is treated as "no constraint".
+            // Betting-popularity rank (1 = most popular), static for the race.
+            // `0` means unknown, which is what a synthetic field that sends no
+            // rank looks like, and passes instead of being filtered by a value
+            // the field cannot produce. A rank the caller does supply (Race
+            // Sim's derived rank, or a compare mode's assumed one) gates under
+            // either resolution, so a vacuum run can ask "what if this runner is
+            // 5th favourite".
             if p.runner.popularity > 0 {
                 Some(p.runner.popularity as f64)
             } else {
@@ -1473,18 +1555,15 @@ pub fn build_catalog() -> ConditionCatalog {
             })
             .build(),
     );
-    add(
-        "random_lot",
-        immediate()
-            .eq(|p| {
-                let lot = p.arg;
-                Ok((
-                    p.regions.clone(),
-                    Some(DynamicCondition::new(move |r| r.random_lot() < lot)),
-                ))
-            })
-            .build(),
-    );
+    add("random_lot", random_lot_condition());
+    // JP skill data spells the chance lottery `random_lot_shared`: one draw
+    // shared by the skill's alternatives, resolved at race start. JP skill DBs
+    // label those branches 発動率（共通抽選） and leave plain `random_lot` skills
+    // unlabelled, so the suffix names the *shared* draw rather than a different
+    // mechanic — the JP data even retro-applied it to the older Risk-Maker /
+    // Risk-Taker pair. Cross-runner sharing is unproven, and the one stable
+    // per-runner lot already gives a single draw that every alternative reads.
+    add("random_lot_shared", random_lot_condition());
     add(
         "remain_distance",
         immediate()
@@ -1941,6 +2020,20 @@ pub fn build_catalog() -> ConditionCatalog {
             "is_other_character_activate_advantage_skill",
         ),
     );
+    // True when the #1-popularity runner activates an advantage skill. There is
+    // no popularity ranking in the vacuum (static) field, so the token samples a
+    // random activation window (Erlang 3, 2.0, matching
+    // `is_other_character_activate_advantage_skill`) instead of pinning the
+    // earliest region. No dynamic factory is registered yet, so the contested
+    // resolution falls back to the same random sample until a real
+    // implementation lands.
+    add(
+        "is_popularity_top_character_activate_advantage_skill",
+        dynamic_or_static(
+            noop_erlang(3, 2.0),
+            "is_popularity_top_character_activate_advantage_skill",
+        ),
+    );
     add(
         "is_abroad",
         immediate()
@@ -2096,6 +2189,31 @@ mod tests {
 
     struct DummyRunner;
     impl RunnerView for DummyRunner {}
+
+    /// A runner whose only non-default trait is its start delay.
+    struct StartDelay(f64);
+    impl RunnerView for StartDelay {
+        fn start_delay(&self) -> f64 {
+            self.0
+        }
+    }
+
+    /// A runner whose only non-default trait is its pre-race lottery number.
+    struct RandomLot(i64);
+    impl RunnerView for RandomLot {
+        fn random_lot(&self) -> i64 {
+            self.0
+        }
+    }
+
+    /// A runner whose only non-default trait is its lane, in metres from the
+    /// inner fence.
+    struct CurrentLane(f64);
+    impl RunnerView for CurrentLane {
+        fn current_lane(&self) -> f64 {
+            self.0
+        }
+    }
 
     fn course() -> CourseData {
         CourseData {
@@ -2407,6 +2525,96 @@ mod tests {
     }
 
     #[test]
+    fn popularity_is_unconstrained_when_rank_is_unknown() {
+        // `0` is "no rank to gate on", which is what a synthetic field that sends
+        // none looks like, so the condition passes instead of being filtered by
+        // a value the field cannot produce. Both resolutions pass the same way,
+        // so the vacuum path is unchanged until a caller supplies a rank.
+        fn apply_at(
+            condition: &str,
+            popularity: i64,
+            resolution: ConditionResolution,
+        ) -> ConditionResult {
+            let catalog = build_catalog();
+            let parser = ConditionParser::new(&catalog);
+            let op = parser.parse(condition).expect("parse");
+            let course = course();
+            let mut runner = runner();
+            runner.popularity = popularity;
+            let extra = params();
+            op.apply(&ApplyParams {
+                regions: whole_course(&course),
+                course: &course,
+                runner: &runner,
+                extra: &extra,
+                resolution,
+            })
+            .expect("apply")
+        }
+
+        for resolution in [ConditionResolution::Static, ConditionResolution::Dynamic] {
+            for condition in ["popularity==1", "popularity<=3", "popularity>=6"] {
+                let (regions, _) = apply_at(condition, 0, resolution);
+                assert_eq!(
+                    regions.0,
+                    whole_course(&course()).0,
+                    "{condition} should pass with an unknown rank ({resolution:?})"
+                );
+            }
+        }
+
+        // A supplied rank gates in the vacuum path too, which is what lets a
+        // compare mode ask for a specific favourite or underdog branch.
+        let (favourite, _) = apply_at("popularity<=3", 1, ConditionResolution::Static);
+        assert_eq!(favourite.0, whole_course(&course()).0);
+        let (not_favourite, _) = apply_at("popularity<=3", 9, ConditionResolution::Static);
+        assert!(not_favourite.0.is_empty());
+        let (underdog, _) = apply_at("popularity>=6", 7, ConditionResolution::Static);
+        assert_eq!(underdog.0, whole_course(&course()).0);
+        let (not_underdog, _) = apply_at("popularity>=6", 2, ConditionResolution::Static);
+        assert!(not_underdog.0.is_empty());
+    }
+
+    #[test]
+    fn popularity_top_advantage_skill_random_samples_until_modeled() {
+        // The token has no popularity ranking to read yet, so it no-ops and
+        // samples a random activation window in both the vacuum (static) and
+        // contested (dynamic) paths.
+        for resolution in [ConditionResolution::Static, ConditionResolution::Dynamic] {
+            let (regions, dynamic) = apply_with(
+                "is_popularity_top_character_activate_advantage_skill==-1",
+                resolution,
+            );
+            assert_eq!(regions.0, whole_course(&course()).0);
+            assert!(
+                dynamic.is_none(),
+                "no dynamic gate should be attached while unmodeled"
+            );
+        }
+
+        // The sample policy is the same Erlang random sample the sibling
+        // opponent condition uses, not an immediate first-region fire.
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let op = parser
+            .parse("is_popularity_top_character_activate_advantage_skill==-1")
+            .expect("parse");
+        assert_eq!(
+            op.sample_policy(),
+            ActivationSamplePolicy::Erlang { k: 3, lambda: 2.0 }
+        );
+
+        // The full dataset string for Bouquet of Wishes, Forward (113401211)
+        // must parse: the negative literal and every companion token exist.
+        for resolution in [ConditionResolution::Static, ConditionResolution::Dynamic] {
+            apply_with(
+                "phase>=2&is_finalcorner==1&is_popularity_top_character_activate_advantage_skill==-1&base_wiz>=1200",
+                resolution,
+            );
+        }
+    }
+
+    #[test]
     fn distance_type_filters_course() {
         let (regions, _) = apply("distance_type==4");
         assert_eq!(regions.0, whole_course(&course()).0);
@@ -2419,6 +2627,50 @@ mod tests {
         let (_, cond) = apply("accumulatetime>=20");
         // The default RunnerView reports accumulate_time = 0, so 0 >= 20 is false.
         assert!(!cond.expect("dynamic condition").eval(&DummyRunner));
+    }
+
+    #[test]
+    fn random_lot_shared_is_the_same_lottery_as_random_lot() {
+        for token in ["random_lot==60", "random_lot_shared==60"] {
+            let (_, cond) = apply(token);
+            let cond = cond.unwrap_or_else(|| panic!("{token} attaches a dynamic condition"));
+            // The argument is a percentage threshold, not an equality value.
+            assert!(cond.eval(&RandomLot(0)), "{token} fires on the lowest lot");
+            assert!(cond.eval(&RandomLot(59)), "{token} fires below 60");
+            assert!(!cond.eval(&RandomLot(60)), "{token} misses the lot of 60");
+            assert!(!cond.eval(&RandomLot(99)), "{token} misses a high lot");
+        }
+    }
+
+    #[test]
+    fn lane_type_splits_the_course_width_in_half() {
+        // The test course is 30 m wide, so the inner rail side ends at 15 m.
+        let (_, inner) = apply("lane_type==0");
+        let inner = inner.expect("lane_type attaches a dynamic condition");
+        assert!(inner.eval(&CurrentLane(0.0)));
+        assert!(inner.eval(&CurrentLane(15.0)));
+        assert!(!inner.eval(&CurrentLane(15.5)));
+
+        let (_, outer) = apply("lane_type==1");
+        let outer = outer.expect("lane_type==1 attaches a dynamic condition");
+        assert!(!outer.eval(&CurrentLane(2.0)));
+        assert!(outer.eval(&CurrentLane(20.0)));
+    }
+
+    #[test]
+    fn is_goodstart_is_the_complement_of_is_badstart() {
+        let (_, good) = apply("is_goodstart==1");
+        let good = good.expect("is_goodstart attaches a dynamic condition");
+        assert!(good.eval(&StartDelay(0.0)));
+        // The threshold itself is a good start: `is_badstart` only calls the
+        // delay late when it is strictly above it.
+        assert!(good.eval(&StartDelay(LATE_START_DELAY_SECONDS)));
+        assert!(!good.eval(&StartDelay(0.09)));
+
+        let (_, late) = apply("is_goodstart==0");
+        let late = late.expect("is_goodstart==0 attaches a dynamic condition");
+        assert!(!late.eval(&StartDelay(0.05)));
+        assert!(late.eval(&StartDelay(0.09)));
     }
 
     #[test]

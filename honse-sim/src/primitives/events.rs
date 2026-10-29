@@ -223,6 +223,13 @@ pub trait RunnerObservation {
     fn rushed_activations(&self) -> Vec<(f64, f64)> {
         Vec::new()
     }
+    /// Position-keep regions this round as `(start, end, state)`, where `state`
+    /// is the `PositionKeepState` discriminant (1 pace up, 2 pace down,
+    /// 3 speed up, 4 overtake, 5 pace up ex). A region still open when the
+    /// runner finishes carries `end == 0.0`; the reader closes it.
+    fn position_keep_activations(&self) -> Vec<(f64, f64, i64)> {
+        Vec::new()
+    }
     /// Dueling start position (`-1.0` when never dueled).
     fn dueling_start_position(&self) -> f64 {
         -1.0

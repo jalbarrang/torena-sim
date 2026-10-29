@@ -19,11 +19,13 @@ use crate::shared_kernel::language::Strategy;
 use crate::shared_kernel::math::Timer;
 use crate::shared_kernel::params::{RaceParameters, StatLine};
 use crate::shared_kernel::region::{Region, RegionList};
+use crate::shared_kernel::rng::Xoshiro256StarStar;
 use crate::skills::activation::ActivationSamplePolicy;
 use crate::skills::condition::dynamic::{
     eval_dynamic, ActiveRunner, DynamicCondition, RunnerSnapshot as DynRunnerSnapshot, RunnerView,
 };
 use crate::skills::condition::language::ConditionParser;
+use crate::skills::condition::order::CONTINUE_GRACE_PERIOD_SECONDS;
 use crate::skills::condition::{ApplyParams, ConditionResolution, SkillEvalRunner};
 use crate::skills::debuff::{get_external_debuff_effects, is_emittable_external_effect};
 use crate::skills::effect::{SkillRarity, SkillType};
@@ -46,6 +48,8 @@ pub struct FieldView {
     pub num_umas: i64,
     /// The leader's position in meters, if known.
     pub leader_position: Option<f64>,
+    /// The rearmost active runner's position in meters, if known.
+    pub last_position: Option<f64>,
     /// Snapshots of every *other* active runner.
     pub other_snapshots: Vec<DynRunnerSnapshot>,
     /// Live state of every active runner (including self).
@@ -98,7 +102,7 @@ impl RunnerView for RunnerConditionView<'_> {
         self.runner.health_policy.has_remaining_health()
     }
     fn has_used_skill(&self, skill_id: &str) -> bool {
-        self.runner.used_skills.contains(skill_id)
+        self.runner.used_skills.iter().any(|s| s == skill_id)
     }
     fn start_delay(&self) -> f64 {
         self.runner.start_delay
@@ -154,17 +158,26 @@ impl RunnerView for RunnerConditionView<'_> {
     fn previous_order(&self) -> Option<i64> {
         self.field.self_previous_order
     }
+    fn order_min_since_grace(&self) -> Option<i64> {
+        self.runner.order_min_since_grace
+    }
+    fn order_max_since_grace(&self) -> Option<i64> {
+        self.runner.order_max_since_grace
+    }
     fn num_umas(&self) -> i64 {
         self.field.num_umas
     }
     fn leader_position(&self) -> Option<f64> {
         self.field.leader_position
     }
-    fn other_snapshots(&self) -> Vec<DynRunnerSnapshot> {
-        self.field.other_snapshots.clone()
+    fn last_position(&self) -> Option<f64> {
+        self.field.last_position
     }
-    fn active_runners(&self) -> Vec<ActiveRunner> {
-        self.field.active_runners.clone()
+    fn other_snapshots(&self) -> &[DynRunnerSnapshot] {
+        &self.field.other_snapshots
+    }
+    fn active_runners(&self) -> &[ActiveRunner] {
+        &self.field.active_runners
     }
 }
 
@@ -257,17 +270,22 @@ pub fn build_skill_data(params: &BuildSkillDataParams<'_>) -> Vec<SkillTrigger> 
             continue;
         }
 
-        let effects = build_skill_effects(alt);
+        let effects = build_skill_effects(alt, skill.level);
         if !effects.is_empty() || params.ignore_null_effects {
             triggers.push(SkillTrigger {
                 skill_id: skill.skill_id.clone(),
                 rarity: skill.rarity,
                 tags: skill.tags.clone(),
+                activate_lot: skill.activate_lot,
                 sample_policy: parsed_op.sample_policy(),
                 regions,
                 effects,
                 extra_condition,
                 target_strategy: derive_target_strategy(&alt.condition),
+                cooldown: alt
+                    .cooldown_time
+                    .filter(|cooldown| *cooldown > 0.0)
+                    .map(|c| c / 10000.0),
             });
         }
     }
@@ -281,7 +299,7 @@ pub fn build_skill_data(params: &BuildSkillDataParams<'_>) -> Vec<SkillTrigger> 
     let Some(first) = skill.alternatives.first() else {
         return Vec::new();
     };
-    let effects = build_skill_effects(first);
+    let effects = build_skill_effects(first, skill.level);
     if effects.is_empty() && !params.ignore_null_effects {
         return Vec::new();
     }
@@ -291,11 +309,16 @@ pub fn build_skill_data(params: &BuildSkillDataParams<'_>) -> Vec<SkillTrigger> 
         skill_id: skill.skill_id.clone(),
         rarity: skill.rarity,
         tags: skill.tags.clone(),
+        activate_lot: skill.activate_lot,
         sample_policy: ActivationSamplePolicy::Immediate,
         regions: after_end,
         effects,
         extra_condition: Some(DynamicCondition::new(|_| false)),
         target_strategy: None,
+        cooldown: first
+            .cooldown_time
+            .filter(|cooldown| *cooldown > 0.0)
+            .map(|c| c / 10000.0),
     }]
 }
 
@@ -335,6 +358,17 @@ fn derive_target_strategy(condition: &str) -> Option<Strategy> {
     }
 }
 
+/// Stable per-(runner, skill) seed for compare-only placement isolation: the
+/// same skill keeps its window when the rest of the build changes.
+fn skill_isolation_seed(runner_seed: u32, skill_id: &str) -> u32 {
+    let mut hash = 2_166_136_261u32 ^ runner_seed;
+    for byte in skill_id.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(16_777_619);
+    }
+    hash
+}
+
 impl Runner {
     /// Reset and rebuild the skill-tracking state for a fresh round.
     ///
@@ -363,56 +397,102 @@ impl Runner {
         self.pending_skill_removal.clear();
         self.pending_skills.clear();
         self.pending_targeted_skills.clear();
+        self.skill_cooldown_until.clear();
+        self.skill_wit_passes.clear();
 
         let eval_runner = self.skill_eval_runner();
         let skills = std::mem::take(&mut self.skills);
+
+        // Parse skill conditions once per runner, not once per round. The
+        // trigger data depends only on the (round-invariant) eval runner and the
+        // static race context, so rebuilding it every round was pure overhead
+        // that scaled with the runner's skill count.
+        if self.compiled_skill_triggers.is_none() {
+            let mut triggers = Vec::new();
+            for skill in &skills {
+                triggers.extend(build_skill_data(&BuildSkillDataParams {
+                    runner: &eval_runner,
+                    race_params: ctx.race_params,
+                    course: ctx.course,
+                    whole_course: ctx.whole_course,
+                    parser: ctx.parser,
+                    skill,
+                    ignore_null_effects: false,
+                    resolution: ctx.condition_resolution,
+                }));
+            }
+            self.compiled_skill_triggers = Some(triggers);
+        }
+
         let mut pending: Vec<PendingSkill> = Vec::new();
         let mut forced_bypass_granted: std::collections::HashSet<String> =
             std::collections::HashSet::new();
-        for skill in &skills {
-            let triggers = build_skill_data(&BuildSkillDataParams {
-                runner: &eval_runner,
-                race_params: ctx.race_params,
-                course: ctx.course,
-                whole_course: ctx.whole_course,
-                parser: ctx.parser,
-                skill,
-                ignore_null_effects: false,
-                resolution: ctx.condition_resolution,
-            });
-            for trigger in triggers {
-                let base = trigger.skill_id.base().to_owned();
-                let forced_pos = self.forced_positions.get(&base).copied();
-                // A forced skill activates unconditionally at its position:
-                // only the first alternative's trigger gets the bypass so
-                // mutually exclusive alternatives cannot both fire there.
-                let forced = forced_pos.is_some() && forced_bypass_granted.insert(base);
-                let policy = match forced_pos {
-                    Some(pos) => ActivationSamplePolicy::Fixed(pos),
-                    None => trigger.sample_policy,
-                };
-                let samples =
-                    policy.sample(&trigger.regions, ctx.skill_samples, &mut *self.skill_rng);
-                if samples.is_empty() {
+        // Take the cache out so the loop can borrow `self` mutably for the RNG.
+        let compiled_triggers = self
+            .compiled_skill_triggers
+            .take()
+            .expect("compiled just above");
+        for trigger in &compiled_triggers {
+            let base = trigger.skill_id.base().to_owned();
+            let forced_pos = self.forced_positions.get(&base).copied();
+            // A forced skill activates unconditionally at its position:
+            // only the first alternative's trigger gets the bypass so
+            // mutually exclusive alternatives cannot both fire there.
+            let forced = forced_pos.is_some() && forced_bypass_granted.insert(base);
+            let policy = match forced_pos {
+                Some(pos) => ActivationSamplePolicy::Fixed(pos),
+                None => trigger.sample_policy,
+            };
+            let realizations = if self.isolate_skill_rng {
+                // Advance the shared stream exactly as the default path does:
+                // runtime consumers (MultiplyRandom value scaling, forced gold
+                // activation) read it, so only the *chosen* window may move.
+                let _ = policy.sample(&trigger.regions, ctx.skill_samples, &mut *self.skill_rng);
+                let mut isolated = Xoshiro256StarStar::from_u32_seed(skill_isolation_seed(
+                    self.runner_seed,
+                    trigger.skill_id.as_str(),
+                ));
+                policy.sample(&trigger.regions, ctx.skill_samples, &mut isolated)
+            } else {
+                policy.sample(&trigger.regions, ctx.skill_samples, &mut *self.skill_rng)
+            };
+            if realizations.is_empty() {
+                continue;
+            }
+            let windows = &realizations[ctx.round_iteration % realizations.len()];
+            // A skill without a cooldown activates once per race: the extra
+            // `all_corner_random` triggers exist so a *cooldown* skill can
+            // re-arm at a later corner (mechanics § all_corner_random), not so a
+            // one-shot skill can fire at every one of them.
+            let one_shot = trigger.cooldown.is_none();
+            let mut armed = false;
+            for &trigger_region in windows {
+                if !trigger_region.is_valid() {
                     continue;
                 }
-                let trigger_region = samples[ctx.round_iteration % samples.len()];
+                if one_shot && armed {
+                    break;
+                }
+                armed = true;
                 pending.push(PendingSkill {
-                    skill_id: trigger.skill_id,
+                    skill_id: trigger.skill_id.clone(),
                     rarity: trigger.rarity,
-                    tags: trigger.tags,
+                    tags: trigger.tags.clone(),
+                    activate_lot: trigger.activate_lot,
                     trigger: trigger_region,
-                    effects: trigger.effects,
+                    effects: trigger.effects.clone(),
                     extra_condition: if forced {
                         None
                     } else {
-                        trigger.extra_condition
+                        trigger.extra_condition.clone()
                     },
                     target_strategy: trigger.target_strategy,
                     forced,
+                    cooldown: trigger.cooldown,
                 });
             }
         }
+        self.compiled_skill_triggers = Some(compiled_triggers);
 
         // A forced skill whose static conditions produced no trigger on this
         // course/run must still fire: the user scripted "this skill activates
@@ -427,7 +507,7 @@ impl Runner {
                 continue;
             }
             for alt in &skill.alternatives {
-                let effects = build_skill_effects(alt);
+                let effects = build_skill_effects(alt, skill.level);
                 if effects.is_empty() {
                     continue;
                 }
@@ -436,11 +516,16 @@ impl Runner {
                     skill_id: skill.skill_id.clone(),
                     rarity: skill.rarity,
                     tags: skill.tags.clone(),
+                    activate_lot: skill.activate_lot,
                     trigger: Region::new(pos, pos + 10.0),
                     effects,
                     extra_condition: None,
                     target_strategy: derive_target_strategy(&alt.condition),
                     forced: true,
+                    cooldown: alt
+                        .cooldown_time
+                        .filter(|cooldown| *cooldown > 0.0)
+                        .map(|c| c / 10000.0),
                 });
                 break;
             }
@@ -484,19 +569,24 @@ impl Runner {
                     continue;
                 }
                 let policy = ActivationSamplePolicy::Fixed(debuff.position);
-                let samples =
+                let realizations =
                     policy.sample(&trigger.regions, ctx.skill_samples, &mut *self.skill_rng);
-                if samples.is_empty() {
+                if realizations.is_empty() {
                     continue;
                 }
-                let trigger_region = samples[ctx.round_iteration % samples.len()];
-                self.pending_targeted_skills.push(PendingTargetedSkill {
-                    skill_id: trigger.skill_id,
-                    origin: TargetedSkillOrigin::Injection,
-                    source_runner_id: None,
-                    trigger: trigger_region,
-                    effects: external,
-                });
+                let windows = &realizations[ctx.round_iteration % realizations.len()];
+                for &trigger_region in windows {
+                    if !trigger_region.is_valid() {
+                        continue;
+                    }
+                    self.pending_targeted_skills.push(PendingTargetedSkill {
+                        skill_id: trigger.skill_id.clone(),
+                        origin: TargetedSkillOrigin::Injection,
+                        source_runner_id: None,
+                        trigger: trigger_region,
+                        effects: external.clone(),
+                    });
+                }
             }
         }
         self.injected_debuffs = debuffs;
@@ -517,6 +607,35 @@ impl Runner {
         }
     }
 
+    /// Fold this tick's finishing order into the `*_continue` band history.
+    ///
+    /// `order_rate_inXX_continue` / `order_rate_outXX_continue` require a band to
+    /// have held for the whole race, not just at the activating tick (mechanics
+    /// § order_rate). The first 5 seconds are ignored, so recording starts with
+    /// the first tick past the grace period; from then on the runner keeps the
+    /// lowest and highest order it has held.
+    ///
+    /// Called from [`on_update`](Runner::on_update) before the start-delay gate,
+    /// so the band is sampled on race time: a runner held at the gate still
+    /// records from the 5-second mark instead of starting late.
+    pub(crate) fn observe_order_history(&mut self, order: Option<i64>) {
+        if self.accumulate_time.t <= CONTINUE_GRACE_PERIOD_SECONDS {
+            return;
+        }
+        let Some(order) = order else {
+            return;
+        };
+
+        self.order_min_since_grace = Some(
+            self.order_min_since_grace
+                .map_or(order, |min| min.min(order)),
+        );
+        self.order_max_since_grace = Some(
+            self.order_max_since_grace
+                .map_or(order, |max| max.max(order)),
+        );
+    }
+
     /// Activate green (gate) skills at the start of the round.
     pub(crate) fn activate_gate_skills(&mut self, course_distance: f64) {
         let field = FieldView::at_gate();
@@ -533,26 +652,77 @@ impl Runner {
             if i >= self.pending_skills.len() {
                 continue;
             }
-            let (trigger, skill_id, forced) = {
-                let s = &self.pending_skills[i];
-                (s.trigger, s.skill_id.0.clone(), s.forced)
-            };
 
-            if self.position >= trigger.end || self.pending_skill_removal.contains(&skill_id) {
+            // Expiry + explicit removal, checked by borrowing the id rather than
+            // cloning it. This runs for every pending skill every tick, so the
+            // old `skill_id.0.clone()` was the hottest allocation in the sim.
+            let expired = self.position >= self.pending_skills[i].trigger.end;
+            let removed = !self.pending_skill_removal.is_empty()
+                && self
+                    .pending_skill_removal
+                    .contains(&self.pending_skills[i].skill_id.0);
+            if expired || removed {
                 self.pending_skills.remove(i);
-                self.pending_skill_removal.remove(&skill_id);
                 continue;
             }
 
-            if self.position >= trigger.start && (forced || self.pending_extra_passes(i, field)) {
-                let skip = forced || self.should_skip_wit_check_at(i);
-                if skip || self.do_wit_check() {
-                    let skill = self.pending_skills[i].clone();
-                    self.activate_skill(&skill, course_distance);
-                }
+            if self.position < self.pending_skills[i].trigger.start {
+                continue;
+            }
+
+            let forced = self.pending_skills[i].forced;
+            let base = self.pending_skills[i].skill_id.base().to_owned();
+            let off_cooldown = forced
+                || self
+                    .skill_cooldown_until
+                    .get(&base)
+                    .copied()
+                    .unwrap_or(f64::NEG_INFINITY)
+                    <= self.accumulate_time.t;
+
+            // Do not evaluate a dynamic condition while its skill remains on
+            // cooldown. Only clone the pending entry once it actually qualifies,
+            // instead of for every in-window skill every tick.
+            if !forced && !(off_cooldown && self.pending_extra_passes(i, field)) {
+                continue;
+            }
+
+            let skill = self.pending_skills[i].clone();
+            if off_cooldown && self.wit_gate(&skill, &base) {
+                self.activate_skill(&skill, course_distance);
+            }
+
+            // A cooldown skill stays armed while its sampled region remains
+            // valid. A short random window expires on the next tick, while a
+            // dynamic region can reach a later window.
+            let keep_armed = !forced
+                && skill.cooldown.is_some()
+                && !self.pending_skill_removal.contains(&skill.skill_id.0);
+            if !keep_armed {
                 self.pending_skills.remove(i);
             }
         }
+    }
+
+    /// One Wit eligibility roll per skill, cached across its trigger windows.
+    ///
+    /// The game checks activation chance before the race, so a skill either can
+    /// activate for the whole race or not at all. The roll is taken lazily at
+    /// the first qualifying window (which keeps the RNG stream identical to the
+    /// previous single-window behavior for one-shot skills) and every later
+    /// window of the same skill reuses the result instead of drawing again.
+    fn wit_gate(&mut self, skill: &PendingSkill, base: &str) -> bool {
+        // Forced activations fire unconditionally, bypassing the Wit roll —
+        // the same contract as injected debuffs.
+        if skill.forced {
+            return true;
+        }
+        if let Some(&passed) = self.skill_wit_passes.get(base) {
+            return passed;
+        }
+        let passed = self.should_skip_wit_check(skill) || self.do_wit_check();
+        self.skill_wit_passes.insert(base.to_owned(), passed);
+        passed
     }
 
     fn cleanup_expired_self_skills(&mut self) {
@@ -594,14 +764,19 @@ impl Runner {
         eval_dynamic(&skill.extra_condition, &view)
     }
 
-    fn should_skip_wit_check_at(&self, idx: usize) -> bool {
-        self.should_skip_wit_check(&self.pending_skills[idx])
-    }
-
     fn should_skip_wit_check(&self, skill: &PendingSkill) -> bool {
         if !self.wit_checks_enabled {
             return true;
         }
+        // Master data is authoritative when present: `activate_lot == 0` means
+        // the skill is guaranteed eligible, `1` means it rolls.
+        match skill.activate_lot {
+            Some(0) => return true,
+            Some(_) => return false,
+            None => {}
+        }
+        // Legacy heuristic for skills master.mdb does not describe (GameTora-only
+        // / unreleased): green stat-ups and uniques never roll.
         if let Some(first) = skill.effects.first() {
             let type_id = first.effect_type as i32;
             if (1..=6).contains(&type_id) {
@@ -685,14 +860,23 @@ impl Runner {
                 1.0
             };
             let scaled_duration = resolved.base_duration * (course_distance / 1000.0) * scaling;
-            self.apply_self_effect(skill, &resolved, scaled_duration);
+            self.apply_self_effect(skill, &resolved, scaled_duration, course_distance);
         }
 
         let half_race = usize::from(self.position >= course_distance / 2.0);
         self.skills_activated_half_race_map[half_race] += 1;
         self.skills_activated_phase_map[self.phase.index()] += 1;
         self.skills_activated_count += 1;
-        self.used_skills.insert(skill.skill_id.0.clone());
+        // Every activation appends, so a cooldown skill's second proc shows up
+        // in the activation log (and in collectors) as its own entry.
+        self.used_skills.push(skill.skill_id.0.clone());
+        // Arm the cooldown gate: the next trigger window of this skill cannot
+        // activate until the scaled cooldown has elapsed on the race clock.
+        if let Some(cooldown) = skill.cooldown {
+            let scaled = cooldown * (course_distance / 1000.0);
+            self.skill_cooldown_until
+                .insert(base_skill_id.clone(), self.accumulate_time.t + scaled);
+        }
         // Record only after a successful activation so caster-context scaling
         // (usage 14) counts greens that actually fired this round.
         self.activated_ledger.record(&base_skill_id, &skill.tags);
@@ -703,6 +887,7 @@ impl Runner {
         skill: &PendingSkill,
         effect: &ResolvedSkillEffect,
         duration: f64,
+        course_distance: f64,
     ) {
         match effect.effect_type {
             SkillType::Noop => {}
@@ -716,6 +901,9 @@ impl Runner {
             }
             SkillType::PowerUp => {
                 self.adjusted_stats.power = (self.adjusted_stats.power + effect.modifier).max(1.0);
+                // Charge Up reads its own Power stat, which excludes the ground
+                // penalty baked into `adjusted_stats` (mechanics § Charge Up).
+                self.power_skill_modifier += effect.modifier;
             }
             SkillType::GutsUp => {
                 self.adjusted_stats.guts = (self.adjusted_stats.guts + effect.modifier).max(1.0);
@@ -762,7 +950,11 @@ impl Runner {
                 }
             }
             SkillType::ActivateRandomGold => {
-                self.activate_random_gold_skill(effect.modifier as usize, duration);
+                // `modifier` is already divided by 10000 when the effect is
+                // classified, so 564 Escapades' 10000 is 1 rare skill here and
+                // its unique's 20000 is 2. Each skill it activates starts at
+                // this race's course distance, not this effect's duration.
+                self.activate_random_gold_skill(effect.modifier as usize, course_distance);
             }
             SkillType::ExtendEvolvedDuration => {
                 self.modifiers.special_skill_duration_scaling = effect.modifier;
@@ -775,15 +967,20 @@ impl Runner {
     }
 
     fn activate_random_gold_skill(&mut self, count: usize, course_distance: f64) {
+        let mut seen_bases = std::collections::HashSet::new();
         let mut gold_indices: Vec<usize> = self
             .pending_skills
             .iter()
             .enumerate()
-            .filter(|(_, skill)| {
+            .filter_map(|(idx, skill)| {
                 let gold = matches!(skill.rarity, SkillRarity::Gold | SkillRarity::Evolution);
-                gold && skill.effects.iter().all(|e| (e.effect_type as i32) > 5)
+                let eligible = gold && skill.effects.iter().all(|e| (e.effect_type as i32) > 5);
+                if eligible && seen_bases.insert(skill.skill_id.base().to_owned()) {
+                    Some(idx)
+                } else {
+                    None
+                }
             })
-            .map(|(idx, _)| idx)
             .collect();
 
         let mut i = gold_indices.len();
@@ -901,13 +1098,20 @@ impl Runner {
     ) {
         match effect.effect_type {
             SkillType::Noop | SkillType::ChangeStrategy | SkillType::RushedChance => {}
-            // Frenzied family: worsen a rushed opponent by extending its
-            // remaining rushed duration (modifier is +5.0s, already scaled).
-            // Only meaningful while the target is currently rushed; the 12s
-            // cap-based exit is delayed by the added time.
+            // Frenzied family: worsen a rushed opponent by **overwriting** its
+            // rushed timer to the debuff's fixed window (modifier is 5.0s,
+            // already scaled). Only meaningful while the target is currently
+            // rushed — there is no timer to overwrite otherwise.
+            //
+            // Not an extension and not stackable: the window restarts at the
+            // debuff's value each time, which can shorten a spell that had more
+            // budget left. `rushed_timer_locked` then suppresses the 3-second
+            // snap-out roll, so nothing but the window ends the spell.
             SkillType::RushedDuration => {
                 if self.is_rushed {
-                    self.rushed_max_duration += effect.modifier;
+                    self.rushed_timer.t = 0.0;
+                    self.rushed_max_duration = effect.modifier.max(0.0);
+                    self.rushed_timer_locked = true;
                 }
             }
             SkillType::SpeedUp => {
@@ -920,6 +1124,8 @@ impl Runner {
             }
             SkillType::PowerUp => {
                 self.adjusted_stats.power = (self.adjusted_stats.power + effect.modifier).max(1.0);
+                // An injected power buff changes this runner's Charge Up stat too.
+                self.power_skill_modifier += effect.modifier;
             }
             SkillType::GutsUp => {
                 self.adjusted_stats.guts = (self.adjusted_stats.guts + effect.modifier).max(1.0);
@@ -1097,6 +1303,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -1120,6 +1328,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: -10000.0,
                 cooldown_time: None,
@@ -1152,6 +1362,8 @@ mod tests {
             skill_id: SkillId::new("202051"),
             rarity: SkillRarity::Gold,
             tags: vec![101, 612],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: -1.0,
                 cooldown_time: Some(0.0),
@@ -1189,6 +1401,24 @@ mod tests {
     }
 
     #[test]
+    fn build_skill_data_folds_skill_level_into_flagged_effects() {
+        let mut leveled = target_speed_skill("100011", SkillRarity::Unique, "phase>=1");
+        leveled.alternatives[0].effects[0].value_level_usage = Some(1);
+
+        let at_level_one = build(&leveled);
+        assert_eq!(at_level_one[0].effects[0].modifier, 0.45);
+
+        leveled.level = 6;
+        let at_level_six = build(&leveled);
+        assert!((at_level_six[0].effects[0].modifier - 0.45 * 1.13).abs() < 1e-12);
+
+        // An effect without the level flag keeps its stored value at any level.
+        let mut unflagged = target_speed_skill("100012", SkillRarity::Unique, "phase>=1");
+        unflagged.level = 6;
+        assert_eq!(build(&unflagged)[0].effects[0].modifier, 0.45);
+    }
+
+    #[test]
     fn build_skill_data_produces_trigger_for_phase_condition() {
         let skill = target_speed_skill("100001", SkillRarity::Gold, "phase>=2");
         let triggers = build(&skill);
@@ -1196,6 +1426,79 @@ mod tests {
         assert!(!triggers[0].regions.0.is_empty());
         assert_eq!(triggers[0].effects[0].effect_type, SkillType::TargetSpeed);
         assert!(triggers[0].regions.0[0].start >= 1200.0);
+    }
+
+    #[test]
+    fn build_skill_data_picks_the_popularity_branch_the_rank_belongs_to() {
+        // Seirios-shaped: the first alternative adds a popularity gate, the
+        // second is the unconditional fallback. A supplied rank has to choose
+        // between them, under the vacuum (static) resolution too, which is what
+        // a compare mode's assumed popularity uses.
+        fn popularity_split_skill() -> Skill {
+            let alternative = |condition: &str, modifier: f64| SkillAlternative {
+                base_duration: 40000.0,
+                cooldown_time: None,
+                condition: condition.to_owned(),
+                precondition: None,
+                effects: vec![RawSkillEffect {
+                    modifier,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 31, // Acceleration
+                    value_usage: None,
+                    value_level_usage: None,
+                    pre_applied_multiplier: None,
+                }],
+            };
+
+            Skill {
+                skill_id: SkillId::new("100701"),
+                rarity: SkillRarity::Unique,
+                tags: vec![],
+                activate_lot: None,
+                level: 1,
+                alternatives: vec![
+                    alternative("phase>=1&popularity<=3", 5000.0),
+                    alternative("phase>=1", 2000.0),
+                ],
+            }
+        }
+
+        fn build_at(popularity: i64, resolution: ConditionResolution) -> Vec<SkillTrigger> {
+            let course = test_course();
+            let catalog = build_catalog();
+            let parser = ConditionParser::new(&catalog);
+            let rp = test_race_params();
+            let wc = test_whole_course(&course);
+            let mut eval = eval_runner();
+            eval.popularity = popularity;
+            build_skill_data(&BuildSkillDataParams {
+                runner: &eval,
+                race_params: &rp,
+                course: &course,
+                whole_course: &wc,
+                parser: &parser,
+                skill: &popularity_split_skill(),
+                ignore_null_effects: false,
+                resolution,
+            })
+        }
+
+        for resolution in [ConditionResolution::Dynamic, ConditionResolution::Static] {
+            let favourite = build_at(1, resolution);
+            assert_eq!(favourite.len(), 1, "one branch only ({resolution:?})");
+            assert_eq!(favourite[0].effects[0].modifier, 0.5);
+
+            let long_shot = build_at(9, resolution);
+            assert_eq!(long_shot.len(), 1, "one branch only ({resolution:?})");
+            assert_eq!(long_shot[0].effects[0].modifier, 0.2);
+
+            // An unknown rank satisfies every gate, so the first branch listed
+            // wins. That is the pre-knob behaviour, kept for callers that send
+            // none.
+            let unknown = build_at(0, resolution);
+            assert_eq!(unknown.len(), 1);
+            assert_eq!(unknown[0].effects[0].modifier, 0.5);
+        }
     }
 
     #[test]
@@ -1312,6 +1615,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
             tags,
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: -10000.0,
                 cooldown_time: Some(0.0),
@@ -1334,6 +1639,8 @@ mod tests {
                 skill_id: SkillId::new("100981"),
                 rarity: SkillRarity::Unique,
                 tags: vec![401, 403],
+                activate_lot: None,
+                level: 1,
                 alternatives: vec![SkillAlternative {
                     base_duration: 50000.0,
                     cooldown_time: None,
@@ -1372,6 +1679,8 @@ mod tests {
                 skill_id: SkillId::new("201532"),
                 rarity: SkillRarity::White,
                 tags: vec![102, 405, 612],
+                activate_lot: None,
+                level: 1,
                 alternatives: vec![SkillAlternative {
                     base_duration: -10000.0,
                     cooldown_time: Some(0.0),
@@ -1416,6 +1725,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
             tags,
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: -10000.0,
                 cooldown_time: Some(0.0),
@@ -1554,7 +1865,7 @@ mod tests {
         );
 
         proc_luck_runs_my_way(&mut uma1);
-        assert!(uma1.used_skills.contains("100981"), "100981 must proc");
+        assert!(uma1.has_used_skill("100981"), "100981 must proc");
 
         // Uma 2: only 100981 -> no greens -> tier 0x baseline.
         let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
@@ -1563,7 +1874,7 @@ mod tests {
             .expect("100981 is the first skill")]);
         assert_eq!(uma2.activated_ledger.activated_green_count(), 0);
         proc_luck_runs_my_way(&mut uma2);
-        assert!(uma2.used_skills.contains("100981"));
+        assert!(uma2.has_used_skill("100981"));
 
         // Target speed carries no start-dash term, so absolute values are clean:
         // green count 3 -> tier 1x adds the usage-14 0.05 on top of the shared
@@ -1605,7 +1916,7 @@ mod tests {
             "all six greens must activate"
         );
         proc_luck_runs_my_way(&mut uma1);
-        assert!(uma1.used_skills.contains("100981"));
+        assert!(uma1.has_used_skill("100981"));
 
         // No-green baseline.
         let mut uma2 = copano_on_dirtgrade(vec![copano_rickey_full_skills()
@@ -1647,6 +1958,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::White,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 30000.0,
                 cooldown_time: None,
@@ -1662,6 +1975,41 @@ mod tests {
                 }],
             }],
         }
+    }
+
+    #[test]
+    fn order_history_starts_after_the_continue_grace_period() {
+        let mut r = runner_with_skills(vec![]);
+        prepare(&mut r);
+
+        // Inside the grace period nothing is recorded, whatever the order.
+        r.accumulate_time = Timer::new(4.0);
+        r.observe_order_history(Some(9));
+        assert_eq!(r.order_min_since_grace, None);
+        assert_eq!(r.order_max_since_grace, None);
+
+        // Past it, every tick folds into the band.
+        r.accumulate_time = Timer::new(6.0);
+        r.observe_order_history(Some(9));
+        r.observe_order_history(Some(3));
+        r.observe_order_history(Some(5));
+        assert_eq!(r.order_min_since_grace, Some(3));
+        assert_eq!(r.order_max_since_grace, Some(9));
+    }
+
+    #[test]
+    fn order_history_resets_between_rounds() {
+        let mut r = runner_with_skills(vec![]);
+        prepare(&mut r);
+        r.accumulate_time = Timer::new(6.0);
+        r.observe_order_history(Some(7));
+        assert_eq!(r.order_min_since_grace, Some(7));
+        assert_eq!(r.order_max_since_grace, Some(7));
+
+        prepare(&mut r); // next round of the same aggregate
+
+        assert_eq!(r.order_min_since_grace, None);
+        assert_eq!(r.order_max_since_grace, None);
     }
 
     #[test]
@@ -1715,7 +2063,7 @@ mod tests {
         assert_eq!(r.target_speed_skills_active.len(), 1);
         assert!(r.modifiers.target_speed.total() > 0.0);
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("100001"));
+        assert!(r.has_used_skill("100001"));
         assert!(r.pending_skills.is_empty());
     }
 
@@ -1744,7 +2092,7 @@ mod tests {
         r.position = 1000.5;
         r.process_skill_activations(&FieldView::at_gate(), 2400.0);
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("100001"));
+        assert!(r.has_used_skill("100001"));
     }
 
     #[test]
@@ -1769,7 +2117,7 @@ mod tests {
         r.position = 1200.5;
         r.process_skill_activations(&FieldView::at_gate(), 2400.0);
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("100002"));
+        assert!(r.has_used_skill("100002"));
         assert!((r.modifiers.target_speed.total() - 0.45).abs() < 1e-9);
     }
 
@@ -1795,7 +2143,7 @@ mod tests {
         r.position = 800.5;
         r.process_skill_activations(&FieldView::at_gate(), 2400.0);
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("100003"));
+        assert!(r.has_used_skill("100003"));
     }
 
     #[test]
@@ -1839,6 +2187,8 @@ mod tests {
             skill_id: SkillId::new(id),
             rarity: SkillRarity::Gold,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 18000.0,
                 cooldown_time: None,
@@ -1885,7 +2235,7 @@ mod tests {
         assert!((r.modifiers.current_speed.total()).abs() < 1e-9);
         // The skill still counts as activated.
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("202131"));
+        assert!(r.has_used_skill("202131"));
     }
 
     #[test]
@@ -1894,6 +2244,8 @@ mod tests {
             skill_id: SkillId::new("300001"),
             rarity: SkillRarity::White,
             tags: vec![],
+            activate_lot: None,
+            level: 1,
             alternatives: vec![SkillAlternative {
                 base_duration: 0.0,
                 cooldown_time: None,
@@ -1965,6 +2317,32 @@ mod tests {
     }
 
     #[test]
+    fn activate_lot_overrides_the_effect_type_heuristic() {
+        // activate_lot == 1 forces a green stat-up to roll even though the legacy
+        // heuristic (effect types 1..=6) would skip it.
+        let mut rolls = target_speed_skill("200491", SkillRarity::White, "phase>=1");
+        rolls.alternatives[0].effects[0].effect_type = 5; // Wisdom Up (green)
+        rolls.activate_lot = Some(1);
+
+        // activate_lot == 0 makes a target-speed skill guaranteed, where the
+        // legacy heuristic would have rolled for it.
+        let mut guaranteed = target_speed_skill("200492", SkillRarity::White, "phase>=1");
+        guaranteed.activate_lot = Some(0);
+
+        let mut r = runner_with_skills(vec![rolls, guaranteed]);
+        prepare(&mut r);
+
+        let pending = |id: &str| {
+            r.pending_skills
+                .iter()
+                .find(|skill| skill.skill_id.0 == id)
+                .expect("pending skill")
+        };
+        assert!(!r.should_skip_wit_check(pending("200491")));
+        assert!(r.should_skip_wit_check(pending("200492")));
+    }
+
+    #[test]
     fn runaway_activates_at_gate_and_promotes_only_position_keep_strategy() {
         let mut r = runner_with_skills(vec![runaway_skill("running_style==1")]);
         r.strategy = Strategy::FrontRunner;
@@ -1979,7 +2357,7 @@ mod tests {
         );
         assert_eq!(r.position_keep_strategy, Strategy::Runaway);
         assert_eq!(r.skills_activated_count, 1);
-        assert!(r.used_skills.contains("202051"));
+        assert!(r.has_used_skill("202051"));
     }
 
     #[test]
@@ -2014,7 +2392,7 @@ mod tests {
             r.skills_activated_count, 1,
             "Savvy must fire, not be dropped"
         );
-        assert!(r.used_skills.contains("201531"));
+        assert!(r.has_used_skill("201531"));
         assert_eq!(
             r.adjusted_stats.wit,
             wit_before + 60.0,
@@ -2060,5 +2438,343 @@ mod tests {
         r.process_skill_activations(&field, 2400.0);
         assert!(r.target_speed_skills_active.is_empty());
         assert!(r.modifiers.target_speed.total().abs() < 1e-9);
+    }
+
+    /// A manually-armed pending trigger for a cooldown skill, shaped like
+    /// See Ya Later! / Professor of Curvature (30s base cooldown).
+    fn cooldown_window(start: f64) -> PendingSkill {
+        PendingSkill {
+            skill_id: SkillId::new("201662"),
+            rarity: SkillRarity::Gold,
+            tags: vec![],
+            activate_lot: None,
+            trigger: Region::new(start, start + 10.0),
+            effects: vec![SkillEffectSpec {
+                target: SkillTarget::SelfTarget,
+                effect_type: SkillType::TargetSpeed,
+                base_duration: 3.0,
+                modifier: 0.35,
+                value_scaling: crate::skills::value_scaling::ValueScalingPolicy::Direct,
+                value_level_usage: None,
+            }],
+            extra_condition: None,
+            target_strategy: None,
+            forced: false,
+            cooldown: Some(30.0),
+        }
+    }
+
+    #[test]
+    fn cooldown_skill_rearms_at_later_trigger_windows() {
+        let mut r = runner_with_skills(vec![target_speed_skill(
+            "100001",
+            SkillRarity::Gold,
+            "phase>=2",
+        )]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+        let field = FieldView::at_gate();
+        // Two manually-armed windows of one skill on a 1600m course: the
+        // cooldown scales to 30 × 1600/1000 = 48s.
+        r.pending_skills = vec![cooldown_window(100.0), cooldown_window(900.0)];
+
+        // First window: procs and arms the cooldown gate.
+        r.position = 105.0;
+        r.accumulate_time.t = 5.0;
+        r.process_skill_activations(&field, 1600.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert_eq!(r.pending_skills.len(), 2, "the active window stays armed");
+        assert_eq!(r.used_skills.len(), 1);
+
+        // The later window falls inside the cooldown and stays armed until it
+        // expires, but it does not proc.
+        r.position = 905.0;
+        r.accumulate_time.t = 40.0;
+        r.process_skill_activations(&field, 1600.0);
+        assert_eq!(r.skills_activated_count, 1, "cooldown blocks the re-proc");
+        assert_eq!(r.pending_skills.len(), 1);
+        r.position = 911.0;
+        r.process_skill_activations(&field, 1600.0);
+        assert!(r.pending_skills.is_empty());
+
+        // A window after the cooldown elapsed procs again and appends to the
+        // activation log.
+        r.pending_skills = vec![cooldown_window(1200.0)];
+        r.position = 1205.0;
+        r.accumulate_time.t = 55.0; // ≥ 5.0 + 48.0
+        r.process_skill_activations(&field, 1600.0);
+        assert_eq!(r.skills_activated_count, 2);
+        assert_eq!(r.used_skills.len(), 2, "second proc appends its own entry");
+    }
+
+    #[test]
+    fn cooldown_skill_stays_armed_for_a_later_point_in_one_region() {
+        let mut skill = target_speed_skill("201662", SkillRarity::Gold, "phase>=2");
+        skill.alternatives[0].cooldown_time = Some(300000.0);
+        let mut r = runner_with_skills(vec![skill]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+
+        let trigger = r.pending_skills[0].trigger;
+        assert!(trigger.end - trigger.start > 100.0);
+
+        r.position = trigger.start + 0.5;
+        r.accumulate_time.t = 5.0;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 1);
+        assert_eq!(r.pending_skills.len(), 1);
+
+        r.position = trigger.end - 1.0;
+        r.accumulate_time.t = 80.0;
+        r.process_skill_activations(&FieldView::at_gate(), 2400.0);
+        assert_eq!(r.skills_activated_count, 2);
+        assert_eq!(r.used_skills.len(), 2);
+    }
+
+    #[test]
+    fn wit_roll_is_cached_across_trigger_windows() {
+        // The game rolls the Wit eligibility check before the race, so all
+        // windows of a skill share one roll. A cached failure suppresses the
+        // later windows; a cached pass lets them proc without a fresh roll.
+        let field = FieldView::at_gate();
+
+        let mut failed = runner_with_skills(vec![target_speed_skill(
+            "100001",
+            SkillRarity::Gold,
+            "phase>=2",
+        )]);
+        prepare(&mut failed);
+        failed.skill_wit_passes.insert("201662".to_owned(), false);
+        failed.pending_skills = vec![cooldown_window(100.0), cooldown_window(900.0)];
+        failed.position = 105.0;
+        failed.process_skill_activations(&field, 2400.0);
+        failed.position = 905.0;
+        failed.process_skill_activations(&field, 2400.0);
+        assert_eq!(
+            failed.skills_activated_count, 0,
+            "cached failure covers every window"
+        );
+
+        let mut passed = runner_with_skills(vec![target_speed_skill(
+            "100002",
+            SkillRarity::Gold,
+            "phase>=2",
+        )]);
+        prepare(&mut passed);
+        passed.skill_wit_passes.insert("201662".to_owned(), true);
+        passed.pending_skills = vec![cooldown_window(100.0), cooldown_window(900.0)];
+        passed.position = 105.0;
+        passed.process_skill_activations(&field, 2400.0);
+        passed.position = 905.0;
+        // Second window on the 2400m test course: the 72s scaled cooldown has
+        // elapsed by the time the runner reaches it.
+        passed.accumulate_time.t = 100.0;
+        passed.process_skill_activations(&field, 2400.0);
+        assert_eq!(
+            passed.skills_activated_count, 2,
+            "cached pass lets later windows proc"
+        );
+    }
+
+    #[test]
+    fn all_corner_random_skill_arms_every_sampled_window() {
+        // Professor of Curvature shape: the sampled realization carries every
+        // placed trigger window, each carrying the skill's cooldown.
+        let mut skill = target_speed_skill("200331", SkillRarity::Gold, "all_corner_random==1");
+        skill.alternatives[0].cooldown_time = Some(300000.0);
+        let mut r = runner_with_skills(vec![skill]);
+
+        let mut course = test_course();
+        course.corners = vec![
+            crate::course::model::Corner {
+                start: 400.0,
+                length: 300.0,
+            },
+            crate::course::model::Corner {
+                start: 1400.0,
+                length: 300.0,
+            },
+        ];
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let rp = test_race_params();
+        let wc = test_whole_course(&course);
+        let ctx = PrepareContext {
+            course: &course,
+            base_speed: 19.6,
+            condition_resolution: ConditionResolution::Dynamic,
+            pos_keep_end_multiplier: 3.0,
+            race_params: &rp,
+            whole_course: &wc,
+            parser: &parser,
+            skill_samples: 4,
+            round_iteration: 0,
+        };
+        r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
+
+        assert!(
+            r.pending_skills.len() >= 2,
+            "one realization must arm every window, got {}",
+            r.pending_skills.len()
+        );
+        assert!(r.pending_skills.iter().all(|p| p.cooldown == Some(30.0)));
+        r.activate_random_gold_skill(4, 2400.0);
+        assert_eq!(
+            r.skills_activated_count, 1,
+            "duplicate windows must not create duplicate random-gold candidates"
+        );
+        for pair in r.pending_skills.windows(2) {
+            assert!(
+                pair[0].trigger.end <= pair[1].trigger.start,
+                "windows are distinct and sorted by distance"
+            );
+        }
+    }
+
+    /// The shape of `564 Escapades`: an effect whose value is a count, not a
+    /// speed modifier.
+    fn random_gold_skill(id: &str, modifier: f64) -> Skill {
+        Skill {
+            skill_id: SkillId::new(id),
+            rarity: SkillRarity::White,
+            tags: vec![],
+            activate_lot: None,
+            level: 1,
+            alternatives: vec![SkillAlternative {
+                base_duration: 30000.0,
+                cooldown_time: Some(5_000_000.0),
+                condition: "phase>=1".to_owned(),
+                precondition: None,
+                effects: vec![RawSkillEffect {
+                    modifier,
+                    target: SkillTarget::SelfTarget,
+                    effect_type: 37, // ActivateRandomGold
+                    value_usage: None,
+                    value_level_usage: None,
+                    pre_applied_multiplier: None,
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn random_gold_activation_reads_the_effect_value_as_a_count() {
+        // 10000 means one rare skill and 20000 two. Reading the raw value as a
+        // count activated every gold in the build.
+        for (modifier, expected) in [(10_000.0, 1), (20_000.0, 2)] {
+            let mut r = runner_with_skills(vec![
+                random_gold_skill("910071", modifier),
+                target_speed_skill("200011", SkillRarity::Gold, "phase>=1"),
+                target_speed_skill("200012", SkillRarity::Gold, "phase>=1"),
+                target_speed_skill("200013", SkillRarity::Gold, "phase>=1"),
+            ]);
+            prepare(&mut r);
+            r.wit_checks_enabled = false;
+
+            let pending = r
+                .pending_skills
+                .iter()
+                .find(|skill| skill.skill_id.as_str() == "910071")
+                .expect("the activating skill is armed")
+                .clone();
+            r.activate_skill(&pending, 2400.0);
+
+            assert_eq!(
+                r.pending_skill_removal.len(),
+                expected,
+                "modifier {modifier} must activate {expected} rare skill(s)"
+            );
+        }
+    }
+
+    #[test]
+    fn random_gold_activation_passes_the_course_distance_to_the_activated_skill() {
+        // The random-gold effect's own duration must not leak into the skill it
+        // activates: a 3 s effect on a 2400 m course lasts 7.2 s, so the rare
+        // skill it triggers must last 7.2 s too (not 3 s * 7.2 / 1000).
+        let mut r = runner_with_skills(vec![
+            random_gold_skill("910071", 10_000.0),
+            target_speed_skill("200011", SkillRarity::Gold, "phase>=1"),
+        ]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+
+        let pending = r
+            .pending_skills
+            .iter()
+            .find(|skill| skill.skill_id.as_str() == "910071")
+            .expect("the activating skill is armed")
+            .clone();
+        r.activate_skill(&pending, 2400.0);
+
+        let activated = r
+            .target_speed_skills_active
+            .iter()
+            .find(|active| active.skill_id.as_str() == "200011")
+            .expect("the rare skill activated");
+        let duration = activated.duration_timer.t;
+        assert!(
+            (duration + 7.2).abs() < 1e-9,
+            "the activated skill must scale from the 2400 m course, got {duration}s"
+        );
+    }
+
+    #[test]
+    fn no_cooldown_all_corner_random_skill_arms_only_its_first_window() {
+        // The same shape without a cooldown (Lightning Slash and friends): every
+        // placed trigger still exists, but only the first one is armed, so the
+        // skill procs once instead of stacking at each corner.
+        let mut skill = target_speed_skill("200973", SkillRarity::White, "all_corner_random==1");
+        skill.alternatives[0].cooldown_time = None;
+        let mut r = runner_with_skills(vec![skill]);
+
+        let mut course = test_course();
+        course.corners = vec![
+            crate::course::model::Corner {
+                start: 400.0,
+                length: 300.0,
+            },
+            crate::course::model::Corner {
+                start: 1400.0,
+                length: 300.0,
+            },
+        ];
+        let catalog = build_catalog();
+        let parser = ConditionParser::new(&catalog);
+        let rp = test_race_params();
+        let wc = test_whole_course(&course);
+        let ctx = PrepareContext {
+            course: &course,
+            base_speed: 19.6,
+            condition_resolution: ConditionResolution::Dynamic,
+            pos_keep_end_multiplier: 3.0,
+            race_params: &rp,
+            whole_course: &wc,
+            parser: &parser,
+            skill_samples: 4,
+            round_iteration: 0,
+        };
+        r.on_prepare(Box::new(Xoshiro256StarStar::from_u64_seed(7)), &ctx);
+
+        assert_eq!(
+            r.pending_skills.len(),
+            1,
+            "a skill without a cooldown arms one window"
+        );
+        assert!(r.pending_skills[0].cooldown.is_none());
+    }
+
+    #[test]
+    fn build_skill_data_normalizes_cooldown_to_seconds() {
+        let mut skill = target_speed_skill("200331", SkillRarity::Gold, "all_corner_random==1");
+        skill.alternatives[0].cooldown_time = Some(300000.0);
+        let triggers = build(&skill);
+        assert_eq!(triggers[0].cooldown, Some(30.0));
+
+        skill.alternatives[0].cooldown_time = Some(0.0);
+        assert_eq!(build(&skill)[0].cooldown, None);
+
+        skill.alternatives[0].cooldown_time = None;
+        assert_eq!(build(&skill)[0].cooldown, None);
     }
 }

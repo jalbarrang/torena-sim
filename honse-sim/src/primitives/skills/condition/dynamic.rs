@@ -197,6 +197,16 @@ pub trait RunnerView {
     fn previous_order(&self) -> Option<i64> {
         None
     }
+    /// The best (lowest) order the runner has held since the `*_continue` grace
+    /// period, if that period has elapsed.
+    fn order_min_since_grace(&self) -> Option<i64> {
+        None
+    }
+    /// The worst (highest) order the runner has held since the `*_continue` grace
+    /// period, if that period has elapsed.
+    fn order_max_since_grace(&self) -> Option<i64> {
+        None
+    }
     /// The number of runners in the race.
     fn num_umas(&self) -> i64 {
         0
@@ -205,13 +215,24 @@ pub trait RunnerView {
     fn leader_position(&self) -> Option<f64> {
         None
     }
+    /// The rearmost active runner's position in meters, if known.
+    fn last_position(&self) -> Option<f64> {
+        None
+    }
     /// Snapshots of every other active runner (excludes self).
-    fn other_snapshots(&self) -> Vec<RunnerSnapshot> {
-        Vec::new()
+    ///
+    /// Borrowed rather than owned: a predicate is evaluated many times per tick,
+    /// so returning a fresh `Vec` here made every field-reading condition
+    /// allocate on each evaluation. Implementors hand back a slice of state they
+    /// already hold.
+    fn other_snapshots(&self) -> &[RunnerSnapshot] {
+        &[]
     }
     /// Live state of every active (non-finished) runner, including self.
-    fn active_runners(&self) -> Vec<ActiveRunner> {
-        Vec::new()
+    ///
+    /// Borrowed for the same reason as [`other_snapshots`](Self::other_snapshots).
+    fn active_runners(&self) -> &[ActiveRunner] {
+        &[]
     }
 }
 

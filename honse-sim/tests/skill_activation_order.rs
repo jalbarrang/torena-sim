@@ -69,6 +69,8 @@ fn skill(id: &str) -> Skill {
         skill_id: SkillId::new(id),
         rarity: SkillRarity::White,
         tags: vec![],
+        activate_lot: None,
+        level: 1,
         alternatives: vec![SkillAlternative {
             // A random trigger, so the skill draws from the shared skill PRNG
             // while the kernel walks the skill vector. A fixed trigger would

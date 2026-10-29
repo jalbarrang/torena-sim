@@ -39,6 +39,8 @@ pub enum ParseError {
     UnknownCondition(String),
     /// A `=` was not followed by `=`.
     ExpectedEquals,
+    /// A `-` was not followed by a digit.
+    ExpectedNumber,
     /// An invalid character was encountered.
     InvalidCharacter(char),
     /// The top-level expression was not an operator.
@@ -63,6 +65,7 @@ impl std::fmt::Display for ParseError {
             }
             ParseError::UnknownCondition(name) => write!(f, "unknown condition '{name}'"),
             ParseError::ExpectedEquals => write!(f, "expected ="),
+            ParseError::ExpectedNumber => write!(f, "expected number after -"),
             ParseError::InvalidCharacter(c) => write!(f, "invalid character '{c}'"),
             ParseError::ExpectedOperator => write!(f, "expected comparison or operator"),
             ParseError::Operator(err) => write!(f, "{err}"),
@@ -168,6 +171,22 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
                 b'&' => {
                     i += 1;
                     tokens.push(Token::And);
+                }
+                // Negative literals (e.g. `is_popularity_top_character_activate_
+                // advantage_skill==-1`) appear in the dataset, so `-` reads the
+                // digits that follow and yields a negative integer. Mirrors the
+                // TS tokenizer's `case '-'`.
+                b'-' => {
+                    i += 1;
+                    if i >= bytes.len() || !is_digit(bytes[i]) {
+                        return Err(ParseError::ExpectedNumber);
+                    }
+                    let mut value: i64 = 0;
+                    while i < bytes.len() && is_digit(bytes[i]) {
+                        value = value * 10 + i64::from(bytes[i] - b'0');
+                        i += 1;
+                    }
+                    tokens.push(Token::Int(-value));
                 }
                 _ => return Err(ParseError::InvalidCharacter(c as char)),
             }
@@ -521,6 +540,14 @@ mod tests {
     }
 
     #[test]
+    fn parses_negative_integer_argument() {
+        // Gametora data uses `==-1` (e.g. Bouquet of Wishes, Forward).
+        let cat = catalog();
+        let parser = ConditionParser::new(&cat);
+        parser.parse("phase>=-1").expect("parse");
+    }
+
+    #[test]
     fn error_cases() {
         let cat = catalog();
         let parser = ConditionParser::new(&cat);
@@ -537,6 +564,7 @@ mod tests {
             ParseError::ExpectedOperatorOperand
         );
         assert_eq!(err("phase#1"), ParseError::InvalidCharacter('#'));
+        assert_eq!(err("phase>=-"), ParseError::ExpectedNumber);
         // A bare condition is not an operator.
         assert_eq!(err("phase"), ParseError::ExpectedOperator);
     }

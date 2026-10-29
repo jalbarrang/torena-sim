@@ -16,7 +16,7 @@ use uma_sim_primitives::course::model::CourseData;
 use uma_sim_primitives::events::{RaceObservation, RaceObserver, RaceObservers};
 use uma_sim_primitives::position_keep::{update_position_keep_coefficient, PositionKeepContext};
 use uma_sim_primitives::race_support::{
-    assign_gates, build_field_snapshot, build_field_view, condition_value, resolve_debuff_targets,
+    assign_gates, build_field_snapshot, condition_value, refill_field_view, resolve_debuff_targets,
     FieldOrderTracker,
 };
 use uma_sim_primitives::runner::lifecycle::{CreateRunner, PrepareContext};
@@ -36,6 +36,9 @@ use uma_sim_primitives::skills::condition::catalog::build_catalog;
 use uma_sim_primitives::skills::condition::dynamic::register_all_dynamic_conditions;
 use uma_sim_primitives::skills::condition::language::ConditionParser;
 use uma_sim_primitives::skills::condition::{ConditionCatalog, ConditionResolution};
+use uma_sim_primitives::spot_struggle::{
+    run_spot_struggle_exits, run_spot_struggle_groups, SpotStruggleState,
+};
 use uma_sim_primitives::stamina::game_policy::GameStaminaPolicy;
 use uma_sim_primitives::stamina::policy::{NoopStaminaPolicy, StaminaPolicy};
 
@@ -68,15 +71,30 @@ pub struct SimulationSettings {
     pub spot_struggle: bool,
     /// Whether dueling is enabled.
     pub dueling: bool,
+    /// Per-runner dueling settings, by runner insertion index. Entries override
+    /// the default; unlisted runners (such as a pacer) use `dueling`.
+    pub dueling_runners: Vec<bool>,
     /// Whether wit checks gate skill activation by default.
     pub wit_checks: bool,
     /// Per-runner wit-check settings, by runner insertion index. Entries
     /// override the default; unlisted runners use `wit_checks`.
     pub wit_checks_runners: Vec<bool>,
+    /// Runners that share one RNG stream, by runner insertion index.
+    ///
+    /// Unlisted runners always keep their own stream: unlike the other
+    /// per-runner settings there is no field-wide default, because making a
+    /// pacer or generated mob share a stream would make it behave identically.
+    /// Classic compare names its compared pair here, so a difference between
+    /// them is the build rather than luck.
+    pub sync_rng_runners: Vec<bool>,
     /// Position-keep mode (`2` enables virtual position keeping).
     pub position_keep_mode: i32,
     /// Number of activation samples drawn per skill trigger.
     pub skill_samples: usize,
+    /// Sample each skill's pre-race placement from its own seed instead of the
+    /// shared skill stream, so adding a skill cannot re-roll the others.
+    /// Compare paths only; see `docs/simulation/patterns.md`.
+    pub isolate_skill_rng: bool,
     /// Per-base-skill recovery (stamina-drain) override modifiers.
     pub stamina_drain_overrides: HashMap<String, f64>,
 }
@@ -94,10 +112,13 @@ impl Default for SimulationSettings {
             conserve_power_runners: Vec::new(),
             spot_struggle: true,
             dueling: true,
+            dueling_runners: Vec::new(),
             wit_checks: true,
             wit_checks_runners: Vec::new(),
+            sync_rng_runners: Vec::new(),
             position_keep_mode: 2,
             skill_samples: 1,
+            isolate_skill_rng: false,
             stamina_drain_overrides: HashMap::new(),
         }
     }
@@ -121,6 +142,13 @@ pub struct Race {
     /// Ids of finished runners, in finish order (append-only).
     finished_runners: Vec<RunnerId>,
 
+    /// Reusable per-runner skill-condition views, indexed by `RunnerId`.
+    ///
+    /// Refilled in place each tick. See the contested engine's copy of this
+    /// field for the full reasoning: rebuilding the two projected series per
+    /// runner per tick allocated O(n^2) vectors per tick.
+    field_views: Vec<FieldView>,
+
     /// The static condition catalog (owns the parser's backing data).
     catalog: ConditionCatalog,
     /// The whole course as a region list.
@@ -136,6 +164,8 @@ pub struct Race {
 
     /// Pacer + finishing-order state, threaded across frames.
     order_tracker: FieldOrderTracker,
+    /// Race-level spot-struggle state, threaded across rounds.
+    spot_struggle: SpotStruggleState,
 
     /// Lifecycle observers.
     observers: RaceObservers,
@@ -149,7 +179,7 @@ impl RaceObservation for Race {
         self.order_tracker.pacer_position
     }
     fn runner_order(&self, id: RunnerId) -> Option<i64> {
-        self.order_tracker.runner_order.get(&id).copied()
+        self.order_tracker.runner_order.get(id)
     }
     fn seed(&self) -> u64 {
         self.seed
@@ -187,6 +217,7 @@ impl Race {
             dueling_rates,
             runners: Vec::new(),
             finished_runners: Vec::new(),
+            field_views: Vec::new(),
             catalog: build_catalog(),
             whole_course,
             round_iteration: 0,
@@ -194,6 +225,7 @@ impl Race {
             seed: 0,
             rng: Box::new(Xoshiro256StarStar::from_u64_seed(0)),
             order_tracker: FieldOrderTracker::new(),
+            spot_struggle: SpotStruggleState::default(),
             observers: RaceObservers::new(),
             course,
         }
@@ -236,15 +268,26 @@ impl Race {
             Box::new(Xoshiro256StarStar::from_u32_seed(id.0)),
         );
         self.runners.push(runner);
+        // Keep the view pool aligned with the field; a runner's id is its slot.
+        self.field_views.push(FieldView::default());
+        debug_assert_eq!(self.runners.len(), self.field_views.len());
+        // The finished-runner bitmask indexes by id, so the field must stay
+        // inside `u64`; the public API caps a field at 12.
+        debug_assert!(self.runners.len() < u64::BITS as usize);
         id
     }
 
     /// Prepare the field for a round: count field composition, assign gates,
     /// spawn per-runner RNGs + stamina policies, and reset every runner.
+    ///
+    /// Uses the aggregate's own round counter; prefer
+    /// [`prepare_round_at`](Self::prepare_round_at) when the round index is
+    /// already known.
     pub fn prepare_round(&mut self, master_seed: u64) {
         self.accumulated_time = 0.0;
         self.finished_runners.clear();
         self.order_tracker.reset();
+        self.spot_struggle.reset();
 
         self.prepare_race();
 
@@ -259,13 +302,35 @@ impl Race {
         let gates = assign_gates(&fixed_gates, 9, &mut *self.rng);
 
         let mut runners = std::mem::take(&mut self.runners);
+        // Synced runners reuse the first synced runner's stream seeds, so a
+        // compared pair sees identical draws. Every other runner draws its own,
+        // which leaves a run that does not name a pair on its old sequence.
+        let mut synced_runner_seed: Option<u32> = None;
+        let mut synced_hp_seed: Option<u32> = None;
         for (idx, runner) in runners.iter_mut().enumerate() {
             runner.gate = gates[idx];
+            let sync_rng = self
+                .settings
+                .sync_rng_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(false);
+            let runner_seed = if sync_rng {
+                *synced_runner_seed.get_or_insert_with(|| self.rng.int32())
+            } else {
+                self.rng.int32()
+            };
+            runner.runner_seed = runner_seed;
+            runner.isolate_skill_rng = self.settings.isolate_skill_rng;
             let runner_rng: Box<dyn Prng> =
-                Box::new(Xoshiro256StarStar::from_u32_seed(self.rng.int32()));
+                Box::new(Xoshiro256StarStar::from_u32_seed(runner_seed));
             let policy: Box<dyn StaminaPolicy> = if self.settings.health_system {
-                let hp_rng: Box<dyn Prng> =
-                    Box::new(Xoshiro256StarStar::from_u32_seed(self.rng.int32()));
+                let hp_seed = if sync_rng {
+                    *synced_hp_seed.get_or_insert_with(|| self.rng.int32())
+                } else {
+                    self.rng.int32()
+                };
+                let hp_rng: Box<dyn Prng> = Box::new(Xoshiro256StarStar::from_u32_seed(hp_seed));
                 Box::new(GameStaminaPolicy::new(&self.course, self.ground, hp_rng))
             } else {
                 Box::new(NoopStaminaPolicy)
@@ -283,7 +348,12 @@ impl Race {
                 .get(idx)
                 .copied()
                 .unwrap_or(self.settings.rushed);
-            runner.dueling_enabled = self.settings.dueling;
+            runner.dueling_enabled = self
+                .settings
+                .dueling_runners
+                .get(idx)
+                .copied()
+                .unwrap_or(self.settings.dueling);
             runner.spot_struggle_enabled = self.settings.spot_struggle;
             runner.downhill_enabled = self
                 .settings
@@ -323,6 +393,19 @@ impl Race {
         self.emit_runners_prepared();
     }
 
+    /// Prepare a named round without inheriting the aggregate's round counter.
+    ///
+    /// A round's skill-trigger sampling depends on its index
+    /// (`round_iteration`), so a round's outcome depends on how many rounds ran
+    /// before it in the same aggregate. This entry point pins that index instead
+    /// of inheriting it, so round `i` reproduces the batch run's round `i` on
+    /// its own — what lets a summary name a representative race and have the
+    /// caller re-run exactly that one.
+    pub fn prepare_round_at(&mut self, master_seed: u64, round_index: usize) {
+        self.round_iteration = round_index;
+        self.prepare_round(master_seed);
+    }
+
     /// Reset per-round race params for the vacuum field: the synthetic engine
     /// does not fold in field composition (no live field to count), so the
     /// strategy-count / common-skill aggregates are cleared.
@@ -359,23 +442,36 @@ impl Race {
         );
 
         let base_speed = self.base_speed();
+
+        // Finished membership as a dense bitmask: the per-runner test used to be
+        // a linear scan of `finished_runners`, making the tick loop O(n^2).
+        let finished_mask = self.finished_mask();
+
+        // A field-wide property, so it is resolved once per tick rather than
+        // recomputed identically for every runner.
+        let only_front_runner = snapshot
+            .entries
+            .iter()
+            .filter(|entry| strategy_matches(entry.strategy, Strategy::FrontRunner))
+            .count()
+            == 1;
+
+        // Per-runner condition views are refilled in place rather than rebuilt:
+        // each holds two series projected from the snapshot, so rebuilding them
+        // allocated O(n^2) vectors per tick.
+        let mut field_views = std::mem::take(&mut self.field_views);
         let mut runners = std::mem::take(&mut self.runners);
-        for runner in &mut runners {
-            if self.finished_runners.contains(&runner.id) {
+        for (slot, runner) in runners.iter_mut().enumerate() {
+            if finished_mask & (1_u64 << runner.id.0) != 0 {
                 continue;
             }
             update_position_keep_coefficient(runner);
-            let field = build_field_view(runner.id, &snapshot);
+            refill_field_view(&mut field_views[slot], runner.id, &snapshot);
+            let field = &field_views[slot];
             let backward_strategy_runner_ahead = snapshot.entries.iter().any(|entry| {
                 entry.position > runner.position
                     && entry.strategy.order_rank() > runner.position_keep_strategy.order_rank()
             });
-            let only_front_runner = snapshot
-                .entries
-                .iter()
-                .filter(|entry| strategy_matches(entry.strategy, Strategy::FrontRunner))
-                .count()
-                == 1;
             let position_keep = PositionKeepContext {
                 position_keep_mode: self.settings.position_keep_mode,
                 num_runners: snapshot.num_active as usize,
@@ -393,7 +489,7 @@ impl Race {
             // `FieldInputs` plus a field-free course context. There is no
             // paradigm branch and no live field to read.
             let field_inputs =
-                resolve_field_inputs(runner, &field, self.dueling_rates, position_keep);
+                resolve_field_inputs(runner, field, self.dueling_rates, position_keep);
             let ctx = UpdateContext {
                 base_speed,
                 accumulated_time: self.accumulated_time,
@@ -402,19 +498,41 @@ impl Race {
             runner.on_update(dt, &field_inputs, &ctx);
         }
         self.runners = runners;
+        self.field_views = field_views;
 
         // Route opponent-facing debuffs emitted this frame onto their targets.
         // With context runners in the vacuum race (e.g. a dedicated pacer) there
         // IS a field to hit: the pacer's Hesitant-family / Speed Eater casts land
         // on the compared uma exactly as in the contested engine. In a solo
         // vacuum the resolver finds no targets and this reduces to draining the
-        // outbox (the old behavior). Proximity dueling / spot-struggle stay
-        // synthetic — those contention coordinators remain contested-only.
+        // outbox (the old behavior).
         self.coordinate_external_debuffs(&snapshot);
+
+        // Spot struggle is a proximity rule over the runners who are actually
+        // here, so this engine runs the shared coordinator rather than leaving
+        // the mechanic contested-only.
+        if self.settings.spot_struggle {
+            self.coordinate_spot_struggle_groups();
+            self.coordinate_spot_struggle_exits();
+        }
 
         update_first_position_in_late_race(&mut self.runners, self.course.distance);
 
-        self.emit_runner_ticks_and_finishes(dt);
+        self.emit_runner_ticks_and_finishes(dt, finished_mask);
+    }
+
+    /// The rule lives in `primitives::spot_struggle`; this applies it.
+    fn coordinate_spot_struggle_groups(&mut self) {
+        run_spot_struggle_groups(
+            &mut self.runners,
+            self.course.course_width,
+            &mut self.spot_struggle,
+        );
+    }
+
+    /// The rule lives in `primitives::spot_struggle`; this applies it.
+    fn coordinate_spot_struggle_exits(&mut self) {
+        run_spot_struggle_exits(&mut self.runners, self.course.course_width);
     }
 
     /// **External-debuff routing** coordinator (port of the contested engine's
@@ -468,10 +586,12 @@ impl Race {
         // Phase 2: apply onto each target via the targeted-effect path.
         // Teammates stay valid *targets* (they count toward a skill's maximum
         // target in-game) but are excluded from the debuff *effect*
-        // (docs/mechanics/README.md § Skill Target), so the exclusion happens
+        // (docs/race-mechanics/ § Skill Target), so the exclusion happens
         // here at application, after target resolution.
         for route in routes {
-            let Some(target) = self.runners.iter_mut().find(|r| r.id == route.target) else {
+            // Direct index: ids are dense, so the target's id is its field slot.
+            // `get_mut` keeps the old `find` semantics for an absent runner.
+            let Some(target) = self.runners.get_mut(route.target.0 as usize) else {
                 continue;
             };
             if route.source_team.is_some() && route.source_team == target.team {
@@ -488,21 +608,39 @@ impl Race {
         }
     }
 
-    fn emit_runner_ticks_and_finishes(&mut self, dt: f64) {
+    /// Finished membership as a dense bitmask over runner ids.
+    ///
+    /// See the contested engine's copy of this helper for the full reasoning:
+    /// ids are dense, so a bit per id answers "has this runner finished?" in
+    /// O(1) where a scan of `finished_runners` was O(n) per runner.
+    fn finished_mask(&self) -> u64 {
+        let mut mask: u64 = 0;
+        for id in &self.finished_runners {
+            mask |= 1_u64 << id.0;
+        }
+        mask
+    }
+
+    fn emit_runner_ticks_and_finishes(&mut self, dt: f64, finished_mask: u64) {
         let mut observers = std::mem::take(&mut self.observers);
-        let mut newly_finished: Vec<RunnerId> = Vec::new();
+        let mut newly_finished: Vec<(RunnerId, f64)> = Vec::new();
         for runner in &self.runners {
-            if self.finished_runners.contains(&runner.id) {
+            if finished_mask & (1_u64 << runner.id.0) != 0 {
                 continue;
             }
             observers.emit_after_runner_tick(self, runner, dt);
             if runner.finished {
-                newly_finished.push(runner.id);
+                newly_finished.push((runner.id, runner.finish_time));
             }
         }
-        for id in newly_finished {
+        // Order by interpolated finish time, not by field insertion order: an
+        // unsorted push hands same-tick finishers an arbitrary place. See the
+        // contested engine's copy of this pass for the full reasoning.
+        newly_finished.sort_by(|a, b| a.1.total_cmp(&b.1));
+        for (id, _) in newly_finished {
             self.finished_runners.push(id);
-            if let Some(runner) = self.runners.iter().find(|r| r.id == id) {
+            // Direct index: ids are dense, so `id.0` is the field slot.
+            if let Some(runner) = self.runners.get(id.0 as usize) {
                 observers.emit_runner_finished(self, runner);
             }
         }
@@ -633,6 +771,7 @@ mod tests {
             downhill_runners: vec![false, true],
             conserve_power_runners: vec![true, false],
             wit_checks_runners: vec![false, true],
+            dueling_runners: vec![false, true],
             ..SimulationSettings::default()
         };
         let mut race = Race::new(
@@ -655,11 +794,50 @@ mod tests {
         assert!(!race.runners[1].conserve_power_enabled);
         assert!(!race.runners[0].wit_checks_enabled);
         assert!(race.runners[1].wit_checks_enabled);
+        assert!(!race.runners[0].dueling_enabled);
+        assert!(race.runners[1].dueling_enabled);
         // Unlisted runners fall back to the race defaults.
         assert!(race.runners[2].rushed_enabled);
         assert!(race.runners[2].downhill_enabled);
         assert!(race.runners[2].conserve_power_enabled);
         assert!(race.runners[2].wit_checks_enabled);
+        assert!(race.runners[2].dueling_enabled);
+    }
+
+    #[test]
+    fn runners_keep_their_own_streams_by_default() {
+        // The synced-RNG compare mode is opt-in: nothing shares a stream unless
+        // the settings name the runners.
+        let mut race = race_with(2);
+        race.prepare_round(42);
+
+        assert_ne!(race.runners[0].rng.int32(), race.runners[1].rng.int32());
+    }
+
+    #[test]
+    fn synced_runners_share_one_rng_stream() {
+        // Classic compare names its pair here: both runners draw from the same
+        // stream, so a difference between them is the build and not luck. The
+        // pacer keeps its own stream.
+        let settings = SimulationSettings {
+            sync_rng_runners: vec![true, true],
+            ..SimulationSettings::default()
+        };
+        let mut race = Race::new(
+            test_course(),
+            GroundCondition::Firm,
+            settings,
+            test_race_params(),
+            None,
+        );
+        race.add_runner(props("a", Strategy::PaceChaser));
+        race.add_runner(props("b", Strategy::PaceChaser));
+        race.add_runner(props("pacer", Strategy::FrontRunner));
+        race.prepare_round(42);
+
+        assert_eq!(race.runners[0].rng.int32(), race.runners[1].rng.int32());
+        assert_ne!(race.runners[0].rng.int32(), race.runners[2].rng.int32());
+        assert_ne!(race.runners[1].rng.int32(), race.runners[2].rng.int32());
     }
 
     #[test]
@@ -853,5 +1031,76 @@ mod tests {
         // No field to hit: the outbox drains, the caster is never self-targeted.
         assert!(race.runners[0].emitted_debuffs.is_empty());
         assert!(race.runners[0].targeted_current_speed_active.is_empty());
+    }
+
+    /// Bunch the first two runners inside the early-race entry window, with any
+    /// others trailing past the entry gap.
+    fn bunch_front_runners(race: &mut Race) {
+        let section = race.runners[0].section_length;
+        let bunched = (section * 4.0).min((section * 5.0).floor()).max(200.0);
+        for (idx, runner) in race.runners.iter_mut().enumerate() {
+            runner.strategy = Strategy::FrontRunner;
+            runner.position_keep_strategy = Strategy::FrontRunner;
+            runner.current_lane = 0.5;
+            runner.position = if idx < 2 { bunched } else { bunched - 100.0 };
+        }
+    }
+
+    #[test]
+    fn spot_struggle_starts_between_bunched_front_runners() {
+        // The point of the shared rule: the synthetic engine reaches the same
+        // verdict the contested engine does, from a field of three. Before this
+        // pass existed a compare run could not produce a struggle at all.
+        let mut race = race_with(3);
+        race.prepare_round(42);
+        bunch_front_runners(&mut race);
+
+        race.coordinate_spot_struggle_groups();
+
+        assert!(race.runners[0].in_spot_struggle);
+        assert!(race.runners[1].in_spot_struggle);
+        // The third runner is 100m back, outside the entry gap.
+        assert!(!race.runners[2].in_spot_struggle);
+        assert_eq!(
+            race.runners[0].spot_struggle_end_position,
+            (race.runners[0].section_length * 8.0).floor()
+        );
+    }
+
+    #[test]
+    fn a_solo_compare_run_never_starts_a_spot_struggle() {
+        // No same-style partner to struggle with, so the pass is a no-op however
+        // far into the race the lone runner is.
+        let mut race = race_with(1);
+        race.prepare_round(7);
+        race.runners[0].strategy = Strategy::FrontRunner;
+        race.runners[0].position = 400.0;
+
+        race.coordinate_spot_struggle_groups();
+
+        assert!(!race.runners[0].in_spot_struggle);
+        assert!(race.runners[0].spot_struggle_start_position.is_none());
+    }
+
+    #[test]
+    fn spot_struggle_state_resets_between_rounds() {
+        // The unlock latch and the spent triggers live on the aggregate, so they
+        // have to be reset with it. A latched "already triggered" would silently
+        // drop the mechanic from every round after the first.
+        let mut race = race_with(2);
+        race.prepare_round(1);
+        bunch_front_runners(&mut race);
+        race.coordinate_spot_struggle_groups();
+        assert!(race.runners[0].in_spot_struggle);
+
+        race.prepare_round(2);
+        bunch_front_runners(&mut race);
+        race.coordinate_spot_struggle_groups();
+
+        assert!(race.runners[0].in_spot_struggle);
+        assert_eq!(
+            race.runners[0].spot_struggle_start_position,
+            Some(race.runners[0].position)
+        );
     }
 }

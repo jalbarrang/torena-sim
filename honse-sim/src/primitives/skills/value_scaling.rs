@@ -43,7 +43,7 @@ pub enum ValueScalingPolicy {
     /// not say which tier was applied is dropped rather than assumed, because
     /// assuming would understate it by up to 1.2× with nothing to notice.
     /// Modeling any of these for real means dividing that multiplier back out
-    /// first. See docs/mechanics/README.md § "Value Scaling, Ability Value Usage".
+    /// first. See docs/race-mechanics/ § "Value Scaling, Ability Value Usage".
     PreAppliedTier,
     /// Reserved for usage 14, enabled once activated-tag state exists.
     MultiplyActivatedTaggedSkillCount,
@@ -427,7 +427,7 @@ mod tests {
                 },
             ],
         };
-        let specs = build_skill_effects(&alt);
+        let specs = build_skill_effects(&alt, 1);
         assert_eq!(
             specs.len(),
             3,

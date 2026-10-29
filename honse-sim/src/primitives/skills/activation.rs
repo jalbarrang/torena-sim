@@ -28,7 +28,7 @@ pub enum ActivationSamplePolicy {
     /// Pick a region with equal probability (ignoring length), then a random
     /// point inside it.
     StraightRandom,
-    /// Place up to four triggers across the corners and keep the earliest.
+    /// Place up to four triggers across the corners.
     AllCornerRandom,
     /// Erlang-distributed offset (shape `k`, rate `lambda`).
     Erlang { k: u32, lambda: f64 },
@@ -119,11 +119,27 @@ impl ActivationSamplePolicy {
         }
     }
 
-    /// Sample `nsamples` concrete trigger regions from the static activation
-    /// `regions`.
-    pub fn sample(&self, regions: &RegionList, nsamples: usize, rng: &mut dyn Prng) -> Vec<Region> {
+    /// Sample `nsamples` concrete trigger **realizations** from the static
+    /// activation `regions`.
+    ///
+    /// One realization holds every trigger window a single race realization
+    /// provides: most policies place exactly one, but `AllCornerRandom` places
+    /// up to four (and a cooldown skill can activate at a later one once its
+    /// cooldown has elapsed). Callers select one realization per round and arm
+    /// one pending trigger per window.
+    pub fn sample(
+        &self,
+        regions: &RegionList,
+        nsamples: usize,
+        rng: &mut dyn Prng,
+    ) -> Vec<Vec<Region>> {
         match self {
-            ActivationSamplePolicy::Immediate => regions.0.iter().take(1).copied().collect(),
+            ActivationSamplePolicy::Immediate => {
+                if regions.0.is_empty() {
+                    return Vec::new();
+                }
+                (0..nsamples).map(|_| vec![regions.0[0]]).collect()
+            }
             ActivationSamplePolicy::Random | ActivationSamplePolicy::CornerRandom => {
                 Self::sample_weighted(regions, nsamples, rng)
             }
@@ -135,13 +151,17 @@ impl ActivationSamplePolicy {
             | ActivationSamplePolicy::LogNormal { .. }
             | ActivationSamplePolicy::Uniform => self.sample_distribution(regions, nsamples, rng),
             ActivationSamplePolicy::Fixed(pos) => (0..nsamples)
-                .map(|_| Region::new(*pos, *pos + 10.0))
+                .map(|_| vec![Region::new(*pos, *pos + 10.0)])
                 .collect(),
         }
     }
 
     /// Length-weighted point sampling (`RandomPolicy` / `CornerRandomPolicy`).
-    fn sample_weighted(regions: &RegionList, nsamples: usize, rng: &mut dyn Prng) -> Vec<Region> {
+    fn sample_weighted(
+        regions: &RegionList,
+        nsamples: usize,
+        rng: &mut dyn Prng,
+    ) -> Vec<Vec<Region>> {
         if regions.0.is_empty() {
             return Vec::new();
         }
@@ -165,13 +185,17 @@ impl ActivationSamplePolicy {
             let region = regions.0[idx];
             let span = (region.len() - 10.0).max(0.0);
             let pos = region.start + f64::from(rng.uniform(span as u32));
-            out.push(Region::new(pos, pos + 10.0));
+            out.push(vec![Region::new(pos, pos + 10.0)]);
         }
         out
     }
 
     /// Equal-weight region then point (`StraightRandomPolicy`).
-    fn sample_straight(regions: &RegionList, nsamples: usize, rng: &mut dyn Prng) -> Vec<Region> {
+    fn sample_straight(
+        regions: &RegionList,
+        nsamples: usize,
+        rng: &mut dyn Prng,
+    ) -> Vec<Vec<Region>> {
         if regions.0.is_empty() {
             return Vec::new();
         }
@@ -181,21 +205,22 @@ impl ActivationSamplePolicy {
             let region = regions.0[idx];
             let span = (region.len() - 10.0).max(0.0);
             let pos = region.start + f64::from(rng.uniform(span as u32));
-            out.push(Region::new(pos, pos + 10.0));
+            out.push(vec![Region::new(pos, pos + 10.0)]);
         }
         out
     }
 
-    /// Place up to four triggers across the corners, returning the earliest
-    /// (`AllCornerRandomPolicy::placeTriggers`). Returns [`Region::INVALID`] when
-    /// no trigger could be placed.
-    fn place_triggers(regions: &RegionList, rng: &mut dyn Prng) -> Region {
+    /// Place up to four triggers across the corners, returning **all** of them
+    /// (`AllCornerRandomPolicy::placeTriggers`). The game arms every placed
+    /// trigger, so the full list — not only the earliest — is what a cooldown
+    /// skill needs to re-arm at. Returns an empty list when no trigger could be
+    /// placed.
+    fn place_triggers(regions: &RegionList, rng: &mut dyn Prng) -> Vec<Region> {
         let mut candidates = regions.0.clone();
         candidates.sort_by(|a, b| a.start.total_cmp(&b.start));
 
-        let mut first_trigger: Option<f64> = None;
-        let mut placed = 0;
-        while placed < 4 && !candidates.is_empty() {
+        let mut triggers = Vec::new();
+        while triggers.len() < 4 && !candidates.is_empty() {
             let idx = rng.uniform(candidates.len() as u32) as usize;
             let candidate = candidates[idx];
             let span = (candidate.len() - 10.0).max(0.0);
@@ -209,16 +234,9 @@ impl ActivationSamplePolicy {
             // Everything before this corner is guaranteed earlier in distance.
             candidates.drain(0..idx);
 
-            if first_trigger.is_none() {
-                first_trigger = Some(start);
-            }
-            placed += 1;
+            triggers.push(Region::new(start, start + 10.0));
         }
-
-        match first_trigger {
-            Some(start) => Region::new(start, start + 10.0),
-            None => Region::INVALID,
-        }
+        triggers
     }
 
     /// Shared distribution-random sampling (`DistributionRandomPolicy::sample`).
@@ -227,7 +245,7 @@ impl ActivationSamplePolicy {
         regions: &RegionList,
         nsamples: usize,
         rng: &mut dyn Prng,
-    ) -> Vec<Region> {
+    ) -> Vec<Vec<Region>> {
         if regions.0.is_empty() {
             return Vec::new();
         }
@@ -246,12 +264,12 @@ impl ActivationSamplePolicy {
                     pos -= region.end;
                     continue;
                 }
-                out.push(Region::new(pos, region.end));
+                out.push(vec![Region::new(pos, region.end)]);
                 placed = true;
                 break;
             }
             if !placed {
-                out.push(Region::INVALID);
+                out.push(vec![Region::INVALID]);
             }
         }
         out
@@ -357,7 +375,7 @@ mod tests {
         let r = regions(&[(0.0, 100.0), (200.0, 300.0)]);
         let mut rng = Xoshiro256StarStar::from_u64_seed(1);
         let out = ActivationSamplePolicy::Immediate.sample(&r, 3, &mut rng);
-        assert_eq!(out, vec![Region::new(0.0, 100.0)]);
+        assert_eq!(out, vec![vec![Region::new(0.0, 100.0)]; 3]);
     }
 
     #[test]
@@ -367,7 +385,10 @@ mod tests {
         let out = ActivationSamplePolicy::Fixed(450.0).sample(&r, 2, &mut rng);
         assert_eq!(
             out,
-            vec![Region::new(450.0, 460.0), Region::new(450.0, 460.0)]
+            vec![
+                vec![Region::new(450.0, 460.0)],
+                vec![Region::new(450.0, 460.0)]
+            ]
         );
     }
 
@@ -387,21 +408,33 @@ mod tests {
             sample(ActivationSamplePolicy::Uniform)
         );
         // Every produced trigger is a 10m window contained within the course.
-        for region in sample(ActivationSamplePolicy::Random) {
-            assert!((region.len() - 10.0).abs() < 1e-9);
-            assert!(region.start >= 0.0);
+        for realization in sample(ActivationSamplePolicy::Random) {
+            assert_eq!(realization.len(), 1);
+            for region in realization {
+                assert!((region.len() - 10.0).abs() < 1e-9);
+                assert!(region.start >= 0.0);
+            }
         }
     }
 
     #[test]
-    fn all_corner_random_keeps_earliest_trigger() {
+    fn all_corner_random_realization_carries_sorted_windows() {
         let r = regions(&[(0.0, 100.0), (300.0, 400.0), (700.0, 850.0)]);
         let mut rng = Xoshiro256StarStar::from_u64_seed(99);
         let out = ActivationSamplePolicy::AllCornerRandom.sample(&r, 4, &mut rng);
         assert_eq!(out.len(), 4);
-        for region in out {
-            assert!(region.is_valid());
-            assert!((region.len() - 10.0).abs() < 1e-9);
+        for realization in out {
+            assert!(!realization.is_empty());
+            assert!(realization.len() <= 4);
+            // Each realization carries every placed trigger, sorted by
+            // distance — a cooldown skill re-arms at a later one.
+            let mut prev = f64::NEG_INFINITY;
+            for region in realization {
+                assert!(region.is_valid());
+                assert!((region.len() - 10.0).abs() < 1e-9);
+                assert!(region.start > prev);
+                prev = region.start;
+            }
         }
     }
 

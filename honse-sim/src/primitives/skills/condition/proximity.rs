@@ -47,13 +47,13 @@ fn nearest_runner_behind(runner: &dyn RunnerView) -> Option<RunnerSnapshot> {
     let mut nearest: Option<RunnerSnapshot> = None;
     let mut nearest_distance = f64::INFINITY;
     for snapshot in runner.other_snapshots() {
-        if !is_behind_of(runner, &snapshot) {
+        if !is_behind_of(runner, snapshot) {
             continue;
         }
         let distance = runner.position() - snapshot.position;
         if distance < nearest_distance {
             nearest_distance = distance;
-            nearest = Some(snapshot);
+            nearest = Some(*snapshot);
         }
     }
     nearest
@@ -63,13 +63,13 @@ fn nearest_runner_infront(runner: &dyn RunnerView) -> Option<RunnerSnapshot> {
     let mut nearest: Option<RunnerSnapshot> = None;
     let mut nearest_distance = f64::INFINITY;
     for snapshot in runner.other_snapshots() {
-        if !is_ahead_of(runner, &snapshot) {
+        if !is_ahead_of(runner, snapshot) {
             continue;
         }
         let distance = snapshot.position - runner.position();
         if distance < nearest_distance {
             nearest_distance = distance;
-            nearest = Some(snapshot);
+            nearest = Some(*snapshot);
         }
     }
     nearest
@@ -136,14 +136,14 @@ pub fn register_proximity_conditions() {
             let mut ahead = false;
             let mut behind = false;
             for snapshot in r.other_snapshots() {
-                if !within_distance(r, &snapshot, NEAR_DISTANCE_METERS)
-                    || !within_lane(r, &snapshot, threshold)
+                if !within_distance(r, snapshot, NEAR_DISTANCE_METERS)
+                    || !within_lane(r, snapshot, threshold)
                 {
                     continue;
                 }
-                if is_ahead_of(r, &snapshot) {
+                if is_ahead_of(r, snapshot) {
                     ahead = true;
-                } else if is_behind_of(r, &snapshot) {
+                } else if is_behind_of(r, snapshot) {
                     behind = true;
                 }
             }
@@ -231,8 +231,8 @@ mod tests {
         fn accumulate_time(&self) -> f64 {
             self.accumulate_time
         }
-        fn other_snapshots(&self) -> Vec<RunnerSnapshot> {
-            self.snapshots.clone()
+        fn other_snapshots(&self) -> &[RunnerSnapshot] {
+            &self.snapshots
         }
     }
 

@@ -7,7 +7,7 @@
 //! legacy combined engine share them. The engine-side observers feed them
 //! per-tick [`ActiveEffectView`] slices and the open/closed log maps.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Snapshot of one active (duration-based) skill effect, exposed to the compare
 /// read-model so it can reconcile effect-activation position ranges.
@@ -56,8 +56,14 @@ pub struct SkillEffectLog {
 pub type OpenLogRef = (String, usize);
 
 /// Aggregate one tick's active effects into per-key counts.
-pub fn count_effects(effects: &[ActiveEffectView]) -> HashMap<String, (usize, ActiveEffectView)> {
-    let mut counts: HashMap<String, (usize, ActiveEffectView)> = HashMap::new();
+///
+/// A `BTreeMap`, not a `HashMap`: [`reconcile_effects`] opens logs by iterating
+/// this map and assigns each one the next `execution_id`, so hash order made the
+/// telemetry read model differ between runs of the same seed. Sorted iteration
+/// makes the assignment reproducible. Keys are small and few, so the ordered map
+/// costs nothing measurable.
+pub fn count_effects(effects: &[ActiveEffectView]) -> BTreeMap<String, (usize, ActiveEffectView)> {
+    let mut counts: BTreeMap<String, (usize, ActiveEffectView)> = BTreeMap::new();
     for effect in effects {
         let key = format!(
             "{}:{}:{}:{:.6}",
@@ -79,7 +85,7 @@ pub fn count_effects(effects: &[ActiveEffectView]) -> HashMap<String, (usize, Ac
                without improving clarity"
 )]
 pub fn reconcile_effects(
-    counts: &HashMap<String, (usize, ActiveEffectView)>,
+    counts: &BTreeMap<String, (usize, ActiveEffectView)>,
     open: &mut HashMap<String, Vec<OpenLogRef>>,
     logs: &mut HashMap<String, Vec<SkillEffectLog>>,
     perspective: EffectPerspective,
@@ -107,25 +113,22 @@ pub fn reconcile_effects(
             open_refs.push((effect.skill_id.clone(), skill_logs.len() - 1));
         }
     }
-    // Close logs whose effect count dropped.
-    let keys: Vec<String> = open.keys().cloned().collect();
-    for key in keys {
-        let expected = counts.get(&key).map_or(0, |(c, _)| *c);
-        if let Some(open_refs) = open.get_mut(&key) {
-            while open_refs.len() > expected {
-                if let Some((skill_id, idx)) = open_refs.pop() {
-                    if let Some(skill_logs) = logs.get_mut(&skill_id) {
-                        if let Some(log) = skill_logs.get_mut(idx) {
-                            log.end = position;
-                        }
+    // Close logs whose effect count dropped. `retain` walks the open map in
+    // place, so this no longer clones every open key into a scratch `Vec` on
+    // each tick.
+    open.retain(|key, open_refs| {
+        let expected = counts.get(key).map_or(0, |(c, _)| *c);
+        while open_refs.len() > expected {
+            if let Some((skill_id, idx)) = open_refs.pop() {
+                if let Some(skill_logs) = logs.get_mut(&skill_id) {
+                    if let Some(log) = skill_logs.get_mut(idx) {
+                        log.end = position;
                     }
                 }
             }
-            if open_refs.is_empty() {
-                open.remove(&key);
-            }
         }
-    }
+        !open_refs.is_empty()
+    });
 }
 
 /// Close every still-open log at `position` (round end).

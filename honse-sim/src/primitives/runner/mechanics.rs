@@ -15,31 +15,45 @@ use crate::shared_kernel::language::{DistanceType, Strategy};
 use crate::skills::effect::{PositionKeepState, SkillType};
 use crate::stamina::policy::RaceStateSlice;
 
-/// Power-conservation parameters from KuromiAK's mechanics document. Values marked
-/// as assumptions are named constants so Global tuning can change them in one place.
+/// Cap on one rushed (temptation) spell.
+///
+/// A Frenzied-family debuff overwrites `rushed_max_duration` with its own fixed
+/// window; this is the value restored when the spell ends, so the overwrite does
+/// not carry into a later rush.
+pub(super) const RUSHED_MAX_DURATION: f64 = 12.0;
+
+/// Power-conservation parameters, transcribed from `docs/race-mechanics/GLOBAL.md`
+/// §13 (Charge Up / Fully Charged). Values the reference leaves unnamed are
+/// marked as assumptions so Global tuning can change them in one place.
 mod conserve_power {
-    /// The conserved-power gauge threshold required to release Fully Charged.
-    ///
-    /// The source docs say "if there is enough conserved power" but do not name a
-    /// concrete value. 100.0 is a local assumption/tuning point.
-    pub(super) const FULLY_CHARGED_THRESHOLD: f64 = 100.0;
-    /// Gauge gain per 1.5s check while position keep is Pace Down.
-    pub(super) const PACE_DOWN_GAIN: f64 = 6.7;
-    /// Gauge gain per 1.5s check while position keep is Normal/None.
-    pub(super) const NORMAL_GAIN: f64 = 4.2;
-    /// Gauge multiplier applied by Spot Struggle on a conserve check.
-    pub(super) const SPOT_STRUGGLE_DECAY: f64 = 0.95;
-    /// Gauge multiplier applied by Rushed on a conserve check.
-    pub(super) const RUSHED_DECAY: f64 = 0.8;
-    /// Conserve checks run every ~1.5 seconds at 15 FPS.
-    pub(super) const CHECK_FRAMES: i64 = 23;
+    /// Power above which a runner may conserve, and the floor the release
+    /// acceleration is measured from (`PowerStat - 1200`).
+    pub(super) const POWER_FLOOR: f64 = 1200.0;
+    /// Gauge gain **per second** while position keep is Pace Down.
+    pub(super) const PACE_DOWN_GAIN_PER_SECOND: f64 = 6.7;
+    /// Gauge gain **per second** while position keep is Normal/None.
+    pub(super) const NORMAL_GAIN_PER_SECOND: f64 = 4.2;
+    /// Credit accrues over the first 10 sections of the course only.
+    pub(super) const CREDIT_WINDOW_SECTIONS: f64 = 10.0;
+    /// Seconds before conserving may restart after it was stopped.
+    pub(super) const RESTART_LOCK_SECONDS: f64 = 1.5;
+    /// Gauge multiplier applied **once** on entering a Spot Struggle.
+    pub(super) const SPOT_STRUGGLE_ENTRY_DECAY: f64 = 0.95;
+    /// Gauge multiplier applied **once** on entering Rushed.
+    pub(super) const RUSHED_ENTRY_DECAY: f64 = 0.8;
     /// Spot Struggle release activity coefficient.
     pub(super) const SPOT_STRUGGLE_ACTIVITY_COEF: f64 = 0.98;
     /// Rushed release activity coefficient.
     pub(super) const RUSHED_ACTIVITY_COEF: f64 = 0.8;
-    /// Documented but not yet understood by the release-duration model.
-    #[allow(dead_code)]
-    pub(super) const ACTIVITY_TIME_COEF: f64 = 1450.0;
+    /// Divisor of the release-duration formula
+    /// (`ConservedPower * sqrt(CourseDistance) * DistanceTypeCoef / 1450`).
+    pub(super) const RELEASE_DURATION_DIVISOR: f64 = 1450.0;
+    /// A release whose computed duration is shorter than this is skipped.
+    ///
+    /// The reference states the release rule as "if enough power was conserved"
+    /// and then names this floor as the only concrete gate, so it is the whole
+    /// "enough power" test.
+    pub(super) const MIN_RELEASE_DURATION: f64 = 0.2;
 }
 
 /// Per-strategy dueling activation rates (percent) used by compare-mode
@@ -85,6 +99,27 @@ fn fully_charged_duration_coef(distance_type: DistanceType) -> f64 {
     }
 }
 
+/// Gauge gain per second implied by the position-keep state
+/// (GLOBAL.md §13: 4.2 normal, 6.7 pace down). The other states stop accrual
+/// rather than paying a different rate, so they never reach this table.
+fn conserve_power_position_keep_coef(state: PositionKeepState) -> f64 {
+    match state {
+        PositionKeepState::PaceDown => conserve_power::PACE_DOWN_GAIN_PER_SECOND,
+        _ => conserve_power::NORMAL_GAIN_PER_SECOND,
+    }
+}
+
+/// Style coefficient of the conserve-power gain (GLOBAL.md §13: Front Runner
+/// 1.0, Pace Chaser 0.75, Late Surger 1.0, End Closer 0.7). Runaway is not
+/// listed, so it takes its base strategy's value through `base_strategy`.
+fn conserve_power_style_coef(strategy: Strategy) -> f64 {
+    match strategy.base_strategy() {
+        Strategy::PaceChaser => 0.75,
+        Strategy::EndCloser => 0.7,
+        _ => 1.0,
+    }
+}
+
 impl Runner {
     // ===================== initializers =====================
 
@@ -96,7 +131,8 @@ impl Runner {
         self.rushed_enter_position = -1.0;
         self.rushed_end_position = -1.0;
         self.rushed_timer.t = 0.0;
-        self.rushed_max_duration = 12.0;
+        self.rushed_max_duration = RUSHED_MAX_DURATION;
+        self.rushed_timer_locked = false;
         self.rushed_activations.clear();
         self.forced_rushed_index = 0;
         self.is_in_forced_rushed = false;
@@ -142,9 +178,11 @@ impl Runner {
     /// Initialize the Power Conservation / Fully Charged state.
     pub(crate) fn initialize_power_conservation(&mut self, distance_type: DistanceType) {
         self.is_fully_charged = false;
-        self.conserve_power_stat = f64::from(self.stats.power);
+        self.conserve_power_stat = self.charge_up_power_stat();
         self.conserved_power = 0.0;
-        self.last_conserve_power_check_frame = 0;
+        self.conserve_power_restart_left = 0.0;
+        self.conserve_power_was_rushed = false;
+        self.conserve_power_was_spot_struggling = false;
         self.conserve_power_saw_rushed = false;
         self.conserve_power_saw_spot_struggle = false;
         self.fully_charged_timer.t = 0.0;
@@ -154,28 +192,66 @@ impl Runner {
         self.distance_type = distance_type;
     }
 
-    /// Base rushed chance: `(6.5 / log10(0.1·wit + 1))² / 100`.
+    /// The Wiz the pre-race rushed roll reads: **FinalStat**, i.e.
+    /// `AdjustedStat + SkillModifier`.
+    ///
+    /// The roll runs in `initialize_rushed_state`, before gate skills are
+    /// consumed, so a gate `WisdomUp` bonus is not in `adjusted_stats.wit` yet.
+    /// It is read off the pending queue instead, through the same gate seam as
+    /// the type-29 adjustment. Every `WisdomUp` effect in the extract is
+    /// `Direct` (value usage `None` or `1`), so the stored modifier is the whole
+    /// contribution and this consumes no RNG.
+    fn rushed_roll_wit(&self) -> f64 {
+        self.adjusted_stats.wit + self.pending_gate_modifiers(SkillType::WisdomUp)
+    }
+
+    /// Modifiers of `effect_type` carried by pending skills that would already
+    /// have applied by the time the pre-race rolled state is decided.
+    ///
+    /// The filter is `trigger.start <= 0.0`, the same condition
+    /// `process_skill_activations` uses to fire at the gate. Summing *every*
+    /// pending skill would credit one that does not fire until 1200m. All four
+    /// type-29 skills in the extract, and all 34 `WisdomUp` effects, are
+    /// `always==1` gate skills, so nothing currently depends on the distinction —
+    /// it just keeps the seam honest.
+    fn pending_gate_modifiers(&self, effect_type: SkillType) -> f64 {
+        self.pending_skills
+            .iter()
+            .filter(|skill| skill.trigger.start <= 0.0)
+            .flat_map(|skill| skill.effects.iter())
+            .filter(|effect| effect.effect_type == effect_type)
+            .map(|effect| effect.modifier)
+            .sum()
+    }
+
+    /// Base rushed chance **before** the integer-percent ceiling and the type-29
+    /// adjustment: `(6.5 / log10(0.1·wit + 1))² / 100`.
     fn base_rushed_chance(&self) -> f64 {
-        let wit = self.adjusted_stats.wit;
+        let wit = self.rushed_roll_wit();
         (6.5 / (0.1 * wit + 1.0).log10()).powi(2) / 100.0
     }
 
     /// Pre-race rushed-chance adjustment from self `RushedChance` (type 29)
     /// effects, in probability units. Restraint (`202161`) carries a raw
     /// `-30000` modifier (`-3.0` after ×10000 scaling) = −3 percentage points
-    /// → `-0.03`. Read from the pending queue because the rushed roll in
-    /// `initialize_rushed_state` runs before gate skills are consumed.
+    /// → `-0.03`; `Hyper Excitement` (`203691`) carries `+400000` = `+0.40`. Read
+    /// from the pending queue because the rushed roll in
+    /// `initialize_rushed_state` runs before gate skills are consumed. All four
+    /// are self-targeted, so the runner's own queue is the right place to look.
     fn rushed_chance_adjustment(&self) -> f64 {
-        self.pending_skills
-            .iter()
-            .flat_map(|skill| skill.effects.iter())
-            .filter(|effect| effect.effect_type == SkillType::RushedChance)
-            .map(|effect| effect.modifier / 100.0)
-            .sum()
+        self.pending_gate_modifiers(SkillType::RushedChance) / 100.0
     }
 
+    /// The chance the pre-race rushed roll uses.
+    ///
+    /// The game compares an integer RNG against an integer percentage, so the
+    /// chance is effectively rounded **up**: 13.26% rolls as 14%. Ceiling
+    /// commutes with the integer type-29 adjustment
+    /// (`ceil(b) - 3 == ceil(b - 3)`), so the adjustment's position relative to
+    /// it does not matter while every type-29 modifier is a whole percentage.
     fn rushed_chance(&self) -> f64 {
-        (self.base_rushed_chance() + self.rushed_chance_adjustment()).max(0.0)
+        let base = (self.base_rushed_chance() * 100.0).ceil() / 100.0;
+        (base + self.rushed_chance_adjustment()).max(0.0)
     }
 
     // ===================== rushed =====================
@@ -198,9 +274,13 @@ impl Runner {
             return;
         }
 
-        // Recovery check every 3 seconds (55% chance to snap out).
+        // Recovery check every 3 seconds (55% chance to snap out). A
+        // Frenzied-family debuff suppresses it: the overwritten timer runs its
+        // fixed window out with no exit roll, so the cap check below is the only
+        // way out of the spell.
         let t = self.rushed_timer.t;
-        if t > 0.0
+        if !self.rushed_timer_locked
+            && t > 0.0
             && (t / 3.0).floor() > ((t - 0.017) / 3.0).floor()
             && self.rushed_rng.random() < 0.55
         {
@@ -280,6 +360,10 @@ impl Runner {
 
     fn leave_rushed(&mut self) {
         self.is_rushed = false;
+        // The Frenzied overwrite is spent with the spell: the fixed window does
+        // not carry into a later rush, and the 12s cap does not re-apply.
+        self.rushed_timer_locked = false;
+        self.rushed_max_duration = RUSHED_MAX_DURATION;
         self.position_keep_strategy = self.pre_rushed_pos_keep_strategy;
         self.close_last_rushed_activation();
     }
@@ -386,7 +470,7 @@ impl Runner {
             }
             return;
         }
-        // No strategy exclusion: canon (docs/mechanics/README.md "Dueling")
+        // No strategy exclusion: canon (docs/race-mechanics/ "Dueling")
         // gates only on final straight, proximity, placement, and HP. Front
         // runners that fall back into the pack can duel; the per-strategy
         // `DuelingRates` (front_runner/runaway arms) govern the artificial path.
@@ -530,69 +614,112 @@ impl Runner {
 
     // ===================== power conservation / fully charged =====================
 
+    /// The Power stat Charge Up reads (GLOBAL.md §13):
+    /// `BasePower + 0.5 * max(RawPower - 1200, 0) + SkillModifier`.
+    ///
+    /// Past 1200 the base stat is already halved, so the extra `0.5 * overcap`
+    /// converts the stat nearly 1:1 instead of 1:2. The skill half is the sum of
+    /// `PowerUp` (type 3) modifiers applied this round, tracked separately
+    /// because the ground power penalty is part of `adjusted_stats` and is not
+    /// part of this stat.
+    pub(super) fn charge_up_power_stat(&self) -> f64 {
+        let raw = f64::from(self.stats.power);
+        self.base_stats.power
+            + 0.5 * (raw - conserve_power::POWER_FLOOR).max(0.0)
+            + self.power_skill_modifier
+    }
+
     /// Advance the Power Conservation gauge. Release is handled with last-spurt
     /// transition logic so the acceleration window opens exactly at spurt start.
-    pub(crate) fn update_power_conservation(&mut self) {
+    ///
+    /// `dt` is the tick length: the gauge is a per-second rate, so it accrues
+    /// continuously rather than in fixed checks.
+    pub(crate) fn update_power_conservation(&mut self, dt: f64) {
         if self.is_fully_charged && self.fully_charged_timer.t >= self.fully_charged_duration {
             self.close_fully_charged();
         }
 
-        if !self.conserve_power_enabled || self.conserve_power_stat <= 1200.0 || self.is_last_spurt
-        {
+        if !self.conserve_power_enabled || self.is_last_spurt {
             return;
         }
 
-        if self.is_rushed {
-            self.conserve_power_saw_rushed = true;
-        }
-        if self.in_spot_struggle {
+        // Refresh the PowerStat the gate and the release formula read.
+        self.conserve_power_stat = self.charge_up_power_stat();
+
+        // Entering a Spot Struggle or a rush costs the gauge once, on the edge.
+        // These are penalties on the *gauge*, not on the accrual rate, so they
+        // apply whether or not the runner may still accrue credit.
+        if self.in_spot_struggle && !self.conserve_power_was_spot_struggling {
+            self.conserved_power *= conserve_power::SPOT_STRUGGLE_ENTRY_DECAY;
             self.conserve_power_saw_spot_struggle = true;
         }
+        if self.is_rushed && !self.conserve_power_was_rushed {
+            self.conserved_power *= conserve_power::RUSHED_ENTRY_DECAY;
+            self.conserve_power_saw_rushed = true;
+        }
+        self.conserve_power_was_spot_struggling = self.in_spot_struggle;
+        self.conserve_power_was_rushed = self.is_rushed;
 
-        let current_frame = (self.accumulate_time.t * 15.0).floor() as i64;
-        if current_frame <= 0
-            || current_frame == self.last_conserve_power_check_frame
-            || current_frame % conserve_power::CHECK_FRAMES != 0
-        {
+        // Conserving stops while in Speed Up, Overtake, Pace Up or Pace Up Ex,
+        // while Rushed, or while in a Spot Struggle, and cannot restart for
+        // 1.5 s afterwards.
+        let blocked = matches!(
+            self.position_keep_state,
+            PositionKeepState::SpeedUp
+                | PositionKeepState::Overtake
+                | PositionKeepState::PaceUp
+                | PositionKeepState::PaceUpEx
+        ) || self.is_rushed
+            || self.in_spot_struggle;
+        if blocked {
+            self.conserve_power_restart_left = conserve_power::RESTART_LOCK_SECONDS;
+        } else {
+            self.conserve_power_restart_left = (self.conserve_power_restart_left - dt).max(0.0);
+        }
+
+        if blocked || self.conserve_power_restart_left > 0.0 {
             return;
         }
-        self.last_conserve_power_check_frame = current_frame;
-
-        match self.position_keep_state {
-            PositionKeepState::PaceDown => {
-                self.conserved_power += conserve_power::PACE_DOWN_GAIN;
-            }
-            PositionKeepState::None => {
-                self.conserved_power += conserve_power::NORMAL_GAIN;
-            }
-            _ => {}
+        if self.conserve_power_stat <= conserve_power::POWER_FLOOR {
+            return;
+        }
+        if self.position >= self.section_length * conserve_power::CREDIT_WINDOW_SECTIONS {
+            return;
         }
 
-        if self.in_spot_struggle {
-            self.conserved_power *= conserve_power::SPOT_STRUGGLE_DECAY;
-        }
-        if self.is_rushed {
-            self.conserved_power *= conserve_power::RUSHED_DECAY;
-        }
+        self.conserved_power += conserve_power_position_keep_coef(self.position_keep_state)
+            * conserve_power_style_coef(self.strategy)
+            * dt;
     }
 
     fn begin_fully_charged(&mut self) {
         if !self.conserve_power_enabled
             || self.is_fully_charged
             || self.fully_charged_region.is_some()
-            || self.conserve_power_stat <= 1200.0
-            || self.conserved_power < conserve_power::FULLY_CHARGED_THRESHOLD
+            || self.conserve_power_stat <= conserve_power::POWER_FLOOR
         {
+            return;
+        }
+
+        // Duration is proportional to the gauge that was actually banked, and the
+        // gauge being large enough to buy a release is the whole "enough power"
+        // test the reference names.
+        let duration = self.conserved_power
+            * self.course_distance.sqrt()
+            * fully_charged_duration_coef(self.distance_type)
+            / conserve_power::RELEASE_DURATION_DIVISOR;
+        if duration < conserve_power::MIN_RELEASE_DURATION {
             return;
         }
 
         self.is_fully_charged = true;
         self.fully_charged_timer.t = 0.0;
-        self.fully_charged_duration = 3.0 * fully_charged_duration_coef(self.distance_type);
-        self.fully_charged_accel = ((self.conserve_power_stat - 1200.0) * 130.0).sqrt()
-            * 0.001
-            * fully_charged_strategy_distance_coef(self.strategy, self.distance_type)
-            * self.fully_charged_activity_coef();
+        self.fully_charged_duration = duration;
+        self.fully_charged_accel =
+            ((self.conserve_power_stat - conserve_power::POWER_FLOOR) * 130.0).sqrt()
+                * 0.001
+                * fully_charged_strategy_distance_coef(self.strategy, self.distance_type)
+                * self.fully_charged_activity_coef();
         self.fully_charged_region = Some((self.position, -1.0));
     }
 
@@ -715,26 +842,34 @@ mod tests {
     }
 
     #[test]
-    fn rushed_chance_reduced_by_type_29_effect() {
+    fn rushed_chance_is_ceiled_to_an_integer_percent() {
+        let r = test_runner(0, Strategy::PaceChaser);
+        // test_runner carries 800 Wiz at A aptitude, so `rushed_roll_wit` is 800:
+        // (6.5 / log10(81))^2 = 11.60% raw. The game compares an integer RNG
+        // against an integer percentage, so it rolls as 12%.
+        let raw_percent = (6.5 / (0.1 * 800.0_f64 + 1.0).log10()).powi(2);
+        assert!((raw_percent - 11.60).abs() < 0.01, "raw {raw_percent}");
+        assert!((r.rushed_chance() - 0.12).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rushed_chance_reads_final_wit_and_type_29_adjustment() {
         use crate::shared_kernel::ids::SkillId;
         use crate::shared_kernel::region::Region;
-        use crate::skills::effect::{SkillTarget, SkillType};
+        use crate::skills::effect::{SkillRarity, SkillTarget, SkillType};
         use crate::skills::model::{PendingSkill, SkillEffectSpec};
         use crate::skills::value_scaling::ValueScalingPolicy;
 
         let mut r = test_runner(0, Strategy::PaceChaser);
-        let base = r.base_rushed_chance();
-        assert!(
-            (r.rushed_chance() - base).abs() < 1e-12,
-            "no type-29 skill: no adjustment"
-        );
+        assert!((r.rushed_chance() - 0.12).abs() < 1e-12);
 
-        // Restraint (202161): the type-5 wisdom effect plus the type-29 rushed
-        // reducer (raw -30000 -> -3.0 -> -0.03 probability).
+        // Restraint (202161) as the extract stores it: Wisdom Up `60` alongside
+        // the type-29 reducer (raw `-30000` -> `-3.0` -> `-0.03` probability).
         r.pending_skills.push(PendingSkill {
             skill_id: SkillId::new("202161"),
-            rarity: crate::skills::effect::SkillRarity::White,
+            rarity: SkillRarity::White,
             tags: vec![405, 615],
+            activate_lot: None,
             trigger: Region::new(0.0, 1.0),
             effects: vec![
                 SkillEffectSpec {
@@ -757,11 +892,52 @@ mod tests {
             extra_condition: None,
             target_strategy: None,
             forced: false,
+            cooldown: None,
         });
 
+        // Both effects belong to the runner's own gate skill, so the roll reads
+        // FinalStat: 800 + 60 = 860 Wiz, i.e. (6.5 / log10(87))^2 = 11.23%,
+        // ceiled to 12%, then the -3 point adjustment.
+        assert!((r.rushed_roll_wit() - 860.0).abs() < 1e-12);
         assert!(
-            (r.rushed_chance() - (base - 0.03)).abs() < 1e-12,
-            "type-29 effect must lower the rushed chance by 0.03"
+            (r.rushed_chance() - 0.09).abs() < 1e-12,
+            "got {}",
+            r.rushed_chance()
+        );
+    }
+
+    #[test]
+    fn rushed_roll_ignores_pending_wisdom_up_that_fires_later() {
+        use crate::shared_kernel::ids::SkillId;
+        use crate::shared_kernel::region::Region;
+        use crate::skills::effect::{SkillRarity, SkillTarget, SkillType};
+        use crate::skills::model::{PendingSkill, SkillEffectSpec};
+        use crate::skills::value_scaling::ValueScalingPolicy;
+
+        let mut r = test_runner(0, Strategy::PaceChaser);
+        let gate_only = r.rushed_roll_wit();
+        r.pending_skills.push(PendingSkill {
+            skill_id: SkillId::new("100001"),
+            rarity: SkillRarity::White,
+            tags: vec![],
+            activate_lot: None,
+            trigger: Region::new(1200.0, 1210.0),
+            effects: vec![SkillEffectSpec {
+                target: SkillTarget::SelfTarget,
+                effect_type: SkillType::WisdomUp,
+                base_duration: -1.0,
+                modifier: 60.0,
+                value_scaling: ValueScalingPolicy::Direct,
+                value_level_usage: None,
+            }],
+            extra_condition: None,
+            target_strategy: None,
+            forced: false,
+            cooldown: None,
+        });
+        assert!(
+            (r.rushed_roll_wit() - gate_only).abs() < 1e-12,
+            "a Wisdom Up that fires at 1200m must not move the pre-race roll"
         );
     }
 
@@ -872,32 +1048,103 @@ mod tests {
     }
 
     #[test]
-    fn power_conservation_gains_by_position_keep_state() {
+    fn charge_up_power_stat_restores_overcap_and_adds_skill_bonus() {
         let mut r = test_runner(0, Strategy::PaceChaser);
-        r.conserve_power_stat = 1300.0;
-        r.accumulate_time.t = 23.0 / 15.0;
-        r.position_keep_state = PositionKeepState::None;
-        r.update_power_conservation();
-        assert!((r.conserved_power - 4.2).abs() < 1e-9);
+        // 1300 raw overcaps to a 1250 base; the extra half-overcap brings the
+        // Charge Up stat back to 1300 (mechanics § Charge Up).
+        r.stats.power = 1300;
+        r.base_stats.power = 1250.0;
+        assert!((r.charge_up_power_stat() - 1300.0).abs() < 1e-9);
 
-        r.accumulate_time.t = 46.0 / 15.0;
-        r.position_keep_state = PositionKeepState::PaceDown;
-        r.update_power_conservation();
-        assert!((r.conserved_power - 10.9).abs() < 1e-9);
+        // Under the cap it is the base stat plus applied PowerUp skills.
+        r.stats.power = 1000;
+        r.base_stats.power = 1000.0;
+        r.power_skill_modifier = 60.0;
+        assert!((r.charge_up_power_stat() - 1060.0).abs() < 1e-9);
     }
 
     #[test]
-    fn power_conservation_applies_activity_decay() {
+    fn conserve_power_style_coefficients_match_the_reference() {
+        assert_eq!(super::conserve_power_style_coef(Strategy::FrontRunner), 1.0);
+        assert_eq!(super::conserve_power_style_coef(Strategy::PaceChaser), 0.75);
+        assert_eq!(super::conserve_power_style_coef(Strategy::LateSurger), 1.0);
+        assert_eq!(super::conserve_power_style_coef(Strategy::EndCloser), 0.7);
+        // Runaway is unlisted and takes its base strategy's value.
+        assert_eq!(super::conserve_power_style_coef(Strategy::Runaway), 1.0);
+    }
+
+    #[test]
+    fn power_conservation_accrues_per_second_by_state_and_style() {
         let mut r = test_runner(0, Strategy::PaceChaser);
-        r.conserve_power_stat = 1300.0;
-        r.accumulate_time.t = 23.0 / 15.0;
+        r.stats.power = 1300;
+        r.base_stats.power = 1250.0;
         r.position_keep_state = PositionKeepState::None;
+        r.update_power_conservation(1.0);
+        assert!((r.conserved_power - 4.2 * 0.75).abs() < 1e-9);
+
+        r.position_keep_state = PositionKeepState::PaceDown;
+        r.update_power_conservation(1.0);
+        assert!((r.conserved_power - (4.2 + 6.7) * 0.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn power_conservation_stops_and_locks_restart_in_blocking_states() {
+        let mut r = test_runner(0, Strategy::FrontRunner);
+        r.stats.power = 1300;
+        r.base_stats.power = 1250.0;
+        r.position_keep_state = PositionKeepState::SpeedUp;
+        r.update_power_conservation(1.0);
+        assert_eq!(r.conserved_power, 0.0);
+        assert!((r.conserve_power_restart_left - 1.5).abs() < 1e-9);
+
+        // Leaving the state does not resume accrual until the lock expires.
+        r.position_keep_state = PositionKeepState::None;
+        r.update_power_conservation(1.0);
+        assert_eq!(r.conserved_power, 0.0);
+        r.update_power_conservation(0.5);
+        assert!((r.conserved_power - 4.2 * 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn power_conservation_credit_stops_after_ten_sections() {
+        let mut r = test_runner(0, Strategy::FrontRunner);
+        r.stats.power = 1300;
+        r.base_stats.power = 1250.0;
+        r.section_length = 100.0;
+        r.position = 1000.0;
+        r.update_power_conservation(1.0);
+        assert_eq!(r.conserved_power, 0.0);
+
+        r.position = 999.0;
+        r.update_power_conservation(1.0);
+        assert!((r.conserved_power - 4.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn power_conservation_requires_more_than_1200_power() {
+        let mut r = test_runner(0, Strategy::FrontRunner);
+        r.stats.power = 1200;
+        r.base_stats.power = 1200.0;
+        r.update_power_conservation(1.0);
+        assert_eq!(r.conserved_power, 0.0);
+    }
+
+    #[test]
+    fn power_conservation_entry_decays_apply_once_on_the_edge() {
+        let mut r = test_runner(0, Strategy::FrontRunner);
+        r.stats.power = 1300;
+        r.base_stats.power = 1250.0;
+        r.conserved_power = 100.0;
         r.in_spot_struggle = true;
         r.is_rushed = true;
-        r.update_power_conservation();
-        assert!((r.conserved_power - 4.2 * 0.95 * 0.8).abs() < 1e-9);
+        r.update_power_conservation(1.0);
+        assert!((r.conserved_power - 100.0 * 0.95 * 0.8).abs() < 1e-9);
         assert!(r.conserve_power_saw_spot_struggle);
         assert!(r.conserve_power_saw_rushed);
+
+        // Still rushed and struggling: no second decay, and no accrual.
+        r.update_power_conservation(1.0);
+        assert!((r.conserved_power - 100.0 * 0.95 * 0.8).abs() < 1e-9);
     }
 
     #[test]
@@ -906,27 +1153,47 @@ mod tests {
         r.conserve_power_stat = 1400.0;
         r.conserved_power = 100.0;
         r.distance_type = DistanceType::Mid;
+        r.course_distance = 2400.0;
         r.position = 1800.0;
         r.begin_fully_charged();
         let expected = ((1400.0_f64 - 1200.0) * 130.0).sqrt() * 0.001 * 0.9;
         assert!(r.is_fully_charged);
         assert!((r.fully_charged_accel - expected).abs() < 1e-12);
-        assert!((r.fully_charged_duration - 2.625).abs() < 1e-12);
+        // 100 * sqrt(2400) * 0.875 / 1450
+        let expected_duration = 100.0 * 2400.0_f64.sqrt() * 0.875 / 1450.0;
+        assert!((r.fully_charged_duration - expected_duration).abs() < 1e-12);
         assert_eq!(r.fully_charged_region, Some((1800.0, -1.0)));
     }
 
     #[test]
-    fn fully_charged_requires_eligibility_and_threshold() {
+    fn fully_charged_release_needs_a_gauge_worth_more_than_point_two_seconds() {
+        let mut r = test_runner(0, Strategy::PaceChaser);
+        r.conserve_power_stat = 1300.0;
+        r.distance_type = DistanceType::Short;
+        r.course_distance = 1000.0;
+        // 20 * sqrt(1000) * 0.45 / 1450 = 0.196 s, under the floor.
+        r.conserved_power = 20.0;
+        r.begin_fully_charged();
+        assert!(!r.is_fully_charged);
+
+        // 30 * sqrt(1000) * 0.45 / 1450 = 0.294 s, over it.
+        r.conserved_power = 30.0;
+        r.begin_fully_charged();
+        assert!(r.is_fully_charged);
+    }
+
+    #[test]
+    fn fully_charged_requires_eligible_power() {
         let mut r = test_runner(0, Strategy::PaceChaser);
         r.conserve_power_stat = 1200.0;
         r.conserved_power = 100.0;
+        r.course_distance = 2400.0;
         r.begin_fully_charged();
         assert!(!r.is_fully_charged);
 
         r.conserve_power_stat = 1300.0;
-        r.conserved_power = 99.9;
         r.begin_fully_charged();
-        assert!(!r.is_fully_charged);
+        assert!(r.is_fully_charged);
     }
 
     #[test]
@@ -934,11 +1201,13 @@ mod tests {
         let mut r = test_runner(0, Strategy::PaceChaser);
         r.conserve_power_stat = 1300.0;
         r.conserved_power = 100.0;
+        r.distance_type = DistanceType::Mid;
+        r.course_distance = 2400.0;
         r.position = 1700.0;
         r.begin_fully_charged();
         r.position = 1760.0;
         r.fully_charged_timer.t = r.fully_charged_duration;
-        r.update_power_conservation();
+        r.update_power_conservation(1.0 / 15.0);
         assert!(!r.is_fully_charged);
         assert_eq!(r.fully_charged_region, Some((1700.0, 1760.0)));
     }

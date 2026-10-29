@@ -166,6 +166,12 @@ impl RunnerObservation for Runner {
     fn rushed_activations(&self) -> Vec<(f64, f64)> {
         self.rushed_activations.clone()
     }
+    fn position_keep_activations(&self) -> Vec<(f64, f64, i64)> {
+        self.position_keep_activations
+            .iter()
+            .map(|activation| (activation.start, activation.end, activation.state as i64))
+            .collect()
+    }
     fn dueling_start_position(&self) -> f64 {
         self.dueling_start_position
     }

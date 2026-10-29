@@ -83,8 +83,8 @@ The first crates.io release must use the temporary `CRATES_IO_BOOTSTRAP_TOKEN` r
 
 ## Mechanics documentation
 
-- [`docs/mechanics/README.md`](docs/mechanics/README.md) contains the detailed mechanics model.
-- [`docs/mechanics/quick-reference.md`](docs/mechanics/quick-reference.md) contains formulas and known limitations.
+- [`docs/race-mechanics/`](docs/race-mechanics/) contains the detailed mechanics model.
+- [`docs/race-mechanics/GLOBAL.md`](docs/race-mechanics/GLOBAL.md) contains formulas and known limitations.
 - [`docs/simulation/patterns.md`](docs/simulation/patterns.md) describes the two engine patterns.
 
 Race mechanics are reverse-engineered and can contain errors. Update the mechanics documentation and cite the source when new evidence changes an implemented rule.

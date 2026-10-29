@@ -6,15 +6,13 @@
 
 use crate::course::model::CourseData;
 use crate::course::phase::phase_start;
-use crate::readouts::{guts_hp_burn_multiplier, max_hp};
+use crate::readouts::{guts_hp_burn_multiplier, max_hp, spurt_hp_requirement, SPURT_BUFFER_METERS};
 use crate::shared_kernel::language::{GroundCondition, Phase, Strategy};
 use crate::shared_kernel::rng::Prng;
 use crate::stamina::ledger::{StaminaLedger, StatusCause};
 use crate::stamina::policy::{RaceStateSlice, StaminaPolicy, StaminaStats};
 use crate::stamina::spurt::get_ground_consumption_coef;
 
-/// Buffer distance (meters) the game keeps before the finish in spurt math.
-const SPURT_BUFFER_METERS: f64 = 60.0;
 /// A pinned transition this close past the late-race line is a full spurt.
 const PINNED_FULL_SPURT_TOLERANCE_METERS: f64 = 3.0;
 /// The runner's wisdom roll is compared against `subpar_accept_chance` out of
@@ -249,10 +247,26 @@ impl StaminaPolicy for GameStaminaPolicy {
         max_speed: f64,
         base_target_speed2: f64,
     ) -> (f64, f64) {
-        let max_dist = self.distance - phase_start(self.distance, Phase::LateRace);
-        let s = (max_dist - SPURT_BUFFER_METERS) / max_speed;
+        // The readout owns the threshold so a planner and this decision agree
+        // on the bar; see `readouts::spurt_hp_requirement`.
         let last_leg = Self::last_leg_state(state);
-        let hp_needed = self.hp_per_second(&last_leg, max_speed) * s;
+        let hp_needed = spurt_hp_requirement(
+            self.distance,
+            max_speed,
+            self.base_speed,
+            self.ground_modifier,
+            self.guts_modifier,
+            self.status_modifier(&last_leg),
+        );
+
+        // Record what the bar held over the spurt's own cost before the branch
+        // decides whether that was enough. A negative margin is the deficit a
+        // force-full-spurt reading reports. The bill itself is recorded beside
+        // it: the margin alone cannot say whether a run was held to a smaller
+        // bar or simply spent less getting there, and those are different
+        // races to a reader deciding what to build.
+        self.ledger.spurt_margin = Some(self.current_health - hp_needed);
+        self.ledger.spurt_hp_required = Some(hp_needed);
 
         if self.current_health >= hp_needed {
             self.achieved_max_spurt = true;
@@ -385,6 +399,76 @@ mod tests {
         let mid = p.hp_per_second(&slice(Phase::MidRace, 22.0), 22.0);
         let late = p.hp_per_second(&slice(Phase::LateRace, 22.0), 22.0);
         assert!(late > mid); // guts modifier > 1 applies in phase 2+
+    }
+
+    /// The bar this policy decides on must be the readout's, or a planner would
+    /// quote a different threshold than the race applies.
+    #[test]
+    fn the_full_spurt_bar_is_the_readout_threshold() {
+        let mut p = policy();
+        let state = slice(Phase::LateRace, 22.0);
+        let bar = spurt_hp_requirement(
+            p.distance,
+            22.0,
+            p.base_speed,
+            p.ground_modifier,
+            p.guts_modifier,
+            p.status_modifier(&state),
+        );
+
+        // A hundredth of an HP over the bar is enough to be granted it.
+        p.current_health = bar + 0.01;
+        assert_eq!(p.get_last_spurt_pair(&state, 22.0, 19.6), (-1.0, 22.0));
+        assert!(p.is_max_spurt());
+
+        // And a hundredth under is not, so the bar is exactly where the
+        // readout says it is.
+        let mut short = policy();
+        short.current_health = bar - 0.01;
+        let (transition, speed) = short.get_last_spurt_pair(&state, 22.0, 19.6);
+        assert!(!short.is_max_spurt());
+        assert!(transition > 0.0);
+        assert!(speed < 22.0);
+    }
+
+    /// The decision records its margin against the same bar, signed: a
+    /// positive margin is spare HP, a negative one is the deficit to a full
+    /// spurt, which is what a force-full-spurt reading reports.
+    #[test]
+    fn the_spurt_decision_records_its_margin() {
+        let mut p = policy();
+        let state = slice(Phase::LateRace, 22.0);
+        let bar = spurt_hp_requirement(
+            p.distance,
+            22.0,
+            p.base_speed,
+            p.ground_modifier,
+            p.guts_modifier,
+            p.status_modifier(&state),
+        );
+
+        p.current_health = bar + 50.0;
+        p.get_last_spurt_pair(&state, 22.0, 19.6);
+        let ledger = p.ledger().expect("game policy records a ledger");
+        assert_eq!(ledger.spurt_margin, Some(50.0));
+        // The bill is the bar the margin was measured against, so a reader can
+        // recover the spend it had already cost.
+        assert_eq!(ledger.spurt_hp_required, Some(bar));
+
+        let mut short = policy();
+        short.current_health = bar - 30.0;
+        short.get_last_spurt_pair(&state, 22.0, 19.6);
+        let short_ledger = short.ledger().expect("game policy records a ledger");
+        assert_eq!(short_ledger.spurt_margin, Some(-30.0));
+        assert_eq!(short_ledger.spurt_hp_required, Some(bar));
+    }
+
+    #[test]
+    fn a_fresh_policy_reports_no_margin() {
+        let policy = policy();
+        let ledger = policy.ledger().expect("game policy records a ledger");
+        assert_eq!(ledger.spurt_margin, None);
+        assert_eq!(ledger.spurt_hp_required, None);
     }
 
     #[test]

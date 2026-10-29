@@ -49,6 +49,11 @@ pub struct CompareRoundData {
     pub start_delay: f64,
     /// Closed rushed regions.
     pub rushed: Vec<(f64, f64)>,
+    /// Position-keep regions as `(start, end, state)`, where `state` is the
+    /// `PositionKeepState` discriminant (1 pace up, 2 pace down, 3 speed up,
+    /// 4 overtake, 5 pace up ex). Every region the collector records is closed:
+    /// one still open at the finish is closed to the course distance.
+    pub position_keep_regions: Vec<(f64, f64, i64)>,
     /// Dueling region, if any.
     pub dueling_region: Option<(f64, f64)>,
     /// Spot-struggle region, if any.
@@ -87,6 +92,19 @@ pub struct CompareData {
     pub rounds: Vec<CompareRound>,
 }
 
+/// Two independently-raced compare runs, paired by round index.
+///
+/// The vacuum compare can race each contestant in its own field; a paired-delta
+/// reader still diffs them round by round, so the two read-models travel
+/// together rather than as two calls whose alignment a caller has to trust.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PairedCompareData {
+    /// The first contestant's rounds.
+    pub first: CompareData,
+    /// The second contestant's rounds.
+    pub second: CompareData,
+}
+
 /// One round's compare data.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CompareRound {
@@ -98,6 +116,37 @@ pub struct CompareRound {
     pub runners: Vec<CompareRoundData>,
 }
 
+/// Position-only per-runner, per-round data.
+///
+/// The skill planner's bashin delta reads only the position series, so its
+/// collector records nothing else: no velocity/HP/lane arrays and no effect
+/// reconciliation. Frames match [`CompareRoundData::position`] exactly.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PositionRoundData {
+    /// Runner id.
+    pub runner_id: u32,
+    /// Per-tick position.
+    pub position: Vec<f64>,
+}
+
+/// One round's position-only data.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PositionRound {
+    /// Master seed.
+    pub seed: u64,
+    /// The primary (first-seen) runner's id, if any.
+    pub primary_runner_id: Option<u32>,
+    /// Per-runner position series.
+    pub runners: Vec<PositionRoundData>,
+}
+
+/// Accumulated position-only data: one entry per round.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PositionData {
+    /// Per-round runner position series.
+    pub rounds: Vec<PositionRound>,
+}
+
 /// An open effect log location: `(skill_id, index into that skill's log vec)`.
 
 #[derive(Default)]
@@ -106,7 +155,7 @@ struct CompareRunnerState {
     open_effects: HashMap<String, Vec<OpenLogRef>>,
     open_targeted: HashMap<String, Vec<OpenLogRef>>,
     effect_sequence: u64,
-    seen_used_skills: HashSet<String>,
+    seen_used_skills: HashMap<String, usize>,
     seen_targeted_count: usize,
 }
 
@@ -269,12 +318,29 @@ impl RaceObserver for CompareObserver {
         );
 
         // --- newly used skills: log their instant (static) effects ---
+        // `used` lists every activation in order, so a cooldown skill's second
+        // proc appears again. Walk that list directly to preserve activation
+        // order while comparing per-id occurrence counts against the ledger.
+        let mut occurrences: HashMap<&str, usize> = HashMap::new();
         for used_skill_id in &used {
-            if state.seen_used_skills.contains(*used_skill_id) {
+            let occurrence = {
+                let count = occurrences.entry(*used_skill_id).or_insert(0);
+                *count += 1;
+                *count
+            };
+            let seen = state
+                .seen_used_skills
+                .get(*used_skill_id)
+                .copied()
+                .unwrap_or(0);
+            if occurrence <= seen {
                 continue;
             }
-            state.seen_used_skills.insert((*used_skill_id).to_owned());
+            state
+                .seen_used_skills
+                .insert((*used_skill_id).to_owned(), occurrence);
             state.data.used_skills.push((*used_skill_id).to_owned());
+
             let mut new_logs: Vec<SkillEffectLog> = Vec::new();
             for effect in &static_effects {
                 if effect.skill_id != *used_skill_id
@@ -357,6 +423,18 @@ impl RaceObserver for CompareObserver {
             .into_iter()
             .map(|(s, e)| (s.min(distance), e.min(distance)))
             .collect();
+        // A position-keep region is back-filled with its exit position, so one
+        // still open when the runner crosses the line carries `end == 0.0`.
+        // Close it to the finish rather than dropping it: the runner really was
+        // pacing up or down over that last stretch.
+        d.position_keep_regions = runner
+            .position_keep_activations()
+            .into_iter()
+            .map(|(s, e, state)| {
+                let end = if e > 0.0 { e } else { distance };
+                (s.min(distance), end.min(distance), state)
+            })
+            .collect();
         let duel_start = runner.dueling_start_position();
         d.dueling_region = if duel_start >= 0.0 {
             let end = runner.dueling_end_position();
@@ -416,12 +494,415 @@ impl RaceObserver for CompareObserver {
     }
 }
 
+#[derive(Default)]
+struct PositionInner {
+    seed: u64,
+    primary: Option<u32>,
+    states: Vec<(u32, PositionRoundData)>,
+    rounds: Vec<PositionRound>,
+}
+
+impl PositionInner {
+    fn state_mut(&mut self, id: u32) -> &mut PositionRoundData {
+        if let Some(pos) = self.states.iter().position(|(rid, _)| *rid == id) {
+            return &mut self.states[pos].1;
+        }
+        if self.primary.is_none() {
+            self.primary = Some(id);
+        }
+        let data = PositionRoundData {
+            runner_id: id,
+            position: Vec::new(),
+        };
+        self.states.push((id, data));
+        let last = self.states.len() - 1;
+        &mut self.states[last].1
+    }
+}
+
+/// Read-model that records only per-tick positions.
+///
+/// The skill planner diffs finish-time positions against a baseline and never
+/// reads velocity, HP, lane, order, or effect logs. Recording just positions
+/// keeps the per-tick work and the serialized payload to what the planner uses.
+pub struct PositionDataCollector {
+    inner: Rc<RefCell<PositionInner>>,
+    focus_runner_ids: Option<HashSet<u32>>,
+}
+
+impl Default for PositionDataCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PositionDataCollector {
+    /// A fresh position collector.
+    pub fn new() -> Self {
+        PositionDataCollector {
+            inner: Rc::new(RefCell::new(PositionInner::default())),
+            focus_runner_ids: None,
+        }
+    }
+
+    /// A fresh position collector that only records the given runner ids.
+    pub fn for_runner_ids(runner_ids: impl IntoIterator<Item = RunnerId>) -> Self {
+        PositionDataCollector {
+            inner: Rc::new(RefCell::new(PositionInner::default())),
+            focus_runner_ids: Some(runner_ids.into_iter().map(|id| id.0).collect()),
+        }
+    }
+
+    /// A boxed observer sharing this collector's storage.
+    pub fn handle(&self) -> Box<dyn RaceObserver> {
+        Box::new(PositionObserver {
+            inner: Rc::clone(&self.inner),
+            focus_runner_ids: self.focus_runner_ids.clone(),
+        })
+    }
+
+    /// The accumulated per-round position data.
+    pub fn result(&self) -> PositionData {
+        PositionData {
+            rounds: self.inner.borrow().rounds.clone(),
+        }
+    }
+}
+
+struct PositionObserver {
+    inner: Rc<RefCell<PositionInner>>,
+    focus_runner_ids: Option<HashSet<u32>>,
+}
+
+impl PositionObserver {
+    fn observes_runner(&self, id: u32) -> bool {
+        self.focus_runner_ids
+            .as_ref()
+            .is_none_or(|focus| focus.contains(&id))
+    }
+}
+
+impl RaceObserver for PositionObserver {
+    fn on_round_start(&mut self, _race: &dyn RaceObservation, seed: u64) {
+        let mut inner = self.inner.borrow_mut();
+        inner.seed = seed;
+        inner.primary = None;
+        inner.states.clear();
+    }
+
+    fn on_after_runner_tick(
+        &mut self,
+        _race: &dyn RaceObservation,
+        runner: &dyn RunnerObservation,
+        _dt: f64,
+    ) {
+        let id = runner.id().0;
+        if !self.observes_runner(id) {
+            return;
+        }
+        let mut inner = self.inner.borrow_mut();
+        inner.state_mut(id).position.push(runner.position());
+    }
+
+    fn on_round_end(&mut self, _race: &dyn RaceObservation) {
+        let mut inner = self.inner.borrow_mut();
+        let primary = inner.primary;
+        let seed = inner.seed;
+        let runners: Vec<PositionRoundData> =
+            inner.states.iter().map(|(_, data)| data.clone()).collect();
+        inner.rounds.push(PositionRound {
+            seed,
+            primary_runner_id: primary,
+            runners,
+        });
+    }
+}
+
+/// Skill-compare (basin) per-runner, per-round data.
+///
+/// The basin reduction reads the position/velocity series, the tracked skill's
+/// self-cast activation logs, and whether each skill was used. It never reads
+/// HP, lane, pacer gap, order, targeted activations, or the mechanic regions the
+/// full compare read-model carries, so this collector records only what it needs.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BasinRoundData {
+    /// Runner id.
+    pub runner_id: u32,
+    /// Per-tick elapsed time.
+    pub time: Vec<f64>,
+    /// Per-tick position.
+    pub position: Vec<f64>,
+    /// Per-tick true velocity (speed + current-speed modifier).
+    pub velocity: Vec<f64>,
+    /// Self-cast skill-effect activation logs, keyed by skill id.
+    pub skill_activations: HashMap<String, Vec<SkillEffectLog>>,
+    /// Ids of skills used this round (in activation order).
+    pub used_skills: Vec<String>,
+    /// Final position.
+    pub finish_position: f64,
+}
+
+/// One round's basin data.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BasinRound {
+    /// Master seed.
+    pub seed: u64,
+    /// The primary (first-seen) runner's id, if any.
+    pub primary_runner_id: Option<u32>,
+    /// Per-runner round data.
+    pub runners: Vec<BasinRoundData>,
+}
+
+/// Accumulated basin data: one entry per round.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BasinData {
+    /// Per-round runner data.
+    pub rounds: Vec<BasinRound>,
+}
+
+#[derive(Default)]
+struct BasinRunnerState {
+    data: BasinRoundData,
+    open_effects: HashMap<String, Vec<OpenLogRef>>,
+    effect_sequence: u64,
+    seen_used_skills: HashMap<String, usize>,
+    finished: bool,
+}
+
+#[derive(Default)]
+struct BasinInner {
+    seed: u64,
+    primary: Option<u32>,
+    states: Vec<(u32, BasinRunnerState)>,
+    rounds: Vec<BasinRound>,
+}
+
+impl BasinInner {
+    fn state_mut(&mut self, id: u32) -> &mut BasinRunnerState {
+        if let Some(pos) = self.states.iter().position(|(rid, _)| *rid == id) {
+            return &mut self.states[pos].1;
+        }
+        if self.primary.is_none() {
+            self.primary = Some(id);
+        }
+        let mut state = BasinRunnerState::default();
+        state.data.runner_id = id;
+        self.states.push((id, state));
+        let last = self.states.len() - 1;
+        &mut self.states[last].1
+    }
+}
+
+/// Read-model that records only the channels the skill/unique basin reduces.
+pub struct BasinDataCollector {
+    inner: Rc<RefCell<BasinInner>>,
+    focus_runner_ids: Option<HashSet<u32>>,
+}
+
+impl Default for BasinDataCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BasinDataCollector {
+    /// A fresh basin collector.
+    pub fn new() -> Self {
+        BasinDataCollector {
+            inner: Rc::new(RefCell::new(BasinInner::default())),
+            focus_runner_ids: None,
+        }
+    }
+
+    /// A fresh basin collector that only records the given runner ids.
+    pub fn for_runner_ids(runner_ids: impl IntoIterator<Item = RunnerId>) -> Self {
+        BasinDataCollector {
+            inner: Rc::new(RefCell::new(BasinInner::default())),
+            focus_runner_ids: Some(runner_ids.into_iter().map(|id| id.0).collect()),
+        }
+    }
+
+    /// A boxed observer sharing this collector's storage.
+    pub fn handle(&self) -> Box<dyn RaceObserver> {
+        Box::new(BasinObserver {
+            inner: Rc::clone(&self.inner),
+            focus_runner_ids: self.focus_runner_ids.clone(),
+        })
+    }
+
+    /// The accumulated per-round basin data.
+    pub fn result(&self) -> BasinData {
+        BasinData {
+            rounds: self.inner.borrow().rounds.clone(),
+        }
+    }
+}
+
+struct BasinObserver {
+    inner: Rc<RefCell<BasinInner>>,
+    focus_runner_ids: Option<HashSet<u32>>,
+}
+
+impl BasinObserver {
+    fn observes_runner(&self, id: u32) -> bool {
+        self.focus_runner_ids
+            .as_ref()
+            .is_none_or(|focus| focus.contains(&id))
+    }
+}
+
+impl RaceObserver for BasinObserver {
+    fn on_round_start(&mut self, _race: &dyn RaceObservation, seed: u64) {
+        let mut inner = self.inner.borrow_mut();
+        inner.seed = seed;
+        inner.primary = None;
+        inner.states.clear();
+    }
+
+    fn on_after_runner_tick(
+        &mut self,
+        race: &dyn RaceObservation,
+        runner: &dyn RunnerObservation,
+        _dt: f64,
+    ) {
+        let seed = self.inner.borrow().seed;
+        let id = runner.id().0;
+        if !self.observes_runner(id) {
+            return;
+        }
+
+        let distance = race.course_distance();
+        let position = runner.position().min(distance);
+
+        let active = runner.active_effects();
+        let used = runner.used_skills();
+        let static_effects = runner.skill_static_effects();
+
+        let mut inner = self.inner.borrow_mut();
+        let state = inner.state_mut(id);
+
+        state.data.time.push(runner.accumulate_time());
+        state.data.position.push(runner.position());
+        state
+            .data
+            .velocity
+            .push(runner.current_speed() + runner.current_speed_modifier());
+
+        let self_counts = count_effects(&active);
+        reconcile_effects(
+            &self_counts,
+            &mut state.open_effects,
+            &mut state.data.skill_activations,
+            EffectPerspective::SelfCast,
+            position,
+            seed,
+            id,
+            &mut state.effect_sequence,
+        );
+
+        // Newly used skills: log their instant (static) effects. `used` lists
+        // every activation in order, so a cooldown skill's second proc appears
+        // again; per-id occurrence counts against the ledger preserve order.
+        let mut occurrences: HashMap<&str, usize> = HashMap::new();
+        for used_skill_id in &used {
+            let occurrence = {
+                let count = occurrences.entry(*used_skill_id).or_insert(0);
+                *count += 1;
+                *count
+            };
+            let seen = state
+                .seen_used_skills
+                .get(*used_skill_id)
+                .copied()
+                .unwrap_or(0);
+            if occurrence <= seen {
+                continue;
+            }
+            state
+                .seen_used_skills
+                .insert((*used_skill_id).to_owned(), occurrence);
+            state.data.used_skills.push((*used_skill_id).to_owned());
+
+            let mut new_logs: Vec<SkillEffectLog> = Vec::new();
+            for effect in &static_effects {
+                if effect.skill_id != *used_skill_id
+                    || ACTIVE_EFFECT_TYPES.contains(&effect.effect_type)
+                {
+                    continue;
+                }
+                new_logs.push(SkillEffectLog {
+                    execution_id: format!("{seed}-{id}-{}", state.effect_sequence),
+                    skill_id: (*used_skill_id).to_owned(),
+                    start: position,
+                    end: position,
+                    perspective: EffectPerspective::SelfCast,
+                    effect_type: effect.effect_type,
+                    effect_target: effect.effect_target,
+                });
+                state.effect_sequence += 1;
+            }
+            if !new_logs.is_empty() {
+                state
+                    .data
+                    .skill_activations
+                    .entry((*used_skill_id).to_owned())
+                    .or_default()
+                    .extend(new_logs);
+            }
+        }
+    }
+
+    fn on_runner_finished(&mut self, race: &dyn RaceObservation, runner: &dyn RunnerObservation) {
+        let distance = race.course_distance();
+        let position = runner.position().min(distance);
+        let mut inner = self.inner.borrow_mut();
+        let id = runner.id().0;
+        if !self.observes_runner(id) {
+            return;
+        }
+        let state = inner.state_mut(id);
+        close_all(
+            &mut state.open_effects,
+            &mut state.data.skill_activations,
+            position,
+        );
+        state.finished = true;
+        state.data.finish_position = position;
+    }
+
+    fn on_round_end(&mut self, race: &dyn RaceObservation) {
+        let distance = race.course_distance();
+        let mut inner = self.inner.borrow_mut();
+        // Close any still-open effects for non-finishers.
+        for (_, state) in &mut inner.states {
+            if !state.finished {
+                close_all(
+                    &mut state.open_effects,
+                    &mut state.data.skill_activations,
+                    distance,
+                );
+            }
+        }
+        let primary = inner.primary;
+        let seed = inner.seed;
+        let runners: Vec<BasinRoundData> = inner
+            .states
+            .iter()
+            .map(|(_, state)| state.data.clone())
+            .collect();
+        inner.rounds.push(BasinRound {
+            seed,
+            primary_runner_id: primary,
+            runners,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::events::ActiveEffectView;
     use crate::shared_kernel::ids::RunnerId;
-
     struct DummyRace;
     impl RaceObservation for DummyRace {
         fn seed(&self) -> u64 {
@@ -439,6 +920,7 @@ mod tests {
         used: Vec<String>,
         statics: Vec<crate::events::StaticEffectView>,
         rushed: Vec<(f64, f64)>,
+        position_keep: Vec<(f64, f64, i64)>,
         fully_charged_region: Option<(f64, f64)>,
         fully_charged_accel: Option<f64>,
         full_spurt: bool,
@@ -468,6 +950,9 @@ mod tests {
         fn rushed_activations(&self) -> Vec<(f64, f64)> {
             self.rushed.clone()
         }
+        fn position_keep_activations(&self) -> Vec<(f64, f64, i64)> {
+            self.position_keep.clone()
+        }
         fn fully_charged_region(&self) -> Option<(f64, f64)> {
             self.fully_charged_region
         }
@@ -484,6 +969,38 @@ mod tests {
         fn course_distance(&self) -> f64 {
             2400.0
         }
+    }
+
+    #[test]
+    fn compare_collector_preserves_repeated_skill_order() {
+        let collector = CompareDataCollector::new();
+        let mut obs = collector.handle();
+        obs.on_round_start(&CmpRace, 7);
+
+        obs.on_after_runner_tick(
+            &CmpRace,
+            &CmpRunner {
+                id: 3,
+                pos: 100.0,
+                used: vec![
+                    "201662".to_owned(),
+                    "200331".to_owned(),
+                    "201662".to_owned(),
+                ],
+                ..Default::default()
+            },
+            0.066,
+        );
+        obs.on_round_end(&CmpRace);
+
+        assert_eq!(
+            collector.result().rounds[0].runners[0].used_skills,
+            vec![
+                "201662".to_owned(),
+                "200331".to_owned(),
+                "201662".to_owned(),
+            ]
+        );
     }
 
     #[test]
@@ -563,5 +1080,40 @@ mod tests {
         assert_eq!(runner.fully_charged_region, Some((1800.0, 1860.0)));
         assert_eq!(runner.fully_charged_accel, Some(0.15));
         assert!(runner.has_achieved_full_spurt);
+    }
+
+    /// A position-keep region is back-filled on state exit, so the one still
+    /// open when the runner crosses the line arrives as `end == 0.0` and has to
+    /// be closed to the finish. Clamping also has to hold: the finish-crossing
+    /// frame overshoots the course distance.
+    #[test]
+    fn compare_collector_closes_and_clamps_position_keep_regions() {
+        let collector = CompareDataCollector::new();
+        let mut obs = collector.handle();
+        obs.on_round_start(&CmpRace, 7);
+
+        obs.on_runner_finished(
+            &CmpRace,
+            &CmpRunner {
+                id: 3,
+                pos: 2401.4,
+                position_keep: vec![
+                    // Pace up, exited normally.
+                    (120.0, 300.0, 1),
+                    // Pace down, still open at the finish.
+                    (2200.0, 0.0, 2),
+                    // Pace up ex, its exit overshot the track.
+                    (2380.0, 2401.4, 5),
+                ],
+                ..Default::default()
+            },
+        );
+        obs.on_round_end(&CmpRace);
+
+        let runner = &collector.result().rounds[0].runners[0];
+        assert_eq!(
+            runner.position_keep_regions,
+            vec![(120.0, 300.0, 1), (2200.0, 2400.0, 2), (2380.0, 2400.0, 5),]
+        );
     }
 }
