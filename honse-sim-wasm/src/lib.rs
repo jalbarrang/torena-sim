@@ -323,6 +323,14 @@ impl WasmSkillBaseline {
         let tracked_skill_id = dto.tracked_skill_id.clone();
         let tracked = run_tracked_basin(dto, None)?;
 
+        if self.rounds.len() != tracked.rounds.len() {
+            return Err(JsError::new(&format!(
+                "the baseline holds {} rounds but the tracked run produced {}",
+                self.rounds.len(),
+                tracked.rounds.len()
+            )));
+        }
+
         let mut summary = SkillCompareSummary::new();
         for (baseline, tracked_round) in self.rounds.iter().zip(tracked.rounds.iter()) {
             summary

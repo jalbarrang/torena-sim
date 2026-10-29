@@ -77,7 +77,7 @@ pub fn compute_position_diff(position_a: &[f64], position_b: &[f64]) -> Option<f
 /// Bashin gained by `candidate` over `baseline` at the finish, or `None` when
 /// either series is empty.
 pub fn bashin_delta(baseline: &[f64], candidate: &[f64]) -> Option<f64> {
-    compute_position_diff(baseline, candidate).map(meters_to_bashin)
+    transported_delta(baseline, candidate)
 }
 
 /// A per-tick value as the read-model transports it.

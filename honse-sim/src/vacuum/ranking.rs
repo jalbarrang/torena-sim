@@ -124,10 +124,14 @@ pub fn rank_skills(params: &SkillRankParams) -> Result<SkillRankData, SimError> 
 
 /// Run one runner for `nsamples` rounds and collect only its positions.
 fn run_positions(params: &SkillRankParams, runner: CreateRunner) -> PositionData {
+    let mut settings = params.settings.clone();
+    // A ranking measures a marginal, so isolate each skill's placement stream:
+    // adding the candidate must not reshuffle the baseline's skills.
+    settings.isolate_skill_rng = true;
     let mut race = Race::new(
         params.course.clone(),
         params.ground,
-        params.settings.clone(),
+        settings,
         params.parameters.clone(),
         Some(params.dueling_rates),
     );

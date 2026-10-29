@@ -117,6 +117,12 @@ impl RaceSimDataCollector {
         let mut focus_slot: Vec<Option<usize>> = Vec::new();
         for (slot, runner_id) in focus_ids.iter().enumerate() {
             let idx = runner_id.0 as usize;
+            // A focus id outside the legal contested field cannot match a
+            // runner; skipping it also keeps a hostile id from forcing a huge
+            // allocation here.
+            if idx >= super::MAX_FIELD_SIZE {
+                continue;
+            }
             if focus_slot.len() <= idx {
                 focus_slot.resize(idx + 1, None);
             }

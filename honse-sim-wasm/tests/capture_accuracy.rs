@@ -988,6 +988,10 @@ fn captured_races_score_no_worse_than_baseline() {
     assert!(!fixtures.is_empty(), "no capture fixtures found");
     let nsamples = samples();
     let update = std::env::var_os("UPDATE_ACCURACY_BASELINE").is_some();
+    assert!(
+        !(update && std::env::var_os("ACCURACY_NO_DUELING").is_some()),
+        "ACCURACY_NO_DUELING is a diagnostic; it must not update the accuracy baseline"
+    );
     let baseline = load_baseline();
     let mut next_baseline: Baseline = BTreeMap::new();
     let mut failures = Vec::new();

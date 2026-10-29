@@ -860,7 +860,7 @@ impl Runner {
                 1.0
             };
             let scaled_duration = resolved.base_duration * (course_distance / 1000.0) * scaling;
-            self.apply_self_effect(skill, &resolved, scaled_duration);
+            self.apply_self_effect(skill, &resolved, scaled_duration, course_distance);
         }
 
         let half_race = usize::from(self.position >= course_distance / 2.0);
@@ -887,6 +887,7 @@ impl Runner {
         skill: &PendingSkill,
         effect: &ResolvedSkillEffect,
         duration: f64,
+        course_distance: f64,
     ) {
         match effect.effect_type {
             SkillType::Noop => {}
@@ -951,8 +952,9 @@ impl Runner {
             SkillType::ActivateRandomGold => {
                 // `modifier` is already divided by 10000 when the effect is
                 // classified, so 564 Escapades' 10000 is 1 rare skill here and
-                // its unique's 20000 is 2.
-                self.activate_random_gold_skill(effect.modifier as usize, duration);
+                // its unique's 20000 is 2. Each skill it activates starts at
+                // this race's course distance, not this effect's duration.
+                self.activate_random_gold_skill(effect.modifier as usize, course_distance);
             }
             SkillType::ExtendEvolvedDuration => {
                 self.modifiers.special_skill_duration_scaling = effect.modifier;
@@ -2683,6 +2685,38 @@ mod tests {
                 "modifier {modifier} must activate {expected} rare skill(s)"
             );
         }
+    }
+
+    #[test]
+    fn random_gold_activation_passes_the_course_distance_to_the_activated_skill() {
+        // The random-gold effect's own duration must not leak into the skill it
+        // activates: a 3 s effect on a 2400 m course lasts 7.2 s, so the rare
+        // skill it triggers must last 7.2 s too (not 3 s * 7.2 / 1000).
+        let mut r = runner_with_skills(vec![
+            random_gold_skill("910071", 10_000.0),
+            target_speed_skill("200011", SkillRarity::Gold, "phase>=1"),
+        ]);
+        prepare(&mut r);
+        r.wit_checks_enabled = false;
+
+        let pending = r
+            .pending_skills
+            .iter()
+            .find(|skill| skill.skill_id.as_str() == "910071")
+            .expect("the activating skill is armed")
+            .clone();
+        r.activate_skill(&pending, 2400.0);
+
+        let activated = r
+            .target_speed_skills_active
+            .iter()
+            .find(|active| active.skill_id.as_str() == "200011")
+            .expect("the rare skill activated");
+        let duration = activated.duration_timer.t;
+        assert!(
+            (duration + 7.2).abs() < 1e-9,
+            "the activated skill must scale from the 2400 m course, got {duration}s"
+        );
     }
 
     #[test]

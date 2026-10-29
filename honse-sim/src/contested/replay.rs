@@ -142,6 +142,10 @@ struct GateState {
     /// Per-id activation occurrence counts already written to the replay
     /// (a cooldown skill's second proc gets its own event, as in the game).
     seen_skills: HashMap<String, usize>,
+    /// How many activations the runner had when the replay last reconciled its
+    /// used-skill log. The count only grows, so an unchanged value means no
+    /// skill fired and the per-activation work can be skipped entirely.
+    seen_activations: usize,
     finish_order: Option<i32>,
     finish_time_raw: f64,
 }
@@ -316,7 +320,12 @@ impl RaceObserver for ReplayObserver {
         let mut newly_used: Vec<String> = Vec::new();
         {
             let state = inner.gate_mut(gate);
-            for skill_id in runner.used_skills() {
+            let used = runner.used_skills();
+            if used.len() == state.seen_activations {
+                return;
+            }
+            state.seen_activations = used.len();
+            for skill_id in used {
                 let occurrence = {
                     let count = occurrences.entry(skill_id).or_insert(0);
                     *count += 1;

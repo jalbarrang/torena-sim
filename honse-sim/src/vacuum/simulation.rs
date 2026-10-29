@@ -20,12 +20,15 @@ use uma_sim_primitives::shared_kernel::ids::RunnerId;
 use uma_sim_primitives::shared_kernel::language::GroundCondition;
 use uma_sim_primitives::shared_kernel::params::RaceParameters;
 
+/// The finished-runner mask is one `u64`, so a field can hold at most 64 runners.
+pub const MAX_VACUUM_FIELD_SIZE: usize = u64::BITS as usize;
+
 /// Errors raised validating / running a compare simulation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SimError {
     /// `nsamples` must be a positive integer.
     InvalidSamples,
-    /// The field must not be empty.
+    /// The field must hold `1..=`[`MAX_VACUUM_FIELD_SIZE`] runners.
     WrongRunnerCount(usize),
     /// `focus_count` must be within `1..=runners.len()`.
     InvalidFocusCount {
@@ -51,9 +54,10 @@ impl std::fmt::Display for SimError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SimError::InvalidSamples => write!(f, "nsamples must be a positive integer"),
-            SimError::WrongRunnerCount(n) => {
-                write!(f, "run_compare expects a non-empty field, got {n}")
-            }
+            SimError::WrongRunnerCount(n) => write!(
+                f,
+                "a vacuum field must hold 1..={MAX_VACUUM_FIELD_SIZE} runners, got {n}"
+            ),
             SimError::InvalidFocusCount {
                 focus_count,
                 runners,
@@ -171,21 +175,14 @@ pub fn run_paired_compare_summarized(
 ) -> Result<CompareSummaryData, SimError> {
     let paired = run_paired_compare_rounds(first, second, None)?;
     let mut summary = CompareSummary::new();
-
-    for (round_a, round_b) in paired.first.rounds.iter().zip(paired.second.rounds.iter()) {
-        let runner_a = round_a
-            .runners
-            .first()
-            .ok_or(SimError::MissingCollectedRunner)?;
-        let runner_b = round_b
-            .runners
-            .first()
-            .ok_or(SimError::MissingCollectedRunner)?;
-        summary
-            .observe(runner_a, runner_b)
-            .map_err(SimError::Summary)?;
-    }
-
+    summary
+        .observe_paired_batch(&paired)
+        .map_err(|error| match error {
+            // A paired batch has exactly one runner per side; keep the
+            // entry-point error callers already match on.
+            SummaryError::MissingRunner(0) => SimError::MissingCollectedRunner,
+            other => SimError::Summary(other),
+        })?;
     Ok(summary.finish())
 }
 
@@ -279,6 +276,9 @@ fn validate_compare(params: &CompareSimParams) -> Result<(), SimError> {
     if params.runners.is_empty() {
         return Err(SimError::WrongRunnerCount(0));
     }
+    if params.runners.len() > MAX_VACUUM_FIELD_SIZE {
+        return Err(SimError::WrongRunnerCount(params.runners.len()));
+    }
     if !(1..=params.runners.len()).contains(&params.focus_count) {
         return Err(SimError::InvalidFocusCount {
             focus_count: params.focus_count,
@@ -319,7 +319,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use uma_sim_primitives::course::model::Straight;
-    use uma_sim_primitives::mob::generate_mob_field;
+    use uma_sim_primitives::mob::{generate_mob_field, generate_mob_runners};
     use uma_sim_primitives::projection::SkillEffectLog;
     use uma_sim_primitives::runner::test_support::{test_course, test_race_params};
     use uma_sim_primitives::shared_kernel::language::Strategy;
@@ -444,6 +444,16 @@ mod tests {
         assert!(matches!(
             run_compare(compare_params(1, 0)),
             Err(SimError::WrongRunnerCount(0))
+        ));
+    }
+
+    #[test]
+    fn compare_rejects_a_field_beyond_the_finished_mask() {
+        let mut params = compare_params(1, 1);
+        params.runners = generate_mob_runners(MAX_VACUUM_FIELD_SIZE + 1, 600);
+        assert!(matches!(
+            run_compare(params),
+            Err(SimError::WrongRunnerCount(65))
         ));
     }
 

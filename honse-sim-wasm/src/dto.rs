@@ -1263,6 +1263,12 @@ impl WasmPairedCompareParams {
                 self.first.nsamples, self.second.nsamples
             )));
         }
+        if self.first.master_seed != self.second.master_seed {
+            return Err(DtoError(format!(
+                "a paired compare needs one master seed, got {} and {}",
+                self.first.master_seed, self.second.master_seed
+            )));
+        }
 
         Ok((self.first.into_domain()?, self.second.into_domain()?))
     }
