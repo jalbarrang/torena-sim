@@ -4,16 +4,20 @@
 #     "frida",
 # ]
 # ///
-"""Export a running career as a skill-planner career document.
+"""Export a running career in umadump's career payload format.
 
-Reads a live Umamusume career off the skill-learning screen and writes a
-`SkillPlannerExportData` JSON document — trainee, stats, aptitudes, SP balance,
-Fast Learner condition, learned skills, and every skill the shop is selling with
-its hint level.
+Reads a live Umamusume career off the skill-learning screen and writes the same
+API-shaped document umadump emits: `{"single_mode_load_common": {...}}`, keyed
+and ordered like a `single_mode/load` response so a capture from this script and
+a capture from umadump are the same file.
 
-That document is a planning tool's own import/export shape, so a capture taken
-from the game and a plan shared between players are the same file. There is no
-intermediate dialect to convert.
+Field offsets are resolved by metadata field name at runtime, the way umadump
+does it, rather than by hardcoded offsets or getter names.
+
+This script reads the trainee and the race history and nothing else. Every other
+section is a documented placeholder: see "What is read" in README.md before
+trusting a key, and note that the scenario data set (`free_data_set` and
+friends) is absent rather than empty.
 
 Usage:
     uv run career_export.py [--out career-export.json] [--debug]
@@ -28,10 +32,9 @@ it, and attaches through that. The server binary is downloaded once and cached
 under `~/.cache/career-export/`; pass `--frida-server` to reuse one, or
 `--wine-prefix` / `--remote` to point at a prefix or server explicitly.
 
-Field offsets come from the `SingleModeSkillLearningViewController.SkillInfo`
-layout reverse-engineered by UmaExtractor (github.com/xancia/UmaExtractor).
-Career state is read through the `WorkDataManager -> WorkSingleModeData ->
-WorkSingleModeCharaData` accessor chain used by honse-tracker.
+Field offsets come from the IL2CPP class table at runtime, keyed by metadata
+field name, following Werseter/umadump (github.com/Werseter/umadump). The
+payload contract is that project's `decode_career_data`.
 """
 
 import argparse
@@ -55,18 +58,6 @@ PROCESS_KEYWORDS = ["uma", "musume", "derby", "cygames"]
 MAX_WAIT_SECONDS = 3600
 WINE_SERVER_WAIT_SECONDS = 60
 FRIDA_SERVER_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "career-export")
-
-# `single_mode_chara_effect` id for the SP-discount condition. Only its presence
-# matters here; the planner applies the discount itself.
-FAST_LEARNER_EFFECT_ID = 7
-
-# Running styles as the planner encodes them.
-STRATEGY_BY_APTITUDE_FIELD = {
-    "nige": 1,
-    "senko": 2,
-    "sashi": 3,
-    "oikomi": 4,
-}
 
 _parser = argparse.ArgumentParser(description="Career exporter")
 _parser.add_argument("--out", default="career-export.json", help="Output path")
@@ -146,8 +137,9 @@ FRIDA_SCRIPT = r"""
         "il2cpp_image_get_class", "il2cpp_class_get_name",
         "il2cpp_class_get_namespace", "il2cpp_class_get_methods",
         "il2cpp_class_get_fields", "il2cpp_class_get_nested_types",
+        "il2cpp_class_get_parent",
         "il2cpp_method_get_name", "il2cpp_method_get_param_count",
-        "il2cpp_field_get_name", "il2cpp_field_get_offset",
+        "il2cpp_field_get_name", "il2cpp_field_get_offset", "il2cpp_field_get_flags",
     ]) api[n] = resolve(n);
 
     for (const required of ["il2cpp_domain_get", "il2cpp_class_get_methods"]) {
@@ -177,6 +169,10 @@ FRIDA_SCRIPT = r"""
             ? new NativeFunction(api.il2cpp_field_get_offset, "int32", ["pointer"]) : null,
         class_get_nested_types: api.il2cpp_class_get_nested_types
             ? new NativeFunction(api.il2cpp_class_get_nested_types, "pointer", ["pointer", "pointer"]) : null,
+        class_get_parent: api.il2cpp_class_get_parent
+            ? new NativeFunction(api.il2cpp_class_get_parent, "pointer", ["pointer"]) : null,
+        field_get_flags: api.il2cpp_field_get_flags
+            ? new NativeFunction(api.il2cpp_field_get_flags, "uint32", ["pointer"]) : null,
     };
 
     function readCStr(p) {
@@ -202,20 +198,32 @@ FRIDA_SCRIPT = r"""
         if (!arrPtr || arrPtr.isNull()) return null;
         try { return arrPtr.add(0x20 + index * ptrSize).readPointer(); } catch(e) { return null; }
     }
-    // ObscuredInt is a value-type pair: {key, hidden}; the plaintext is the xor.
+    // ACTk ObscuredInt is {currentCryptoKey, hiddenValue, inited, fakeValue,
+    // fakeValueActive}; the plaintext is the xor of the first two. That xor is
+    // also correct for the stripped 8-byte variant that drops the trailing
+    // fields, so no scalar read depends on the struct's total size.
     function readObscuredIntAt(base, offset) {
         const key = base.add(offset).readS32();
         const hidden = base.add(offset + 4).readS32();
-        return hidden ^ key;
+        return (hidden ^ key) | 0;
     }
 
     // --- Class scan --------------------------------------------------------
 
+    // The trainee and career roots plus every type the payload reaches into.
+    // Field names and offsets come from this scan, so a class missing here
+    // shows up as a null field rather than a wrong number.
     const TARGET_CLASSES = [
         "Gallop.SingleModeSkillLearningViewController",
         "Gallop.WorkSingleModeData",
         "Gallop.WorkSingleModeCharaData",
-        "SkillInfo",
+        "Gallop.WorkSingleModeCharaData.SkillTips",
+        "Gallop.WorkSingleModeCharaData.EquipSupportCard",
+        "Gallop.WorkSingleModeCharaData.SuccessionCharaInfo",
+        "Gallop.WorkSingleModeData.RaceCondition",
+        "Gallop.WorkSkillData.AcquiredSkill",
+        "Gallop.SingleModeUtils.RaceHistoryInfo",
+        "Gallop.MasterSingleModeWinsSaddle.SingleModeWinsSaddle",
     ];
     const targetLookup = {};
     for (const t of TARGET_CLASSES) targetLookup[t] = true;
@@ -235,6 +243,42 @@ FRIDA_SCRIPT = r"""
             }
         } catch(e) {}
         return nested;
+    }
+
+    // Metadata spells an auto-property `<Speed>k__BackingField`. umadump keys
+    // its wrappers by the camelCase form, so normalise the same way and the
+    // field names below stay identical to that project's.
+    function normalizeFieldName(raw) {
+        let name = raw.replace(/^_+/, "");
+        const backing = name.match(/^<_?([^>]+)>k__BackingField$/);
+        if (backing) name = backing[1];
+        return name ? name[0].toLowerCase() + name.slice(1) : "";
+    }
+
+    // Instance fields of a class and its bases. il2cpp_class_get_fields reports
+    // only what a class declares, and several types the payload reaches into
+    // inherit theirs -- AcquiredSkill takes masterId and level from
+    // SkillDataBase -- so walk the chain.
+    const FIELD_ATTRIBUTE_STATIC = 0x0010;
+
+    function collectFields(classPtr) {
+        const fields = {};
+        let current = classPtr;
+        for (let depth = 0; depth < 16; depth++) {
+            if (!current || current.isNull()) break;
+            const iter = Memory.alloc(ptrSize);
+            iter.writePointer(ptr(0));
+            for (let i = 0; i < 400; i++) {
+                const field = fn.class_get_fields(current, iter);
+                if (field.isNull()) break;
+                if (fn.field_get_flags && (fn.field_get_flags(field) & FIELD_ATTRIBUTE_STATIC)) continue;
+                const name = normalizeFieldName(readCStr(fn.field_get_name(field)));
+                const offset = fn.field_get_offset(field);
+                if (name && offset > 0 && !(name in fields)) fields[name] = offset;
+            }
+            current = fn.class_get_parent ? fn.class_get_parent(current) : null;
+        }
+        return fields;
     }
 
     function processClass(classPtr, parentName) {
@@ -259,16 +303,10 @@ FRIDA_SCRIPT = r"""
             }
 
             if (fn.class_get_fields && fn.field_get_name && fn.field_get_offset) {
-                const fiter = Memory.alloc(ptrSize);
-                fiter.writePointer(ptr(0));
-                for (let i = 0; i < 400; i++) {
-                    const field = fn.class_get_fields(classPtr, fiter);
-                    if (field.isNull()) break;
-                    classInfo.fields[readCStr(fn.field_get_name(field))] = fn.field_get_offset(field);
-                }
+                classInfo.fields = collectFields(classPtr);
             }
 
-            targets[targetLookup[fullName] ? fullName : name] = classInfo;
+            targets[fullName] = classInfo;
             console.log(`  Found class: ${fullName}`);
         }
 
@@ -326,21 +364,17 @@ FRIDA_SCRIPT = r"""
 
     // --- Career state ------------------------------------------------------
     //
-    // Rather than walk the WorkDataManager singleton, latch the live
-    // WorkSingleModeCharaData off the game's own traffic. This needs no
-    // static-field resolution, which differs across IL2CPP builds.
+    // Rather than walk the WorkDataManager singleton, latch the live career off
+    // the game's own traffic. This needs no static-field resolution, which
+    // differs across IL2CPP builds.
     //
-    // A hook only sees calls made after it is installed, so latching one
-    // getter is not enough: attaching while the skill screen is already open
-    // misses everything that screen read on the way in. Two hooks are used --
-    // `get_Character`, which anything touching the career goes through, and
-    // `get_Speed` as a second chance -- and BeginView tolerates the pointer
-    // still being cold rather than giving up on the run.
+    // A hook only sees calls made after it is installed, so latching one getter
+    // is not enough: attaching while the skill screen is already open misses
+    // everything that screen read on the way in. BeginView therefore tolerates
+    // the pointers still being cold rather than giving up on the run.
 
     let charaPtr = null;
-
     let singleModePtr = null;
-    let recordedStyle = null;
 
     hookMethod("Gallop.WorkSingleModeData", "get_Character", 0, {
         onEnter(args) { singleModePtr = args[0]; },
@@ -351,7 +385,7 @@ FRIDA_SCRIPT = r"""
 
     // One hook is not enough to catch WorkSingleModeData. Its getters are not
     // called while a screen sits idle, and the skill screen reads the chara
-    // from a reference it already holds rather than asking for it again — so
+    // from a reference it already holds rather than asking for it again, so
     // attaching mid-career can leave every single one of them unfired.
     //
     // Latch `this` from every no-arg getter on the class instead. Each handler
@@ -371,159 +405,318 @@ FRIDA_SCRIPT = r"""
         }
     }
 
-    // If the game works the style out for itself, take its answer and skip the
-    // call entirely.
-    hookMethod("Gallop.WorkSingleModeData", "GetCardRunningStyle", 1, {
-        onEnter(args) { singleModePtr = args[0]; },
-        onLeave(retval) {
-            const value = retval.toInt32();
-            if (value >= 1 && value <= 4) recordedStyle = value;
-        }
-    });
-
+    // Second chance at the trainee if WorkSingleModeData stayed quiet.
     hookMethod("Gallop.WorkSingleModeCharaData", "get_Speed", 0, {
-        onEnter(args) { charaPtr = args[0]; }
+        onEnter(args) { if (!charaPtr) charaPtr = args[0]; }
     });
 
-    const INT_GETTERS = {
-        speed: "get_Speed",
-        stamina: "get_Stamina",
-        power: "get_Power",
-        guts: "get_Guts",
-        wiz: "get_Wiz",
-        card_id: "get_CardId",
-        motivation: "get_Motivation",
-        proper_distance_short: "get_ProperDistanceShort",
-        proper_distance_mile: "get_ProperDistanceMile",
-        proper_distance_middle: "get_ProperDistanceMiddle",
-        proper_distance_long: "get_ProperDistanceLong",
-        proper_ground_turf: "get_ProperGroundTurf",
-        proper_ground_dirt: "get_ProperGroundDirt",
-        proper_running_style_nige: "get_ProperRunningStyleNige",
-        proper_running_style_senko: "get_ProperRunningStyleSenko",
-        proper_running_style_sashi: "get_ProperRunningStyleSashi",
-        proper_running_style_oikomi: "get_ProperRunningStyleOikomi",
-    };
+    // --- Field reads -------------------------------------------------------
+    //
+    // Values are read by metadata field name, the way umadump reads them, so a
+    // class that gains or moves a field shows up as a null read instead of a
+    // number taken from the wrong slot. Metadata spells auto-properties as
+    // `<Speed>k__BackingField`, so the field tables are keyed by the camelCase
+    // form umadump uses.
 
-    const getterCache = {};
+    // Total size of ACTk's ObscuredInt: {currentCryptoKey, hiddenValue, inited,
+    // fakeValue, fakeValueActive}. Scalars only need the first two, but an
+    // array's stride is this size. A client built with the stripped 8-byte
+    // variant would make every element after the first garbage in
+    // `chara_effect_id_array` and `route_race_id_array`; this is the constant
+    // to change if that is ever observed.
+    const OBSCURED_INT_SIZE = 20;
 
-    function callIntGetter(methodName) {
-        if (!charaPtr || charaPtr.isNull()) return null;
-        if (!(methodName in getterCache)) {
-            const match = findMethod("Gallop.WorkSingleModeCharaData", methodName, 0);
-            getterCache[methodName] = match
-                ? new NativeFunction(ptr(match.compiledAddr), "int32", ["pointer"])
-                : null;
-        }
-        const f = getterCache[methodName];
-        if (!f) return null;
-        try { return f(charaPtr); } catch(e) { return null; }
+    // A torn read can report a huge count and build a payload past Frida's
+    // 128MiB IPC limit, which drops the message and hangs the game. Clamp.
+    const MAX_ELEMENTS = 1024;
+
+    const CHARA = "Gallop.WorkSingleModeCharaData";
+    const CAREER = "Gallop.WorkSingleModeData";
+    const SKILL = "Gallop.WorkSkillData.AcquiredSkill";
+    const SKILL_TIPS = "Gallop.WorkSingleModeCharaData.SkillTips";
+    const SUPPORT_CARD = "Gallop.WorkSingleModeCharaData.EquipSupportCard";
+    const SUCCESSION = "Gallop.WorkSingleModeCharaData.SuccessionCharaInfo";
+    const RACE_CONDITION = "Gallop.WorkSingleModeData.RaceCondition";
+    const RACE_HISTORY = "Gallop.SingleModeUtils.RaceHistoryInfo";
+    const WIN_SADDLE = "Gallop.MasterSingleModeWinsSaddle.SingleModeWinsSaddle";
+
+    function fieldOffset(className, fieldName) {
+        const info = targets[className];
+        if (!info) return null;
+        const offset = info.fields[fieldName];
+        return offset === undefined ? null : offset;
     }
 
-    // The career records the style the trainee last raced with, so it does not
-    // have to be inferred from aptitudes. It hangs off WorkSingleModeData
-    // rather than the chara, keyed by card id.
-    function readRunningStyle(cardId) {
-        if (recordedStyle !== null) return recordedStyle;
-        if (!singleModePtr || singleModePtr.isNull() || !cardId) return null;
-
-        const match = findMethod("Gallop.WorkSingleModeData", "GetCardRunningStyle", 1);
-        if (!match) return null;
-
-        try {
-            const f = new NativeFunction(ptr(match.compiledAddr), "int32", ["pointer", "int32"]);
-            return f(singleModePtr, cardId);
-        } catch(e) { return null; }
+    function readIntField(className, objectPtr, fieldName) {
+        if (!objectPtr || objectPtr.isNull()) return null;
+        const offset = fieldOffset(className, fieldName);
+        if (offset === null) return null;
+        try { return readObscuredIntAt(objectPtr, offset); } catch(e) { return null; }
     }
 
-    function readCareer() {
-        if (!charaPtr || charaPtr.isNull()) return null;
+    // For plain int fields; only the win-saddle id is not obscured.
+    function readPlainIntField(className, objectPtr, fieldName) {
+        if (!objectPtr || objectPtr.isNull()) return null;
+        const offset = fieldOffset(className, fieldName);
+        if (offset === null) return null;
+        try { return objectPtr.add(offset).readS32(); } catch(e) { return null; }
+    }
 
-        const out = {};
-        for (const [key, method] of Object.entries(INT_GETTERS)) {
-            out[key] = callIntGetter(method);
+    function readPtrField(className, objectPtr, fieldName) {
+        if (!objectPtr || objectPtr.isNull()) return null;
+        const offset = fieldOffset(className, fieldName);
+        if (offset === null) return null;
+        try { return objectPtr.add(offset).readPointer(); } catch(e) { return null; }
+    }
+
+    function arrayPointers(arrayPtr) {
+        const out = [];
+        if (!arrayPtr || arrayPtr.isNull()) return out;
+        const length = readArrayLength(arrayPtr);
+        if (length <= 0 || length > MAX_ELEMENTS) return out;
+        for (let i = 0; i < length; i++) {
+            const item = readArrayElement(arrayPtr, i);
+            if (item && !item.isNull()) out.push(item);
         }
-
-        out.running_style = readRunningStyle(out.card_id);
-
-        // SkillPoint has no plain getter — the backing field is an ObscuredInt.
-        const charaInfo = targets["Gallop.WorkSingleModeCharaData"];
-        const spOffset = charaInfo ? charaInfo.fields["<SkillPoint>k__BackingField"] : undefined;
-        out.skill_point = null;
-        if (spOffset !== undefined && spOffset > 0) {
-            try { out.skill_point = readObscuredIntAt(charaPtr, spOffset); } catch(e) {}
-        }
-
-        // Active career conditions. The array is ObscuredInt[], so each element
-        // is an 8-byte {key, hidden} pair rather than a pointer.
-        out.chara_effect_ids = [];
-        const effectOffset = charaInfo
-            ? charaInfo.fields["<CharaEffectIdArray>k__BackingField"] : undefined;
-        if (effectOffset !== undefined && effectOffset > 0) {
-            try {
-                const arr = charaPtr.add(effectOffset).readPointer();
-                const len = readArrayLength(arr);
-                if (len > 0 && len < 64) {
-                    for (let i = 0; i < len; i++) {
-                        out.chara_effect_ids.push(readObscuredIntAt(arr, 0x20 + i * 8));
-                    }
-                }
-            } catch(e) {}
-        }
-
         return out;
     }
 
-    // --- Skill shop --------------------------------------------------------
+    function listPointers(listPtr) {
+        const out = [];
+        if (!listPtr || listPtr.isNull()) return out;
+        const count = readListCount(listPtr);
+        if (count <= 0 || count > MAX_ELEMENTS) return out;
+        const items = readListItemsArray(listPtr);
+        for (let i = 0; i < count; i++) {
+            const item = readArrayElement(items, i);
+            if (item && !item.isNull()) out.push(item);
+        }
+        return out;
+    }
+
+    // ObscuredInt[]: the field points at an Il2CppArray of value-type elements.
+    function intArrayField(className, objectPtr, fieldName) {
+        const out = [];
+        const array = readPtrField(className, objectPtr, fieldName);
+        if (!array || array.isNull()) return out;
+        const length = readArrayLength(array);
+        if (length <= 0 || length > MAX_ELEMENTS) return out;
+        for (let i = 0; i < length; i++) {
+            try { out.push(readObscuredIntAt(array, 0x20 + i * OBSCURED_INT_SIZE)); }
+            catch(e) { return out; }
+        }
+        return out;
+    }
+
+    // List<ObscuredInt>: the list's backing array holds value-type elements.
+    function intListField(className, objectPtr, fieldName) {
+        const out = [];
+        const list = readPtrField(className, objectPtr, fieldName);
+        if (!list || list.isNull()) return out;
+        const count = readListCount(list);
+        if (count <= 0 || count > MAX_ELEMENTS) return out;
+        const items = readListItemsArray(list);
+        for (let i = 0; i < count; i++) {
+            try { out.push(readObscuredIntAt(items, 0x20 + i * OBSCURED_INT_SIZE)); }
+            catch(e) { return out; }
+        }
+        return out;
+    }
+
+    // --- Payload decoders --------------------------------------------------
+    //
+    // Keys, order and nesting follow umadump's `decode_career_data` so the two
+    // tools emit the same document.
+
+    function decodeCharaInfo(chara, turn, state, playingState) {
+        const int = (name) => readIntField(CHARA, chara, name);
+
+        const skillArray = listPointers(readPtrField(CHARA, chara, "acquiredSkillList")).map((skill) => ({
+            skill_id: readIntField(SKILL, skill, "masterId"),
+            level: readIntField(SKILL, skill, "level"),
+        }));
+        const skillTips = listPointers(readPtrField(CHARA, chara, "skillTipsList")).map((tip) => ({
+            group_id: readIntField(SKILL_TIPS, tip, "groupId"),
+            rarity: readIntField(SKILL_TIPS, tip, "rarity"),
+            level: readIntField(SKILL_TIPS, tip, "level"),
+        }));
+        const supportCards = arrayPointers(readPtrField(CHARA, chara, "equipSupportCardArray")).map((card) => ({
+            position: readIntField(SUPPORT_CARD, card, "position"),
+            support_card_id: readIntField(SUPPORT_CARD, card, "supportCardId"),
+            limit_break_count: readIntField(SUPPORT_CARD, card, "limitBreakCount"),
+            exp: readIntField(SUPPORT_CARD, card, "exp"),
+            // The owner is account state, which this script cannot observe.
+            owner_viewer_id: 0,
+        }));
+        const successionId = (fieldName) => {
+            const info = readPtrField(CHARA, chara, fieldName);
+            return info && !info.isNull()
+                ? readIntField(SUCCESSION, info, "trainedCharaId")
+                : 0;
+        };
+
+        return {
+            single_mode_chara_id: int("id"),
+            card_id: int("cardId"),
+            chara_grade: int("charaGrade"),
+            speed: int("speed"),
+            stamina: int("stamina"),
+            power: int("power"),
+            wiz: int("wiz"),
+            guts: int("guts"),
+            vital: int("hp"),
+            max_speed: int("maxSpeed"),
+            max_stamina: int("maxStamina"),
+            max_power: int("maxPower"),
+            max_wiz: int("maxWiz"),
+            max_guts: int("maxGuts"),
+            default_max_speed: int("defaultMaxSpeed"),
+            default_max_stamina: int("defaultMaxStamina"),
+            default_max_power: int("defaultMaxPower"),
+            default_max_wiz: int("defaultMaxWiz"),
+            default_max_guts: int("defaultMaxGuts"),
+            max_vital: int("maxHp"),
+            motivation: int("motivation"),
+            fans: int("fanCount"),
+            rarity: int("limitBreakCount"),
+            race_program_id: int("entryProgramId"),
+            reserve_race_program_id: int("reservedRaceProgramId"),
+            race_running_style: int("runningStyle"),
+            // ObscuredBool, whose layout this script does not read.
+            is_short_race: 0,
+            proper_ground_turf: int("properGroundTurf"),
+            proper_ground_dirt: int("properGroundDirt"),
+            proper_running_style_nige: int("properRunningStyleNige"),
+            proper_running_style_senko: int("properRunningStyleSenko"),
+            proper_running_style_sashi: int("properRunningStyleSashi"),
+            proper_running_style_oikomi: int("properRunningStyleOikomi"),
+            proper_distance_short: int("properDistanceShort"),
+            proper_distance_mile: int("properDistanceMile"),
+            proper_distance_middle: int("properDistanceMiddle"),
+            proper_distance_long: int("properDistanceLong"),
+            talent_level: int("talentLevel"),
+            skill_array: skillArray,
+            disable_skill_id_array: intListField(CHARA, chara, "disableSkillIdList"),
+            skill_tips_array: skillTips,
+            support_card_array: supportCards,
+            succession_trained_chara_id_1: successionId("successionTrainedCharaInfoFirst"),
+            succession_trained_chara_id_2: successionId("successionTrainedCharaInfoSecond"),
+            turn: turn,
+            skill_point: int("skillPoint"),
+            short_cut_state: int("eventShortcutType"),
+            state: state,
+            playing_state: playingState,
+            scenario_id: int("scenarioId"),
+            route_id: int("routeId"),
+            // ObscuredString, whose XOR-over-a-key-string layout is not read here.
+            start_time: "",
+            evaluation_info_array: [],
+            training_level_info_array: [],
+            nickname_id_array: intArrayField(CHARA, chara, "acquiredNickNameIdArray"),
+            chara_effect_id_array: intArrayField(CHARA, chara, "charaEffectIdArray"),
+            route_race_id_array: intArrayField(CHARA, chara, "routeRaceIdArray"),
+            guest_outing_info_array: [],
+            skill_upgrade_info_array: [],
+        };
+    }
+
+    function decodeRaceHistory() {
+        const int = (entry, name) => readIntField(RACE_HISTORY, entry, name);
+        return listPointers(readPtrField(CAREER, singleModePtr, "raceHistoryInfoList")).map((entry) => ({
+            turn: int(entry, "turn"),
+            program_id: int(entry, "programId"),
+            weather: int(entry, "weather"),
+            ground_condition: int(entry, "groundCondition"),
+            running_style: int(entry, "runningStyle"),
+            result_rank: int(entry, "resultRank"),
+            frame_order: int(entry, "frameOrder"),
+            npc_count: int(entry, "npcCount"),
+        }));
+    }
+
+    function decodeRaceConditions() {
+        return listPointers(readPtrField(CAREER, singleModePtr, "raceConditions")).map((condition) => ({
+            program_id: readIntField(RACE_CONDITION, condition, "programId"),
+            weather: readIntField(RACE_CONDITION, condition, "weather"),
+            ground_condition: readIntField(RACE_CONDITION, condition, "groundCondition"),
+        }));
+    }
+
+    function decodeWinSaddles() {
+        return arrayPointers(readPtrField(CAREER, singleModePtr, "winSaddleArray"))
+            .map((saddle) => readPlainIntField(WIN_SADDLE, saddle, "id"));
+    }
+
+    // HomeInfo holds the live training commands. This script does not read it,
+    // so it emits the same typed placeholder umadump emits for a null source.
+    function emptyHomeInfo() {
+        return {
+            command_info_array: [],
+            race_entry_restriction: 0,
+            disable_command_id_array: [],
+            available_continue_num: 0,
+            available_free_continue_num: 0,
+            free_continue_num: 0,
+            free_continue_time: 0,
+            shortened_race_state: 0,
+        };
+    }
+
+    function decodeCareer() {
+        if (!singleModePtr || singleModePtr.isNull()) return null;
+        const chara = (charaPtr && !charaPtr.isNull())
+            ? charaPtr
+            : readPtrField(CAREER, singleModePtr, "character");
+        if (!chara || chara.isNull()) return null;
+
+        return {
+            single_mode_load_common: {
+                chara_info: decodeCharaInfo(
+                    chara,
+                    readIntField(CAREER, singleModePtr, "totalTurnNum"),
+                    readIntField(CAREER, singleModePtr, "state"),
+                    readIntField(CAREER, singleModePtr, "playingState"),
+                ),
+                race_condition_array: decodeRaceConditions(),
+                race_random_program_array: [],
+                home_info: emptyHomeInfo(),
+                unchecked_event_array: [],
+                race_history: decodeRaceHistory(),
+                win_saddle_id_array: decodeWinSaddles(),
+                effected_factor_array: null,
+                race_start_info: null,
+                race_scenario: null,
+                race_reward_info: null,
+                add_trophy_info: null,
+                trophy_reward_info: null,
+                prev_chara_grade: null,
+                race_add_reward_info: [],
+                reserved_race_array: [],
+                mission_list: [],
+                story_event_mission_list: [],
+                story_event_chara_bonus_list: [],
+                start_dress_info: [],
+                resume_factor_select: null,
+            },
+        };
+    }
+
+    // --- Export trigger ----------------------------------------------------
+    //
+    // The skill-learning screen is a reliable moment to dump: opening it routes
+    // through the career getters above, so the pointers are latched by the time
+    // BeginView runs. The shop listing this hook sits on is not read; only the
+    // screen's arrival is.
 
     hookMethod("Gallop.SingleModeSkillLearningViewController", "BeginView", -1, {
-        onEnter(args) {
-            const controller = args[0];
+        onEnter() {
             try {
-                const skillInfoList = controller.add(64).readPointer();
-                const infoCount = readListCount(skillInfoList);
-                const infoArr = readListItemsArray(skillInfoList);
-
-                // A garbage List count here loops into the millions and builds a
-                // payload past Frida's 128MiB IPC limit, which drops the message
-                // and hangs the game. Clamp rather than trust.
-                const MAX_GROUPS = 64, MAX_SKILLS = 1024;
-                if (infoCount < 0 || infoCount > MAX_GROUPS) {
-                    console.log(`[HOOK] BeginView: implausible group count ${infoCount}, skipping`);
-                    return;
-                }
-
-                const skills = [];
-                for (let gi = 0; gi < infoCount; gi++) {
-                    const skillInfo = readArrayElement(infoArr, gi);
-                    if (!skillInfo || skillInfo.isNull()) continue;
-                    const skillList = skillInfo.add(16).readPointer();
-                    const skillCount = readListCount(skillList);
-                    const skillArr = readListItemsArray(skillList);
-                    if (skillCount < 0 || skillCount > MAX_SKILLS) continue;
-
-                    for (let si = 0; si < skillCount; si++) {
-                        const info = readArrayElement(skillArr, si);
-                        if (!info || info.isNull()) continue;
-                        try {
-                            skills.push({
-                                skillId:      info.add(16).readS32(),
-                                currentLevel: info.add(20).readS32(),
-                                isAcquired:   info.add(32).readS32(),
-                                baseCost:     info.add(52).readS32(),
-                                hintLevel:    info.add(60).readS32(),
-                            });
-                        } catch(e) { /* torn entry; skip it */ }
-                    }
-                }
-
-                const career = readCareer();
+                const career = decodeCareer();
                 if (!career) {
-                    send({ type: "career_cold", skillCount: skills.length });
+                    send({ type: "career_cold" });
                     return;
                 }
-
-                send({ type: "career_export", skills, career });
+                send({ type: "career_export", career });
             } catch(e) {
                 send({ type: "error", message: "BeginView: " + e });
             }
@@ -742,93 +935,99 @@ def resolve_target():
     return device, pid, server
 
 
-def build_export(skills, career):
-    """Assemble a SkillPlannerExportData document.
+# Fields that decide whether a career is worth writing at all. A payload with
+# zeroed stats looks valid to whatever reads it and would silently produce a
+# wrong result, which is worse than no file at all.
+REQUIRED_CHARA_FIELDS = (
+    "single_mode_chara_id",
+    "card_id",
+    "speed",
+    "stamina",
+    "power",
+    "guts",
+    "wiz",
+)
 
-    Raises if any field that decides a plan is missing. A file with zeroed
-    stats looks valid to the planner and would silently produce a wrong plan,
-    which is far worse than refusing to write one.
+
+def _fill_unread(value):
+    """Replace unresolved reads with 0 inside the int-typed regions.
+
+    `chara_info` and its list entries, race history, race conditions and the
+    win saddles are all int-typed, so a null there is a field lookup that
+    failed, not data. The race-context keys and `effected_factor_array` are
+    legitimately null and sit outside these regions, so they are not walked.
     """
-    missing = [k for k in ("card_id", "speed", "stamina", "power", "guts", "wiz")
-               if not career.get(k)]
+    if value is None:
+        return 0
+    if isinstance(value, dict):
+        return {key: _fill_unread(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_fill_unread(item) for item in value]
+    return value
+
+
+def build_export(career):
+    """Validate a career payload and fill the reads that failed.
+
+    The Frida side sends null for any field it could not resolve, so a moved
+    class or field surfaces here instead of turning into a zero. Core stats are
+    required; everything else defaults to 0, which the report then flags.
+    """
+    common = career["single_mode_load_common"]
+    chara = common["chara_info"]
+
+    missing = [key for key in REQUIRED_CHARA_FIELDS if chara.get(key) is None]
     if missing:
-        raise SystemExit(f"Career read is incomplete — missing {', '.join(missing)}.")
+        raise SystemExit(
+            "Career read is incomplete — missing " + ", ".join(missing) + "."
+        )
 
-    obtained = [s for s in skills if s["isAcquired"]]
-    buyable = [s for s in skills if not s["isAcquired"]]
+    unread = [key for key, value in chara.items() if value is None]
+    common["chara_info"] = _fill_unread(chara)
+    for section in ("race_history", "race_condition_array", "win_saddle_id_array"):
+        common[section] = _fill_unread(common[section])
 
-    style_aptitudes = {
-        key: career.get(f"proper_running_style_{key}") or 0
-        for key in STRATEGY_BY_APTITUDE_FIELD
-    }
-    best_style = max(style_aptitudes, key=lambda k: style_aptitudes[k])
-
-    # The career remembers the style the trainee last raced with. Fall back to
-    # the best aptitude only when that read gives nothing usable.
-    recorded_style = career.get("running_style")
-    if recorded_style in STRATEGY_BY_APTITUDE_FIELD.values():
-        strategy, strategy_source = recorded_style, "recorded by the career"
-    else:
-        strategy = STRATEGY_BY_APTITUDE_FIELD[best_style]
-        strategy_source = "guessed from the best aptitude"
-
-    effect_ids = career.get("chara_effect_ids") or []
-
-    export = {
-        "card_id": career["card_id"],
-        "speed": career["speed"],
-        "stamina": career["stamina"],
-        "power": career["power"],
-        "guts": career["guts"],
-        "wiz": career["wiz"],
-        "proper_distance_short": career.get("proper_distance_short") or 0,
-        "proper_distance_mile": career.get("proper_distance_mile") or 0,
-        "proper_distance_middle": career.get("proper_distance_middle") or 0,
-        "proper_distance_long": career.get("proper_distance_long") or 0,
-        "proper_ground_turf": career.get("proper_ground_turf") or 0,
-        "proper_ground_dirt": career.get("proper_ground_dirt") or 0,
-        "proper_running_style_nige": style_aptitudes["nige"],
-        "proper_running_style_senko": style_aptitudes["senko"],
-        "proper_running_style_sashi": style_aptitudes["sashi"],
-        "proper_running_style_oikomi": style_aptitudes["oikomi"],
-        "strategy": strategy,
-        "mood": (career.get("motivation") or 3) - 3,
-        "budget": career.get("skill_point") or 0,
-        "fast_learner": FAST_LEARNER_EFFECT_ID in effect_ids,
-        "obtained_skills": [{"skill_id": s["skillId"]} for s in obtained],
-        "candidate_skills": [
-            {
-                "skill_id": s["skillId"],
-                "hint_level": s["hintLevel"],
-                "game_cost": s["baseCost"],
-            }
-            for s in buyable
-        ],
-    }
-
-    return export, effect_ids, strategy_source
+    return career, unread
 
 
 STRATEGY_NAMES = {1: "Front Runner", 2: "Pace Chaser", 3: "Late Surger", 4: "End Closer"}
 
 
-def report(export, effect_ids, strategy_source):
-    log("")
-    log(f"  Trainee card:   {export['card_id']}")
-    log(f"  Stats:          {export['speed']} / {export['stamina']} / "
-        f"{export['power']} / {export['guts']} / {export['wiz']}")
-    log(f"  SP available:   {export['budget']}")
-    log(f"  Fast Learner:   {'yes' if export['fast_learner'] else 'no'}"
-        f"   (conditions: {effect_ids or 'none'})")
-    log(f"  Running style:  {STRATEGY_NAMES.get(export['strategy'], export['strategy'])}"
-        f"   ({strategy_source})")
-    log(f"  Learned skills: {len(export['obtained_skills'])}")
-    log(f"  Shop skills:    {len(export['candidate_skills'])}")
+def report(career, unread):
+    common = career["single_mode_load_common"]
+    chara = common["chara_info"]
+    style = chara["race_running_style"]
 
-    if export["budget"] == 0:
+    log("")
+    log(f"  Career:         {chara['single_mode_chara_id']}  (card {chara['card_id']})")
+    log(f"  Turn:           {chara['turn']}")
+    log(f"  Scenario/route: {chara['scenario_id']} / {chara['route_id']}")
+    log(f"  Stats:          {chara['speed']} / {chara['stamina']} / "
+        f"{chara['power']} / {chara['guts']} / {chara['wiz']}")
+    log(f"  SP available:   {chara['skill_point']}")
+    log(f"  Running style:  {STRATEGY_NAMES.get(style, style)}")
+    log(f"  Learned skills: {len(chara['skill_array'])}"
+        f"   (tips: {len(chara['skill_tips_array'])})")
+    log(f"  Race history:   {len(common['race_history'])} races")
+
+    if unread:
+        log("")
+        log(f"  NOTE: {len(unread)} field(s) did not resolve and were written as 0:")
+        log(f"        {', '.join(unread)}")
+        log("        A field that moved shows up here; check the class scan found")
+        log("        its declaring type.")
+
+    if chara["skill_point"] == 0:
         log("")
         log("  NOTE: SP read as 0. If that is wrong, the ObscuredInt layout has")
-        log("        moved and `<SkillPoint>k__BackingField` needs re-checking.")
+        log("        moved and `skillPoint` needs re-checking.")
+
+    log("")
+    log("  Placeholders in this payload: home_info, race_condition_array,")
+    log("  race_random_program_array, unchecked_event_array, effected_factor_array,")
+    log("  reserved_race_array, resume_factor_select, the mission/start-dress")
+    log("  arrays, evaluation_info_array, training_level_info_array,")
+    log("  is_short_race, start_time, and the scenario data set. See README.md.")
 
 
 def main():
@@ -856,18 +1055,16 @@ def main():
         elif kind == "career_cold":
             # The hooks went in after this screen had already read the career,
             # so there is nothing latched yet. Backing out and re-entering the
-            # screen routes through get_Character and fills it in.
-            log(f"  Read {payload['skillCount']} shop skills, but the career object")
-            log("  is not latched yet. Leave the skill screen and open it again.")
+            # screen routes through the career getters and fills it in.
+            log("  The career object is not latched yet.")
+            log("  Leave the skill screen and open it again.")
         elif kind == "career_export":
             logger.debug(json.dumps(payload)[:20000])
-            export, effect_ids, strategy_source = build_export(
-                payload["skills"], payload["career"]
-            )
+            career, unread = build_export(payload["career"])
             with open(OUTPUT_PATH, "w", encoding="utf-8", newline="\n") as f:
-                json.dump(export, f, indent=2)
+                json.dump(career, f, indent=2)
                 f.write("\n")
-            report(export, effect_ids, strategy_source)
+            report(career, unread)
             log("")
             log(f"Wrote {OUTPUT_PATH}")
             done["written"] = True
